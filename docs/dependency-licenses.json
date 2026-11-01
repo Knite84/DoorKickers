@@ -1,0 +1,92 @@
+[
+  {
+    "name": "@esbuild/win32-x64",
+    "version": "0.28.2",
+    "license": "MIT",
+    "developmentOnly": true
+  },
+  {
+    "name": "@rollup/rollup-win32-x64-gnu",
+    "version": "4.67.4",
+    "license": "MIT",
+    "developmentOnly": true
+  },
+  {
+    "name": "@rollup/rollup-win32-x64-msvc",
+    "version": "4.67.4",
+    "license": "MIT",
+    "developmentOnly": true
+  },
+  {
+    "name": "@types/estree",
+    "version": "1.0.10",
+    "license": "MIT",
+    "developmentOnly": true
+  },
+  {
+    "name": "esbuild",
+    "version": "0.28.2",
+    "license": "MIT",
+    "developmentOnly": true
+  },
+  {
+    "name": "fdir",
+    "version": "6.5.0",
+    "license": "MIT",
+    "developmentOnly": true
+  },
+  {
+    "name": "nanoid",
+    "version": "3.3.20",
+    "license": "MIT",
+    "developmentOnly": true
+  },
+  {
+    "name": "picocolors",
+    "version": "1.1.1",
+    "license": "ISC",
+    "developmentOnly": true
+  },
+  {
+    "name": "picomatch",
+    "version": "4.0.7",
+    "license": "MIT",
+    "developmentOnly": true
+  },
+  {
+    "name": "postcss",
+    "version": "8.5.32",
+    "license": "MIT",
+    "developmentOnly": true
+  },
+  {
+    "name": "rollup",
+    "version": "4.67.4",
+    "license": "MIT",
+    "developmentOnly": true
+  },
+  {
+    "name": "source-map-js",
+    "version": "1.2.2",
+    "license": "BSD-3-Clause",
+    "developmentOnly": true
+  },
+  {
+    "name": "three",
+    "version": "0.187.0",
+    "license": "MIT",
+    "developmentOnly": false
+  },
+  {
+    "name": "tinyglobby",
+    "version": "0.2.17",
+    "license": "MIT",
+    "developmentOnly": true
+  },
+  {
+    "name": "vite",
+    "version": "7.3.7",
+    "license": "MIT",
+    "developmentOnly": true
+  }
+]

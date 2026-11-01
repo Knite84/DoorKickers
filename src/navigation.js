@@ -1,0 +1,99 @@
+import { elevation, stairHeight } from './world.js';
+
+// A small shared walking grid, rebuilt when damage changes passable geometry.
+// Doors are authorized guard routes and are opened on approach by the AI.
+const cache = new WeakMap(), CELL = 0.65;
+export function navigationFor(state, map) {
+  const signature = state.wallPieces.reduce((n, p) => n + Number(p.hp <= 0), 0) + ':' + state.windowHealth?.join(',');
+  const prior = cache.get(state);
+  if (prior?.signature === signature) return prior;
+  const x0 = map.bounds.minX + 0.3, z0 = map.bounds.minZ + 0.3;
+  const width = Math.floor((map.bounds.maxX - x0 - 0.3) / CELL) + 1;
+  const depth = Math.floor((map.bounds.maxZ - z0 - 0.3) / CELL) + 1;
+  const bases = (map.levels ?? [{ elevation: 0 }]).map(elevation), plane = width * depth;
+  const blocked = new Uint8Array(plane * bases.length), heights = new Float32Array(blocked.length), onStair = new Uint8Array(blocked.length);
+  const point = id => [x0 + (id % plane % width) * CELL, z0 + Math.floor(id % plane / width) * CELL];
+  function raster(level, center, size, padding, visit) {
+    const minX = Math.max(0, Math.ceil((center[0] - size[0] / 2 - padding - x0) / CELL));
+    const maxX = Math.min(width - 1, Math.floor((center[0] + size[0] / 2 + padding - x0) / CELL));
+    const minZ = Math.max(0, Math.ceil((center[1] - size[1] / 2 - padding - z0) / CELL));
+    const maxZ = Math.min(depth - 1, Math.floor((center[1] + size[1] / 2 + padding - z0) / CELL));
+    for (let z = minZ; z <= maxZ; z++) for (let x = minX; x <= maxX; x++) visit(level * plane + z * width + x);
+  }
+  bases.forEach((base, level) => {
+    const supported = new Uint8Array(plane).fill(level === 0 ? 1 : 0);
+    for (const piece of state.wallPieces) {
+      if (piece.hp <= 0 || piece.stair) continue;
+      const bottom = piece.center[1] - piece.size[1] / 2, top = piece.center[1] + piece.size[1] / 2;
+      const center = [piece.center[0], piece.center[2]], size = [piece.size[0], piece.size[2]];
+      if (piece.floor && Math.abs(top - base) < 0.15) raster(level, center, size, 0.08, id => { supported[id % plane] = 1; });
+      if (bottom < base + 1.8 && top > base + 0.12) raster(level, center, size, 0.28, id => { blocked[id] = 1; });
+    }
+    for (const prop of map.props) if (elevation(prop) < base + 1.8 && elevation(prop) + 1.1 > base + 0.12) raster(level, prop.position, prop.size, 0.28, id => { blocked[id] = 1; });
+    (map.windows ?? []).forEach((window, index) => {
+      if (state.windowHealth[index] > 0 && Math.abs(elevation(window) - base) < 0.5) raster(level, window.position, window.size, 0.28, id => { blocked[id] = 1; });
+    });
+    for (let at = 0; at < plane; at++) {
+      const id = level * plane + at, stair = stairHeight(map, point(id));
+      heights[id] = stair ?? base;
+      onStair[id] = Number(stair !== null);
+      if (stair !== null) { if (level > 0 && stair < base - 0.5) blocked[id] = 1; }
+      else if (!supported[at]) blocked[id] = 1;
+    }
+  });
+  const graph = { signature, width, depth, bases, plane, blocked, heights, onStair, point };
+  cache.set(state, graph); return graph;
+}
+
+class Heap {
+  values = [];
+  push(value) {
+    const a = this.values; a.push(value); let at = a.length - 1;
+    while (at > 0) { const parent = (at - 1) >> 1; if (a[parent].score <= value.score) break; a[at] = a[parent]; at = parent; } a[at] = value;
+  }
+  pop() {
+    const a = this.values, first = a[0], last = a.pop(); if (!a.length) return first;
+    let at = 0;
+    while (at * 2 + 1 < a.length) {
+      let child = at * 2 + 1; if (child + 1 < a.length && a[child + 1].score < a[child].score) child++;
+      if (a[child].score >= last.score) break; a[at] = a[child]; at = child;
+    } a[at] = last; return first;
+  }
+}
+export function findGuardPath(state, map, start, startY, target, targetY) {
+  const g = navigationFor(state, map), { width, depth, plane, blocked, heights, point } = g;
+  function nearest(position, y) {
+    let best = -1, score = Infinity;
+    for (let id = 0; id < blocked.length; id++) {
+      if (blocked[id] || Math.abs(heights[id] - y) > 0.55) continue;
+      const p = point(id), d = Math.hypot(p[0] - position[0], p[1] - position[1]);
+      if (d < score) { score = d; best = id; }
+    }
+    return best;
+  }
+  const source = nearest(start, startY), goal = nearest(target, targetY);
+  if (source < 0 || goal < 0) return [];
+  const finish = point(goal), heuristic = id => { const p = point(id); return Math.hypot(p[0] - finish[0], p[1] - finish[1]) + Math.abs(heights[id] - heights[goal]) * 2; };
+  const costs = new Float64Array(blocked.length).fill(Infinity), parents = new Int32Array(blocked.length).fill(-1), closed = new Uint8Array(blocked.length), open = new Heap();
+  costs[source] = 0; open.push({ id: source, score: heuristic(source) }); let best = source;
+  while (open.values.length) {
+    const { id } = open.pop(); if (closed[id]) continue; closed[id] = 1;
+    if (heuristic(id) < heuristic(best)) best = id;
+    if (id === goal) { best = goal; break; }
+    const x = id % plane % width, z = Math.floor(id % plane / width), level = Math.floor(id / plane);
+    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+      if (!dx && !dz || x + dx < 0 || x + dx >= width || z + dz < 0 || z + dz >= depth) continue;
+      for (let nextLevel = 0; nextLevel < g.bases.length; nextLevel++) {
+        const next = nextLevel * plane + (z + dz) * width + x + dx;
+        if (blocked[next] || closed[next] || Math.abs(heights[next] - heights[id]) > 0.5) continue;
+        if (heights[next] - heights[id] > 0.12 && !g.onStair[next]) continue;
+        if (dx && dz && (blocked[level * plane + z * width + x + dx] || blocked[level * plane + (z + dz) * width + x])) continue;
+        const cost = costs[id] + CELL * Math.hypot(dx, dz) + Math.abs(heights[next] - heights[id]);
+        if (cost >= costs[next]) continue;
+        costs[next] = cost; parents[next] = id; open.push({ id: next, score: cost + heuristic(next) });
+      }
+    }
+  }
+  const path = []; for (let at = best; at !== source && at >= 0; at = parents[at]) path.push({ position: point(at), elevation: heights[at] });
+  return path.reverse();
+}

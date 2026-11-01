@@ -1,0 +1,183 @@
+import { damageWall, rayBox, removeUnsupportedPieces } from './destruction.js';
+import { items } from './kit.js';
+import { alertGuards, damageGuard, damagePlayer, segmentClear, shatterWindow } from './combat.js';
+import { damageDoor } from './doors.js';
+import { doorCenter, doorSize, elevation, eyeHeight, windowCenter } from './world.js';
+import { hitGuard, guardPose } from './npc-body.js';
+
+function nearbyHit(state, map, origin, direction, reach) {
+  let hit = null, closest = reach;
+  const consider = (center, size, kind, object) => {
+    const d = rayBox(origin, direction, center, size, closest);
+    if (d !== null && d < closest) { closest = d; hit = { kind, object, position: origin.map((v, i) => v + direction[i] * d) }; }
+  };
+  for (const piece of state.wallPieces) if (piece.hp > 0) consider(piece.center, piece.size, 'wall', piece);
+  map.doors.forEach((door, i) => { if (!state.doors[i]) consider(doorCenter(door), doorSize(door), 'door', i); });
+  for (const guard of state.guards) if (guard.health > 0) {
+    const bodyHit = hitGuard(guard, origin, direction, closest);
+    if (bodyHit && bodyHit.distance < closest) { closest = bodyHit.distance; hit = { ...bodyHit, kind: 'guard', object: guard, position: origin.map((v, i) => v + direction[i] * closest) }; }
+  }
+  return hit;
+}
+function event(state, type, position, extra = {}) { state.events.push({ type, position: [...position], ...extra }); }
+function blast(state, map, rules, position, radius = 3, power = 120, heading, innerRadius = 0) {
+  const within = (target, base = 0) => {
+    const dx = target[0] - position[0], dz = target[1] - position[2];
+    const d = Math.hypot(dx, dz, base + 1 - position[1]);
+    if (d > radius) return 0;
+    if (heading !== undefined && d > 0.1 && Math.cos(Math.atan2(dz, dx) - heading) < 0.5) return 0;
+    if (!segmentClear(state, map, position, [target[0], base + 1, target[1]], -1, { glass: false })) return 0;
+    return innerRadius > 0 ? Math.max(0, 1 - Math.max(0, d - innerRadius) / (radius - innerRadius)) : Math.max(0.25, 1 - d / radius);
+  };
+  // Resolve exposure against the cover present when the blast starts. A wall or
+  // closed door can absorb this blast even when that same blast breaks it.
+  const guardExposure = state.guards.map(guard => {
+    const torso = guardPose(guard).chest;
+    return within([torso[0], torso[2]], torso[1] - 1);
+  });
+  const playerExposure = within(state.player, state.playerY ?? 0);
+  if (rules.destructibleWalls) for (const piece of state.wallPieces) {
+    const d = Math.hypot(...piece.center.map((v, axis) => Math.max(0, Math.abs(v - position[axis]) - piece.size[axis] / 2)));
+    if (piece.hp > 0 && Number.isFinite(piece.hp) && d < radius * 0.6) piece.hp = Math.max(0, piece.hp - power / 8 * rules.blastDamage * (1 - d / (radius * 0.75)));
+  }
+  if (rules.destructibleWalls) removeUnsupportedPieces(state.wallPieces);
+  if (rules.destructibleDoors) map.doors.forEach((door, index) => {
+    if (state.doors[index]) return;
+    const d = Math.hypot(door.position[0] - position[0], door.position[1] - position[2], elevation(door) + 1 - position[1]);
+    if (d >= radius) return;
+    const exposure = innerRadius > 0 ? Math.max(0, 1 - Math.max(0, d - innerRadius) / (radius - innerRadius)) : Math.max(0.25, 1 - d / radius);
+    // Test the blast-facing surface, rather than the center inside the door's own collider.
+    const source = position;
+    const direction = [(door.position[0] - position[0]) / (d || 1), (elevation(door) + 1 - position[1]) / (d || 1), (door.position[1] - position[2]) / (d || 1)];
+    const hitDistance = rayBox(source, direction, doorCenter(door), doorSize(door), d);
+    const surface = source.map((v, axis) => v + direction[axis] * Math.max(0, (hitDistance ?? d) - 0.02));
+    if (segmentClear(state, map, source, surface, -1, { glass: false })) damageDoor(state, map, index, exposure * power * rules.blastDamage);
+  });
+  (map.windows ?? []).forEach((window, index) => { if (Math.hypot(...windowCenter(window).map((v, axis) => v - position[axis])) < radius) shatterWindow(state, map, index); });
+  state.guards.forEach((guard, index) => damageGuard(state, guard, guardExposure[index] * power * rules.blastDamage));
+  if (rules.friendlyFire) damagePlayer(state, rules, playerExposure * power * rules.blastDamage);
+  alertGuards(state, rules, position, 24); event(state, 'blast', position, { radius });
+}
+export function detonateCharges(state, map, rules) {
+  if (state.status !== 'active') return 0;
+  const charges = state.devices.filter(device => device.type === 'detcord');
+  state.devices = state.devices.filter(device => device.type !== 'detcord');
+  for (const charge of charges) {
+    if (charge.door !== undefined) {
+      if (rules.destructibleDoors) damageDoor(state, map, charge.door, Infinity, charge.position);
+      else state.doors[charge.door] = true;
+    }
+    if (rules.destructibleWalls && charge.wall !== undefined) for (const piece of state.wallPieces) {
+      if (piece.wall === charge.wall && Math.hypot(...piece.center.map((v, axis) => v - charge.position[axis])) < 1.2) piece.hp = Math.max(0, piece.hp - (piece.floor ? 60 : Infinity));
+    }
+    blast(state, map, rules, charge.position, 2.5, 100);
+  }
+  return charges.length;
+}
+export function useEquipment(state, map, rules, origin, rawDirection) {
+  const id = state.inventory.equipped, item = items[id];
+  if (!item || state.status !== 'active' || state.elapsed < state.nextUse) return '';
+  if (state.inventory.items[id] <= 0) return `${item.name}: none remaining.`;
+  const norm = Math.hypot(...rawDirection);
+  if (norm < 0.001) return '';
+  const direction = rawDirection.map(v => v / norm);
+  if (id === 'medkit') {
+    if (state.health >= 100) return 'Already at full health. Med kit kept.';
+    state.health = Math.min(100, state.health + 50); state.inventory.items[id]--; state.nextUse = state.elapsed + 1;
+    event(state, 'heal', origin); return 'Med kit used: health restored.';
+  }
+  if (id === 'pickgun') {
+    const hit = nearbyHit(state, map, origin, direction, 2.5);
+    if (hit?.kind !== 'door') return 'Aim at a closed door within reach.';
+    if (!state.lockedDoors[hit.object]) return 'This door is already unlocked. E opens it.';
+    state.lockedDoors[hit.object] = false; state.doors[hit.object] = true; state.nextUse = state.elapsed + 2;
+    return 'Lock opened quietly. Door picking gun kept.';
+  }
+  if (id === 'knife') {
+    const hit = nearbyHit(state, map, origin, direction, 1.6);
+    if (hit?.kind !== 'guard') return 'Move close and aim at a guard to use the knife.';
+    const guard = hit.object, dx = origin[0] - guard.position[0], dz = origin[2] - guard.position[1], distance = Math.hypot(dx, dz);
+    const rear = distance > 0.01 && (dx * Math.cos(guard.heading) + dz * Math.sin(guard.heading)) / distance < -0.5;
+    // A rear attack is instantly incapacitating, so there is no surviving-guard
+    // injury call and no noise alert. Visual discovery of the body remains active.
+    damageGuard(state, guard, rear ? guard.health : 55);
+    state.nextUse = state.elapsed + 0.55; event(state, 'strike', hit.position);
+    return rear ? 'Silent knife takedown. No noise or radio alert; the body can still be discovered.' : guard.health <= 0 ? 'Guard down. The earlier injury call may have alerted backup.' : 'Knife hit. The injured guard can call for backup.';
+  }
+  if (id === 'axe' || id === 'crowbar' || id === 'detcord') {
+    const hit = nearbyHit(state, map, origin, direction, 2.5);
+    if (!hit) return 'Move closer and aim at a wall, door, or guard.';
+    if (id === 'detcord') {
+      if (hit.kind === 'guard') return 'Place det cord on a wall, floor, or door.';
+      state.devices.push({ type: id, position: hit.position, wall: hit.kind === 'wall' ? hit.object.wall : undefined, door: hit.kind === 'door' ? hit.object : undefined });
+      state.inventory.items[id]--; state.nextUse = state.elapsed + 0.5;
+      return 'Charge placed. Move clear, then press B to detonate placed charges.';
+    }
+    state.nextUse = state.elapsed + (id === 'axe' ? 0.65 : 0.45);
+    if (hit.kind === 'door') {
+      if (id === 'axe' && rules.destructibleDoors) damageDoor(state, map, hit.object, 70, hit.position);
+      state.doors[hit.object] = true;
+      state.lockedDoors[hit.object] = false; alertGuards(state, rules, origin, 7);
+    }
+    if (hit.kind === 'wall' && rules.destructibleWalls) damageWall(state.wallPieces, hit.object, id === 'axe' ? 4 : 1);
+    if (hit.kind === 'guard') damageGuard(state, hit.object, id === 'axe' ? 70 : 35);
+    if (id === 'axe') alertGuards(state, rules, origin, 7);
+    event(state, 'strike', hit.position);
+    return hit.kind === 'door' ? 'Door forced open.' : hit.kind === 'wall' && hit.object.blastOnly ? 'Exterior masonry requires explosives.' : `${item.name} strike.`;
+  }
+  if (id === 'claymore') {
+    const position = [origin[0] + direction[0] * 0.8, (state.playerY ?? 0) + 0.15, origin[2] + direction[2] * 0.8];
+    if (!segmentClear(state, map, origin, [position[0], origin[1], position[2]])) return 'Placement blocked. Step clear of the wall.';
+    state.devices.push({ type: id, position, heading: Math.atan2(direction[2], direction[0]), armedAt: state.elapsed + 1 });
+    state.inventory.items[id]--; state.nextUse = state.elapsed + 0.6;
+    return 'Claymore placed, facing your aim. Arms in one second.';
+  }
+  state.projectiles.push({ type: id, position: [...origin], velocity: [direction[0] * 9, direction[1] * 9 + 3, direction[2] * 9], expires: state.elapsed + (id === 'molotov' ? 4 : 1.5), settled: false });
+  state.inventory.items[id]--; state.nextUse = state.elapsed + 0.7;
+  return `${item.name} thrown.`;
+}
+export function stepEquipment(state, map, rules, delta) {
+  for (let i = state.projectiles.length - 1; i >= 0; i--) {
+    const projectile = state.projectiles[i];
+    if (!projectile.settled) {
+      projectile.velocity[1] -= delta * 9;
+      const next = projectile.position.map((v, axis) => v + projectile.velocity[axis] * delta);
+      if (!segmentClear(state, map, projectile.position, next)) {
+        projectile.velocity[0] = 0; projectile.velocity[2] = 0;
+        const vertical = [projectile.position[0], next[1], projectile.position[2]];
+        if (segmentClear(state, map, projectile.position, vertical)) projectile.position = vertical;
+        else if (projectile.velocity[1] < 0) { projectile.settled = true; projectile.velocity[1] = 0; }
+        if (projectile.type === 'molotov') projectile.expires = state.elapsed;
+      }
+      else { projectile.position = next; }
+      if (projectile.position[1] <= 0.15) { projectile.position[1] = 0.15; projectile.settled = true; }
+    }
+    if (projectile.type === 'molotov' && projectile.settled) projectile.expires = state.elapsed;
+    if (state.elapsed < projectile.expires) continue;
+    state.projectiles.splice(i, 1);
+    const p = projectile.position;
+    if (projectile.type === 'grenade') blast(state, map, rules, p, 4, 220, undefined, 1.5);
+    if (projectile.type === 'flashbang') {
+      for (const guard of state.guards) if (guard.health > 0 && Math.hypot(guard.position[0] - p[0], guard.position[1] - p[2], elevation(guard) + 1.5 - p[1]) < 6 && segmentClear(state, map, p, [guard.position[0], elevation(guard) + 1.5, guard.position[1]], -1, { glass: false })) { guard.stunnedUntil = state.elapsed + 5; guard.suspicion = 0; }
+      const dx = p[0] - state.player[0], dz = p[2] - state.player[1];
+      if (Math.hypot(dx, dz, eyeHeight(state) - p[1]) < 5 && segmentClear(state, map, [state.player[0], eyeHeight(state), state.player[1]], p, -1, { glass: false }) && dx * state.facing[0] + dz * state.facing[1] > 0) state.flashUntil = state.elapsed + 1.5;
+      event(state, 'flash', p, { radius: 6 }); alertGuards(state, rules, p, 10);
+    }
+    if (projectile.type === 'molotov') { state.fires.push({ position: [...p], until: state.elapsed + 8, radius: 2 }); event(state, 'fire', p); alertGuards(state, rules, p, 10); }
+  }
+  for (let i = state.devices.length - 1; i >= 0; i--) {
+    const device = state.devices[i];
+    if (device.type !== 'claymore' || state.elapsed < device.armedAt) continue;
+    const triggered = state.guards.some(guard => {
+      const dx = guard.position[0] - device.position[0], dz = guard.position[1] - device.position[2];
+      return guard.health > 0 && Math.hypot(dx, dz, elevation(guard) + 0.15 - device.position[1]) < 3 && Math.cos(Math.atan2(dz, dx) - device.heading) > 0.5 && segmentClear(state, map, [device.position[0], device.position[1] + 0.85, device.position[2]], [guard.position[0], elevation(guard) + 1, guard.position[1]]);
+    });
+    if (triggered) { state.devices.splice(i, 1); blast(state, map, rules, device.position, 3, 180, device.heading); }
+  }
+  state.fires = state.fires.filter(fire => fire.until > state.elapsed);
+  for (const fire of state.fires) {
+    const burning = (target, base = 0) => Math.hypot(target[0] - fire.position[0], target[1] - fire.position[2], base + 0.15 - fire.position[1]) < fire.radius && segmentClear(state, map, [fire.position[0], fire.position[1] + 0.35, fire.position[2]], [target[0], base + 0.5, target[1]]);
+    for (const guard of state.guards) if (burning(guard.position, elevation(guard))) damageGuard(state, guard, delta * 35);
+    if (rules.friendlyFire && burning(state.player, state.playerY ?? 0)) damagePlayer(state, rules, delta * 25);
+  }
+}
