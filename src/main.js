@@ -5,7 +5,7 @@ import { createMission, stepMission, interact, distance, movementGait, toggleCro
 import { createScene } from './scene.js';
 import { fireWeapon, reload } from './weapons.js';
 import { createGunAudio } from './audio.js';
-import { weapons, items, ammoTypes, defaultLoadout, validateLoadout, equip, toggleHolster } from './kit.js';
+import { weapons, items, ammoTypes, defaultLoadout, validateLoadout, equip, toggleHolster, restockEquipment } from './kit.js';
 import { useEquipment, detonateCharges } from './equipment.js';
 import { createKitMenu } from './menus.js';
 import { bindCombatMouse } from './combat-input.js';
@@ -62,6 +62,7 @@ try { const saved = localStorage.getItem('stealth-map-v1'); if (Object.hasOwn(ma
 let map = resolveMap(plannedMap);
 function updateMapLabels() {
   $('.mission-card h1').textContent = map.name;
+  $('.map-stamp').firstChild.textContent = map.id === 'martelli-01' ? 'LAKE / S ↑' : 'N ↑';
   $('.map-stamp span').textContent = `${map.stamp ?? 'COURTYARD RESIDENCE'} · 1 UNIT = 1 METRE`;
   const floors = map.levels ?? [{ name: 'Ground floor', elevation: 0 }];
   $('#map-floor').replaceChildren(...floors.map((floor, index) => new Option(floor.name, String(index))));
@@ -209,6 +210,7 @@ const kitMenu = createKitMenu({
   },
   onClose: () => { menuVisible = false; if (menuWasActive && menuPaused && state.status === 'paused') state.status = 'active'; canvas.focus(); },
   equip: id => { equip(state, id); aimed = false; }, detonate,
+  restock: () => restockEquipment(state),
 });
 function openKit() { kitMenu.open(['planning', 'complete', 'captured'].includes(state.status) ? 'planning' : 'inventory'); }
 $('#inventory-toggle').addEventListener('click', openKit);
@@ -369,7 +371,8 @@ function frame(now) {
   const radioText = state.guardReportUntil > state.elapsed ? state.lastGuardReport : '';
   $('#guard-radio').hidden = !radioText;
   if ($('#guard-radio').textContent !== radioText) $('#guard-radio').textContent = radioText;
-  $('#gait').textContent = `${gait.toUpperCase()}${gait === 'creep' && state.crouched ? ' · CROUCHED' : ''}${map.levels ? ` · ${state.playerY > 1.6 ? 'UPPER' : 'GROUND'}` : ''}`;
+  const floorName = map.levels?.reduce((nearest, floor) => Math.abs(floor.elevation - state.playerY) < Math.abs(nearest.elevation - state.playerY) ? floor : nearest).name;
+  $('#gait').textContent = `${gait.toUpperCase()}${gait === 'creep' && state.crouched ? ' · CROUCHED' : ''}${floorName ? ` · ${floorName.toUpperCase()}` : ''}`;
   $('#crosshair').hidden = view !== 'first' || mapOpen || menuVisible || scoped || state.status !== 'active';
   $('#hit-marker').hidden = now > hitUntil;
   $('#capture-mouse').hidden = view !== 'first' || mapOpen || menuVisible || scoped || !['active', 'paused'].includes(state.status) || document.pointerLockElement === canvas;

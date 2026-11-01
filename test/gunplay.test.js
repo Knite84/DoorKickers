@@ -95,7 +95,7 @@ test('sustained fire actually clears both skins and a stud before reaching a gua
     const hit = fireWeapon(state, map, rules, [-3, 1.1, -6], [1, 0, 0]);
     hits.push(hit.material ?? hit.kind);
   }
-  assert.deepEqual(hits, ['timber', 'drywall', 'drywall', 'guard', 'guard', 'guard', 'prop', 'prop']);
+  assert.deepEqual(hits, ['timber', 'timber', 'timber', 'timber', 'timber', 'guard', 'guard', 'guard']);
   assert.equal(state.guards[0].health, 0);
 });
 test('creeping overrides running, and each speed is configurable', () => {

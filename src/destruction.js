@@ -42,6 +42,11 @@ export function buildWallPieces(map) {
     }
   });
   for (const [index, floor] of (map.floors ?? []).entries()) {
+    if (floor.solid) {
+      const depth = floor.depth ?? 0.2;
+      add(map.walls.length + index, [floor.center[0], floor.elevation - depth / 2, floor.center[1]], [floor.size[0], depth, floor.size[1]], floor.material ?? 'masonry', Infinity, { floor: true, level: Math.round(floor.elevation / 3.2) });
+      continue;
+    }
     const columns = Math.ceil(floor.size[0] / 1.2), rows = Math.ceil(floor.size[1] / 1.2);
     const width = floor.size[0] / columns, depth = floor.size[1] / rows;
     const extra = { floor: true, level: Math.round(floor.elevation / 3.2) };

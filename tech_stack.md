@@ -105,8 +105,8 @@ Penetration combines the firearm budget, ammunition multiplier and velocity modi
 | --- | --- | --- |
 | Glass | 0.1; shatters on impact | One intact/broken pane state |
 | Drywall skin | 1 | 1 per tile |
-| NPC | 1 | 100 starting guard health |
-| Timber wall stud | 3 | 4; wall plates use 6 |
+| NPC | 4 | 100 starting guard health |
+| Timber wall stud | 4 | 4; wall plates use 6 |
 | Wooden door | 3 | 120 by default; configurable per deployment |
 | Particleboard floor sheet | 6 | 24 |
 | Floor truss | 12 | 80 |
@@ -142,13 +142,15 @@ Held gear determines threat status. Holstering leaves owned/carried gear intact.
 | `stealth-loadout-v1` | Planned weapon configurations and equipment quantities |
 | `stealth-map-v1` | Selected authored map |
 
-Rules export/import uses a versioned JSON envelope and schema validation. New catalogue entries have explicit migrations for older saved kits. Map/enemy-count/entry setup is applied on deployment; live settings are applied without secretly rebuilding the mission. Field inventory never replenishes supplies.
+Rules export/import uses a versioned JSON envelope and schema validation. New catalogue entries have explicit migrations for older saved kits. Map/enemy-count/entry setup is applied on deployment; live settings are applied without secretly rebuilding the mission. Opening field inventory preserves supplies; its explicit Restock equipment & cash debug action refills all item quantities to catalogue maxima and restores support cash to the sandbox maximum ($10,000). Restock works in active or paused missions, preserves magazines/health/world state, and never rewrites the planned loadout.
 
 The browser origin owns this storage. There is no synchronization, cloud backup, database, account authentication, multiplayer transport, or persistent campaign/injury state.
 
 ## Tests and verification
 
-At this documentation checkpoint, 87 Node tests cover simulation, input chords, kit validation/migration, separate magazines, scoped/head hits, multi-layer penetration, blast cover, doors, wall support, lodge reachability, crouch, floor breaches, windows, picking, M134 movement restrictions, guard communication/navigation/detention, and knife behavior.
+At this documentation checkpoint, 108 Node tests cover simulation, input chords, kit validation/migration, separate magazines, scoped/head hits, multi-layer penetration, blast cover, doors, wall support, lodge reachability, crouch, floor breaches, windows, picking, M134 movement restrictions, guard communication/navigation/detention, knife behavior, articulated injuries/ragdolls, glass-breaking tools/throwables, framing/body resistance, and repeatable equipment restocking.
+
+Melee targeting includes intact window bounds so axe/crowbar hits shatter the nearest pane and other tools cannot act through it. Each throwable movement step sweeps window intersections in distance order, verifies solid cover to each impact, and shatters reachable panes before resolving ordinary solid collision. Grenades, flashbangs, and Molotovs retain their velocity and fuse through glass; only solid impact/landing triggers early Molotov ignition. `test/window-equipment.test.js` includes actual lodge windows on both stories, multiple panes per step, range/cooldown, and glass behind solid cover.
 
 For UI changes, verify in a real browser as well: planning controls, deployment count, pointer capture/fallback, model visibility, posture, floor views, radio/detention feedback and readable HUD placement. Node tests do not render Three.js or validate actual browser input delivery. Screenshots in `docs/` record selected checks.
 

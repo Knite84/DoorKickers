@@ -1,3 +1,5 @@
+import { schema } from './rules.js';
+
 // Deliberately abstract game balance, not physical weapon specifications.
 export const weapons = {
   rifle: { name: 'Assault rifle', penetration: 4, magazine: 30, reload: 1.4, interval: 0.11, damage: 50, pellets: 1, spread: 0, automatic: true, length: 0.48, color: 0x354438 },
@@ -15,13 +17,13 @@ export const items = {
   knife: { name: 'Knife', max: 1, count: 1, description: 'Reusable melee weapon. Close rear attacks kill silently; front attacks wound and can trigger an injury call. Bodies can still be discovered.', action: 'Stab' },
   pickgun: { name: 'Door picking gun', max: 1, count: 1, description: 'Reusable placeholder. Aim at a nearby locked door and use to unlock and open it quietly.', action: 'Unlock quietly' },
   medkit: { name: 'Med kit', max: 5, count: 2, description: 'Restore 50 health. Consumed only when hurt.', action: 'Heal' },
-  axe: { name: 'Breaching axe', max: 1, count: 1, description: 'Reusable. Close-range strikes break drywall and framing.', action: 'Swing axe' },
-  crowbar: { name: 'Crowbar', max: 1, count: 1, description: 'Reusable. Pry open a nearby door or chip a wall.', action: 'Pry / strike' },
+  axe: { name: 'Breaching axe', max: 1, count: 1, description: 'Reusable. Close-range strikes break drywall, framing, and window glass.', action: 'Swing axe' },
+  crowbar: { name: 'Crowbar', max: 1, count: 1, description: 'Reusable. Pry open a nearby door, chip a wall, or smash window glass.', action: 'Pry / strike' },
   detcord: { name: 'Det cord', max: 5, count: 2, description: 'Place on a nearby wall, floor, or door. B detonates placed charges.', action: 'Place charge' },
   claymore: { name: 'Claymore', max: 5, count: 2, description: 'Place a directional proximity trap facing your aim. Arms after 1 second.', action: 'Place trap' },
-  grenade: { name: 'Grenade', max: 8, count: 3, description: 'Throw a fused explosive. Full damage up close, falling off with distance. Damages guards, doors, walls, and you.', action: 'Throw grenade' },
-  flashbang: { name: 'Flashbang', max: 8, count: 2, description: 'Throw to stun visible guards. Looking at a nearby burst briefly obscures your view.', action: 'Throw flashbang' },
-  molotov: { name: 'Molotov cocktail', max: 8, count: 2, description: 'Throw to create a temporary fire patch that damages anyone inside.', action: 'Throw Molotov' },
+  grenade: { name: 'Grenade', max: 8, count: 3, description: 'Throw a fused explosive through window glass, shattering it. Full damage up close, falling off with distance. Damages guards, doors, walls, and you.', action: 'Throw grenade' },
+  flashbang: { name: 'Flashbang', max: 8, count: 2, description: 'Throw through window glass, shattering it, to stun visible guards. Looking at a nearby burst briefly obscures your view.', action: 'Throw flashbang' },
+  molotov: { name: 'Molotov cocktail', max: 8, count: 2, description: 'Throw through window glass, shattering it. Creates a temporary fire patch on solid impact or landing that damages anyone inside.', action: 'Throw Molotov' },
 };
 export function defaultLoadout() {
   return { primary: 'rifle', weapons: Object.fromEntries(Object.keys(weapons).map(id => [id, { carried: true, suppressor: false, velocity: 'supersonic', ammoType: 'standard' }])), items: Object.fromEntries(Object.entries(items).map(([id, item]) => [id, item.count])) };
@@ -49,6 +51,18 @@ export function validateLoadout(input) {
 export function createInventory(loadout = defaultLoadout()) {
   const kit = validateLoadout(loadout);
   return { ...kit, equipped: kit.primary, magazines: Object.fromEntries(Object.entries(weapons).map(([id, weapon]) => [id, weapon.magazine])) };
+}
+export function restockEquipment(state) {
+  if (!['active', 'paused'].includes(state.status)) return 0;
+  let added = 0;
+  for (const [id, item] of Object.entries(items)) {
+    added += Math.max(0, item.max - state.inventory.items[id]);
+    state.inventory.items[id] = item.max;
+  }
+  // Temporary debug refill, using the same cash cap as the sandbox settings.
+  added += Math.max(0, schema.budget.max - state.budget);
+  state.budget = Math.max(state.budget, schema.budget.max);
+  return added;
 }
 export function equip(state, id) {
   if (id !== 'unarmed' && !state.inventory.weapons[id]?.carried && !(state.inventory.items[id] > 0)) return false;

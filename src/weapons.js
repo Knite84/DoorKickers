@@ -5,6 +5,8 @@ import { damageDoor } from './doors.js';
 import { doorCenter, doorSize, elevation, windowCenter, windowSize } from './world.js';
 import { hitGuard } from './npc-body.js';
 export const MAGAZINE = 30;
+// Drywall is easy to cross; framing and bodies consume the same heavier budget.
+const penetrationCosts = { drywall: 1, timber: 4, body: 4, door: 3, particleboard: 6, truss: 12 };
 export function reload(state) {
   const weapon = weapons[state.inventory.equipped];
   if (!weapon || state.status !== 'active' || state.reloadUntil > state.elapsed || state.ammo === weapon.magazine) return false;
@@ -45,20 +47,20 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
     let resistance = Infinity;
     if (hit.kind === 'wall' && rules.destructibleWalls) {
       removed.push(...damageWall(state.wallPieces, hit.object, wallPower));
-      resistance = { drywall: 1, timber: 3, particleboard: 6, truss: 12 }[hit.object.material] ?? Infinity;
+      resistance = penetrationCosts[hit.object.material] ?? Infinity;
     }
     if (hit.kind === 'glass') { shatterWindow(state, map, hit.object); resistance = 0.1; }
     if (hit.kind === 'door') {
       doorHit = hit.object;
       if (rules.destructibleDoors) {
         doorDestroyed = damageDoor(state, map, hit.object, damage * doorPower, position) || doorDestroyed;
-        resistance = 3;
+        resistance = penetrationCosts.door;
       }
     }
     if (hit.kind === 'guard') {
       headshot ||= hit.zone === 'head';
       killed = damageGuard(state, hit.object, hit.zone === 'head' ? hit.object.health : damage, { zone: hit.zone, joint: hit.joint, direction, position }) || killed;
-      hitGuards.add(hit.object); guardHit = true; resistance = 1;
+      hitGuards.add(hit.object); guardHit = true; resistance = penetrationCosts.body;
     }
     if (penetration <= resistance) break;
     penetration -= resistance; damage *= 0.8; wallPower *= 0.8;
