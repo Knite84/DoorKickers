@@ -55,23 +55,24 @@ test('M134 has a large separate belt, faster sustained cadence, depletion, reloa
   state.ammo = 212; equip(state, 'rifle'); equip(state, 'minigun'); assert.equal(state.ammo, 212);
 });
 
-test('an NPC and a drywall layer consume identical penetration and reduce downstream wall damage equally', () => {
+test('an NPC and framing consume identical penetration, with drywall costing less', () => {
   function shot(first) {
     const state = ready(); state.inventory.weapons.rifle.ammoType = 'solid';
     state.guards = first === 'guard' ? [state.guards[0]] : [];
     // Thick, floor-anchored pieces retain health so downstream damage is measurable.
     state.wallPieces = [
-      ...(first === 'drywall' ? [{ id: 0, wall: 0, material: 'drywall', center: [2, 1, 0], size: [0.05, 2, 2], hp: 20, maxHp: 20 }] : []),
+      ...(['drywall', 'timber'].includes(first) ? [{ id: 0, wall: 0, material: first, center: [2, 1, 0], size: [0.05, 2, 2], hp: 20, maxHp: 20 }] : []),
       { id: 1, wall: 1, material: 'drywall', center: [4, 1, 0], size: [0.05, 2, 2], hp: 20, maxHp: 20 },
     ];
     const result = fireWeapon(state, arena, defaults, [0, 1, 0], [1, 0, 0]);
     return { result, remaining: state.wallPieces.at(-1).hp };
   }
-  const npc = shot('guard'), wall = shot('drywall'), clear = shot('none');
+  const npc = shot('guard'), wall = shot('timber'), drywall = shot('drywall'), clear = shot('none');
   assert.equal(npc.remaining, wall.remaining);
   assert.ok(Math.abs((20 - npc.remaining) / (20 - clear.remaining) - 0.8) < 1e-8);
   assert.equal(npc.result.impacts[1].penetration, wall.result.impacts[1].penetration);
   assert.equal(npc.result.impacts[1].damage, wall.result.impacts[1].damage);
+  assert.ok(npc.result.impacts[1].penetration < drywall.result.impacts[1].penetration);
 });
 
 test('shots cross NPCs before damaging doors and more NPCs, with less damage and ammunition-dependent stopping', () => {
@@ -79,7 +80,7 @@ test('shots cross NPCs before damaging doors and more NPCs, with less damage and
   for (const ammoType of ['hollow', 'standard', 'solid']) {
     const state = ready(map); state.inventory.weapons.rifle.ammoType = ammoType;
     const shot = fireWeapon(state, map, defaults, [0, 1, 0], [1, 0, 0]);
-    if (ammoType === 'hollow') {
+    if (ammoType !== 'solid') {
       assert.equal(state.doorHealth[0], 120); assert.equal(state.guards[1].health, 100);
       assert.equal(shot.impacts.length, 1);
     } else {
@@ -88,5 +89,15 @@ test('shots cross NPCs before damaging doors and more NPCs, with less damage and
       assert.equal(state.guards[1].health < 100, ammoType === 'solid');
       assert.equal(shot.impacts.filter(i => i.kind === 'guard').length, ammoType === 'solid' ? 2 : 1);
     }
+  }
+});
+
+test('standard rifle rounds cross drywall but stop at framing or a body; solid core crosses either', () => {
+  for (const target of ['drywall', 'timber', 'guard']) for (const ammoType of ['standard', 'solid']) {
+    const state = ready(); state.inventory.weapons.rifle.ammoType = ammoType;
+    state.guards = target === 'guard' ? [state.guards[0], state.guards[1]] : [state.guards[1]];
+    state.wallPieces = target === 'guard' ? [] : [{ id: 0, wall: 0, material: target, center: [2, 1, 0], size: [0.1, 2, 2], hp: 20, maxHp: 20 }];
+    fireWeapon(state, arena, defaults, [0, 1, 0], [1, 0, 0]);
+    assert.equal(state.guards.at(-1).health < 100, target === 'drywall' || ammoType === 'solid', `${target}/${ammoType}`);
   }
 });

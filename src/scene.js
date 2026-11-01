@@ -58,17 +58,20 @@ export function createScene(canvas, map) {
     return mesh;
   }
   box([0, -0.4, 0], [map.bounds.maxX - map.bounds.minX + 4, 0.7, map.bounds.maxZ - map.bounds.minZ + 4], 0x46564a);
-  box([0, -0.03, -4], [20, 0.12, 10], 0x898975);
-  box([0, -0.02, 5], [20, 0.12, 6], 0x6b7567);
-  for (let x = -9; x < 10; x += 2) {
-    for (let z = 2; z < 8; z += 2) box([x, 0.05, z + 0.9], [1.94, 0.03, 1.94], 0x748070);
+  const scenery = (map.scenery ?? []).map(item => box([item.center[0], elevation(item), item.center[1]], [item.size[0], 0.03, item.size[1]], item.color));
+  if (!map.scenery) {
+    box([0, -0.03, -4], [20, 0.12, 10], 0x898975);
+    box([0, -0.02, 5], [20, 0.12, 6], 0x6b7567);
+    for (let x = -9; x < 10; x += 2) {
+      for (let z = 2; z < 8; z += 2) box([x, 0.05, z + 0.9], [1.94, 0.03, 1.94], 0x748070);
+    }
   }
   // Thousands of damageable pieces share a handful of draw calls.
   const structure = buildWallPieces(map), wallBatches = [], wallDisplay = new Uint8Array(structure.length).fill(2);
   const unitBox = new THREE.BoxGeometry(1, 1, 1), instanceTransform = new THREE.Object3D();
   for (const kind of new Set(structure.map(piece => piece.material))) {
     const indices = structure.flatMap((piece, index) => piece.material === kind ? [index] : []);
-    const mesh = new THREE.InstancedMesh(unitBox, material(({ timber: 0xa16d3f, drywall: 0xd5ceb5, particleboard: 0xa68552, truss: 0x79512e })[kind] ?? 0xb7b198), indices.length);
+    const mesh = new THREE.InstancedMesh(unitBox, material(({ timber: 0xa16d3f, drywall: 0xd5ceb5, particleboard: 0xa68552, truss: 0x79512e, earth: 0x59734c, concrete: 0xaaa99d, deck: 0x8c7253 })[kind] ?? 0xb7b198), indices.length);
     mesh.castShadow = mesh.receiveShadow = true; mesh.frustumCulled = false; scene.add(mesh);
     wallBatches.push({ mesh, indices });
   }
@@ -252,7 +255,7 @@ export function createScene(canvas, map) {
   extraction.rotation.x = -Math.PI / 2;
   extraction.position.set(...[map.extraction.position[0], elevation(map.extraction) + 0.13, map.extraction.position[1]]);
   scene.add(extraction);
-  const extractionLabel = label('EXTRACT', map.extraction.position[0], map.extraction.position[1] + 2.2);
+  const extractionLabel = label('EXTRACT', map.extraction.position[0], map.extraction.position[1] + 2.2, elevation(map.extraction));
   const guards = [], cones = [], routes = [];
   for (let i = 0; i < 8; i++) {
     const guardVisual = createGuardVisual(material); scene.add(guardVisual); guards.push(guardVisual);
@@ -341,7 +344,7 @@ export function createScene(canvas, map) {
     for (const { mesh, indices } of wallBatches) {
       let changed = false;
       indices.forEach((index, instance) => {
-        const piece = state.wallPieces[index], visible = Number(piece.hp > 0 && (!overview || (piece.level ?? 0) === selectedLevel));
+        const piece = state.wallPieces[index], visible = Number(piece.hp > 0 && (!overview || piece.stair || (piece.level ?? 0) === selectedLevel));
         if (wallDisplay[index] === visible) return;
         wallDisplay[index] = visible; instanceTransform.position.set(...piece.center); instanceTransform.scale.set(...(visible ? piece.size : [0, 0, 0]));
         instanceTransform.updateMatrix(); mesh.setMatrixAt(instance, instanceTransform.matrix); changed = true;
@@ -365,7 +368,8 @@ export function createScene(canvas, map) {
     extraction.material.opacity = state.collected ? 0.7 + Math.sin(state.elapsed * 4) * 0.25 : 0.4;
     grid.visible = rules.floorPlan && overview; grid.position.y = selectedLevel * 3.2 + 0.08;
     labels.forEach((l, i) => { l.visible = grid.visible && onLevel(map.rooms[i]); });
-    extraction.visible = onLevel(map.extraction); extractionLabel.visible = grid.visible && selectedLevel === 0;
+    extraction.visible = onLevel(map.extraction); extractionLabel.visible = grid.visible && onLevel(map.extraction);
+    scenery.forEach(mesh => { mesh.visible = !overview || selectedLevel === 0; });
     for (let i = 0; i < 8; i++) {
       const guard = state.guards[i];
       const visible = !!guard && onLevel(guard) && (!overview || rules.fullIntel || state.scanUntil > state.elapsed || (distance(guard.position, state.player) < 9 && segmentClear(state, map, [state.player[0], eyeHeight(state), state.player[1]], [guard.position[0], elevation(guard) + 1.5, guard.position[1]], -1, { glass: false })));

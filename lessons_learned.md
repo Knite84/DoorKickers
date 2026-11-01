@@ -73,7 +73,7 @@ See `src/destruction.js` and `test/wall-support.test.js`.
 - Guards can open authorized doors on approach. Planning a route through a door is not permission to walk through its still-closed collider.
 - Upper-floor routes need actual support. Do not give a guard a shortcut across an upper-story void merely because that X/Z position is navigable downstairs.
 - Window openings must be absent from exterior wall geometry. A transparent pane placed over an unbroken solid wall is not a usable window.
-- Intact glass admits vision, blocks movement/thrown items, and can be shot through and shattered. Broken glass does not erase the sill: E performs a checked climb through the opening. An upper-story exit may lead to a fall.
+- Intact glass admits vision and blocks character movement. Shots, axe/crowbar strikes, and thrown grenades/flashbangs/Molotovs shatter it. Throwable collision sweeps must break only reachable panes in distance order, preserve velocity/fuses through glass, and still stop at solid cover. Broken glass does not erase the sill: E performs a checked climb through the opening. An upper-story exit may lead to a fall.
 
 The complete lodge retrieval/return route, guard stair pursuit, new breaches, floor falls, and window climbing are covered by `test/lodge.test.js` and `test/guard-ai.test.js`.
 
@@ -83,7 +83,7 @@ The complete lodge retrieval/return route, guard stair pursuit, new breaches, fl
 
 Compute it from the firearm, projectile, and velocity. Solid core penetrates most, standard sits between, and hollow-point has the least; hollow-point is not a guarantee that nothing behind the target can be hit. Order all hits by distance and keep processing the same ray while budget remains.
 
-Each crossed obstruction reduces remaining damage and wall power. An NPC currently costs the same penetration as one drywall skin. Timber, particleboard, and trusses cost more. Existing holes cost nothing, so later shots can travel farther than the first shot at a fresh wall.
+Each crossed obstruction reduces remaining damage and wall power. Drywall costs 1 penetration unit; 2×4 framing and NPCs each cost 4. Particleboard and trusses cost more. Existing holes cost nothing, so later shots can travel farther than the first shot at a fresh wall.
 
 Do not apply damage attenuation twice to doors: body damage already falls after a crossed layer, so the door's original wall-power multiplier is retained separately. Wall-piece damage still uses the attenuated wall power.
 
@@ -119,7 +119,7 @@ See `src/combat.js`, `src/guard-ai.js`, `test/guard-ai.test.js`, and `test/knife
 
 ## 7. Persistence, configuration, and UX
 
-Keep these concepts separate: authored map, mission state, planned kit, carried inventory, owned gear, support budget, and sandbox rules. Opening field inventory must not restore consumables or magazines. Changing live ammo must not refill a gun.
+Keep these concepts separate: authored map, mission state, planned kit, carried inventory, owned gear, support budget, and sandbox rules. Opening field inventory must preserve consumables and magazines. Its explicit Restock equipment & cash debug button may refill items to their catalogue maxima and restore support cash to the sandbox maximum ($10,000); it must preserve firearm magazines and the saved loadout. Changing live ammo must not refill a gun.
 
 Validate an equipment action before consuming its quantity: a med kit at full health and a blocked placement should not silently spend supplies. Reusable tools and knives must remain in inventory after use.
 

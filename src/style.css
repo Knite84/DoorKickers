@@ -177,6 +177,8 @@ h3 { margin: 0 0 18px; text-transform: uppercase; font: 10px monospace; letter-s
 .kit-bottom p { color: #d2e4bc; font-size: 11px; margin: 0 0 7px; }
 .kit-bottom small { display: block; color: #8fa67e; font-size: 10px; line-height: 1.6; max-width: 690px; }
 .kit-bottom button { width: auto; flex-shrink: 0; margin: 0; white-space: nowrap; }
+.kit-actions { display: flex; flex-direction: column; gap: 8px; flex-shrink: 0; }
+.kit-actions button { width: 100%; }
 #scope-overlay { position: absolute; inset: 0; background: radial-gradient(circle at center, transparent 31vmin, #030805fc 31.4vmin); pointer-events: none; }
 .scope-reticle { position: absolute; width: 62vmin; height: 62vmin; border: 2px solid #182019; border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); }
 .scope-reticle::before, .scope-reticle::after { content: ''; position: absolute; background: #132016; }

@@ -2,7 +2,7 @@ import { damageWall, rayBox, removeUnsupportedPieces } from './destruction.js';
 import { items } from './kit.js';
 import { alertGuards, damageGuard, damagePlayer, segmentClear, shatterWindow } from './combat.js';
 import { damageDoor } from './doors.js';
-import { doorCenter, doorSize, elevation, eyeHeight, windowCenter } from './world.js';
+import { doorCenter, doorSize, elevation, eyeHeight, windowCenter, windowSize } from './world.js';
 import { hitGuard, guardPose } from './npc-body.js';
 
 function nearbyHit(state, map, origin, direction, reach) {
@@ -13,6 +13,7 @@ function nearbyHit(state, map, origin, direction, reach) {
   };
   for (const piece of state.wallPieces) if (piece.hp > 0) consider(piece.center, piece.size, 'wall', piece);
   map.doors.forEach((door, i) => { if (!state.doors[i]) consider(doorCenter(door), doorSize(door), 'door', i); });
+  (map.windows ?? []).forEach((window, i) => { if (state.windowHealth[i] > 0) consider(windowCenter(window), windowSize(window), 'glass', i); });
   for (const guard of state.guards) if (guard.health > 0) {
     const bodyHit = hitGuard(guard, origin, direction, closest);
     if (bodyHit && bodyHit.distance < closest) { closest = bodyHit.distance; hit = { ...bodyHit, kind: 'guard', object: guard, position: origin.map((v, i) => v + direction[i] * closest) }; }
@@ -20,6 +21,23 @@ function nearbyHit(state, map, origin, direction, reach) {
   return hit;
 }
 function event(state, type, position, extra = {}) { state.events.push({ type, position: [...position], ...extra }); }
+function breakWindowsAlongPath(state, map, origin, next) {
+  const length = Math.hypot(...next.map((v, i) => v - origin[i]));
+  if (length < 1e-8) return;
+  const direction = next.map((v, i) => (v - origin[i]) / length);
+  const hits = (map.windows ?? []).flatMap((window, index) => {
+    if (!(state.windowHealth[index] > 0)) return [];
+    const distance = rayBox(origin, direction, windowCenter(window), windowSize(window), length);
+    return distance === null ? [] : [{ index, distance }];
+  }).sort((a, b) => a.distance - b.distance);
+  for (const hit of hits) {
+    const face = origin.map((v, i) => v + direction[i] * Math.max(0, hit.distance - 0.001));
+    // Only break glass the item actually reaches; a wall/door before a pane
+    // still blocks the throw. Sweep the full step so thin glass cannot be skipped.
+    if (!segmentClear(state, map, origin, face, -1, { glass: false })) break;
+    shatterWindow(state, map, hit.index);
+  }
+}
 function blast(state, map, rules, position, radius = 3, power = 120, heading, innerRadius = 0) {
   const within = (target, base = 0) => {
     const dx = target[0] - position[0], dz = target[1] - position[2];
@@ -106,9 +124,9 @@ export function useEquipment(state, map, rules, origin, rawDirection) {
   }
   if (id === 'axe' || id === 'crowbar' || id === 'detcord') {
     const hit = nearbyHit(state, map, origin, direction, 2.5);
-    if (!hit) return 'Move closer and aim at a wall, door, or guard.';
+    if (!hit) return 'Move closer and aim at a wall, door, window, or guard.';
     if (id === 'detcord') {
-      if (hit.kind === 'guard') return 'Place det cord on a wall, floor, or door.';
+      if (hit.kind === 'guard' || hit.kind === 'glass') return 'Place det cord on a wall, floor, or door.';
       state.devices.push({ type: id, position: hit.position, wall: hit.kind === 'wall' ? hit.object.wall : undefined, door: hit.kind === 'door' ? hit.object : undefined });
       state.inventory.items[id]--; state.nextUse = state.elapsed + 0.5;
       return 'Charge placed. Move clear, then press B to detonate placed charges.';
@@ -121,9 +139,10 @@ export function useEquipment(state, map, rules, origin, rawDirection) {
     }
     if (hit.kind === 'wall' && rules.destructibleWalls) damageWall(state.wallPieces, hit.object, id === 'axe' ? 4 : 1);
     if (hit.kind === 'guard') damageGuard(state, hit.object, id === 'axe' ? 70 : 35);
-    if (id === 'axe') alertGuards(state, rules, origin, 7);
+    if (hit.kind === 'glass') shatterWindow(state, map, hit.object);
+    if (id === 'axe' || hit.kind === 'glass') alertGuards(state, rules, origin, 7);
     event(state, 'strike', hit.position);
-    return hit.kind === 'door' ? 'Door forced open.' : hit.kind === 'wall' && hit.object.blastOnly ? 'Exterior masonry requires explosives.' : `${item.name} strike.`;
+    return hit.kind === 'glass' ? `Window shattered with ${item.name.toLowerCase()}.` : hit.kind === 'door' ? 'Door forced open.' : hit.kind === 'wall' && hit.object.blastOnly ? 'Exterior masonry requires explosives.' : `${item.name} strike.`;
   }
   if (id === 'claymore') {
     const position = [origin[0] + direction[0] * 0.8, (state.playerY ?? 0) + 0.15, origin[2] + direction[2] * 0.8];
@@ -142,6 +161,7 @@ export function stepEquipment(state, map, rules, delta) {
     if (!projectile.settled) {
       projectile.velocity[1] -= delta * 9;
       const next = projectile.position.map((v, axis) => v + projectile.velocity[axis] * delta);
+      breakWindowsAlongPath(state, map, projectile.position, next);
       if (!segmentClear(state, map, projectile.position, next)) {
         projectile.velocity[0] = 0; projectile.velocity[2] = 0;
         const vertical = [projectile.position[0], next[1], projectile.position[2]];
