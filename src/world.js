@@ -1,3 +1,4 @@
+import { piecesInArea } from './spatial.js';
 export const elevation = object => object?.elevation ?? 0;
 // Furniture is waist-high cover unless a prop states its own height (beds are low).
 export const propHeight = prop => prop.height ?? 1.1;
@@ -24,7 +25,7 @@ export function supportHeight(state, map, position, fromY) {
   const stair = stairHeight(map, position);
   if (stair !== null && stair <= fromY + 0.4) return stair;
   let height = 0;
-  for (const piece of state.wallPieces) {
+  for (const piece of piecesInArea(state.wallPieces, position[0] - 0.1, position[0] + 0.1, position[1] - 0.1, position[1] + 0.1)) {
     if (!piece.floor || piece.hp <= 0) continue;
     const top = piece.center[1] + piece.size[1] / 2;
     if (top > fromY + 0.12 || top <= height) continue;

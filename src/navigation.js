@@ -1,4 +1,5 @@
 import { elevation, stairHeight, propHeight } from './world.js';
+import { damageCount } from './spatial.js';
 
 // A small shared walking grid, rebuilt when damage changes passable geometry.
 // Doors are authorized guard routes and are opened on approach by the AI.
@@ -6,7 +7,7 @@ import { elevation, stairHeight, propHeight } from './world.js';
 // grid so at least one walkable cell always falls inside each doorway.
 const cache = new WeakMap();
 export function navigationFor(state, map) {
-  const signature = state.wallPieces.reduce((n, p) => n + Number(p.hp <= 0), 0) + ':' + state.windowHealth?.join(',');
+  const signature = damageCount(state) + ':' + state.windowHealth?.join(',');
   const prior = cache.get(state);
   if (prior?.signature === signature) return prior;
   const CELL = map.navCell ?? 0.65, x0 = map.bounds.minX + 0.3, z0 = map.bounds.minZ + 0.3;
@@ -47,7 +48,7 @@ export function navigationFor(state, map) {
       else if (!supported[at]) blocked[id] = 1;
     }
   });
-  const graph = { signature, cell: CELL, width, depth, bases, plane, blocked, heights, onStair, point };
+  const graph = { signature, cell: CELL, x0, z0, width, depth, bases, plane, blocked, heights, onStair, point };
   cache.set(state, graph); return graph;
 }
 
@@ -67,20 +68,24 @@ class Heap {
   }
 }
 export function findGuardPath(state, map, start, startY, target, targetY) {
-  const g = navigationFor(state, map), { width, depth, plane, blocked, heights, point } = g;
+  const g = navigationFor(state, map), { width, depth, plane, blocked, heights, point, cell, x0, z0 } = g;
+  // Plan position of a cell without allocating; searches call these constantly.
+  const cellX = id => x0 + (id % plane % width) * cell, cellZ = id => z0 + Math.floor(id % plane / width) * cell;
   function nearest(position, y) {
     let best = -1, score = Infinity;
     for (let id = 0; id < blocked.length; id++) {
       if (blocked[id] || Math.abs(heights[id] - y) > 0.55) continue;
-      const p = point(id), d = Math.hypot(p[0] - position[0], p[1] - position[1]);
+      const d = Math.hypot(cellX(id) - position[0], cellZ(id) - position[1]);
       if (d < score) { score = d; best = id; }
     }
     return best;
   }
   const source = nearest(start, startY), goal = nearest(target, targetY);
   if (source < 0 || goal < 0) return [];
-  const finish = point(goal), heuristic = id => { const p = point(id); return Math.hypot(p[0] - finish[0], p[1] - finish[1]) + Math.abs(heights[id] - heights[goal]) * 2; };
-  const costs = new Float64Array(blocked.length).fill(Infinity), parents = new Int32Array(blocked.length).fill(-1), closed = new Uint8Array(blocked.length), open = new Heap();
+  const finishX = cellX(goal), finishZ = cellZ(goal), heuristic = id => Math.hypot(cellX(id) - finishX, cellZ(id) - finishZ) + Math.abs(heights[id] - heights[goal]) * 2;
+  // The search buffers are kept with the grid and wiped, rather than reallocated per search.
+  const scratch = g.scratch ??= { costs: new Float64Array(blocked.length), parents: new Int32Array(blocked.length), closed: new Uint8Array(blocked.length) };
+  const costs = scratch.costs.fill(Infinity), parents = scratch.parents.fill(-1), closed = scratch.closed.fill(0), open = new Heap();
   costs[source] = 0; open.push({ id: source, score: heuristic(source) }); let best = source;
   while (open.values.length) {
     const { id } = open.pop(); if (closed[id]) continue; closed[id] = 1;

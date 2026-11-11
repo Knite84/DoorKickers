@@ -9,6 +9,7 @@ import { createGuardVisual } from './npc-visual.js';
 import { guardDisabled, guardEye } from './npc-body.js';
 import { coverClear } from './guard-tactics.js';
 import { createSceneLighting } from './scene-lighting.js';
+import { piecesInArea } from './spatial.js';
 
 // Asset boundary: replace these factories with GLB-backed factories later.
 // The simulation only knows positions and collision boxes, never meshes.
@@ -416,7 +417,8 @@ export function createScene(canvas, map) {
       }
       guards[i].userData.update(guard);
       if (!cones[i].visible) continue;
-      const boxes = obstacles(map, state.doors, state.wallPieces, false, elevation(guard));
+      const reach = rules.sightRange * sightRangeFactor(guard) + 0.5;
+      const boxes = obstacles(map, state.doors, piecesInArea(state.wallPieces, guard.position[0] - reach, guard.position[0] + reach, guard.position[1] - reach, guard.position[1] + reach), false, elevation(guard));
       cones[i].material.color.setHex(guard.stunnedUntil > state.elapsed ? 0xc7d8ec : ({ retreat: 0xf2ae63, cover: 0xf2ae63, peek: 0xff8067, detain: 0xffd278, gather: 0x77cced, pursue: 0xff8067, investigate: 0xd6a0e8, search: 0xd6a0e8 })[guard.mode] ?? (guard.suspicion > 0.2 ? 0xff8067 : 0xeac777));
       const range = rules.sightRange * (rules.weather === 'fog' ? 0.6 : rules.weather === 'rain' ? 0.85 : 1) * sightRangeFactor(guard), half = sightHalfAngle(guard);
       const points = [];

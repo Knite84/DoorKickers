@@ -3,6 +3,7 @@ import { doorCenter, doorSize, windowCenter, windowSize, playerEye } from './wor
 import { reactToHit, guardDisabled } from './npc-body.js';
 import { woundResponse, afterHit } from './guard-wounds.js';
 import { sendGuardReport } from './guard-radio.js';
+import { piecesAlong } from './spatial.js';
 export { sendGuardReport };
 export function shatterWindow(state, map, index) {
   if (!(state.windowHealth?.[index] > 0)) return false;
@@ -48,7 +49,7 @@ export function segmentClear(state, map, a, b, ignoreWall = -1, { glass = true }
   const distance = Math.hypot(...b.map((v, i) => v - a[i]));
   if (distance < 0.001) return true;
   const direction = b.map((v, i) => (v - a[i]) / distance);
-  for (const piece of state.wallPieces) {
+  for (const piece of piecesAlong(state.wallPieces, a, b)) {
     if (piece.hp <= 0 || piece.wall === ignoreWall) continue;
     if (rayBox(a, direction, piece.center, piece.size, distance - 0.02) !== null) return false;
   }

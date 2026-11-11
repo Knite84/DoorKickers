@@ -1,3 +1,4 @@
+import { piecesInArea, damageCount } from './spatial.js';
 import { doorCenter, doorSize, windowCenter, windowSize, propHeight } from './world.js';
 
 // Metres, Y up, local +X forward. These joints drive visuals AND shot capsules.
@@ -167,20 +168,25 @@ export function reactToHit(guard, hit = {}, dead = false) {
     guard.ragdoll.points.pelvis.previous[0] -= Math.cos(guard.heading) * 0.002;
   }
   if (dead) guard.ragdoll.reaction = 'limp';
+  // Any new hit disturbs a body that had come to rest.
+  guard.ragdoll.asleep = false; guard.ragdoll.still = 0;
   if (zone !== 'head' && hit.direction) {
     const point = guard.ragdoll.points[hit.joint ?? (zone === 'stomach' ? 'pelvis' : 'chest')];
     if (point) point.previous = point.previous.map((v, i) => v - hit.direction[i] * 0.012);
   }
 }
 
+const nearest = [0, 0, 0];
+const RESTING = 0.00025;
 function collide(point, radius, boxes, bounds) {
   const p = point.position;
   p[1] = Math.max(radius, p[1]);
   p[0] = Math.max(bounds.minX + radius, Math.min(bounds.maxX - radius, p[0]));
   p[2] = Math.max(bounds.minZ + radius, Math.min(bounds.maxZ - radius, p[2]));
   for (const box of boxes) {
-    const nearest = p.map((v, i) => Math.max(box.center[i] - box.size[i] / 2, Math.min(box.center[i] + box.size[i] / 2, v)));
-    const dist = separation(p, nearest);
+    // This runs thousands of times a frame per body, so it avoids allocating.
+    for (let i = 0; i < 3; i++) nearest[i] = Math.max(box.center[i] - box.size[i] / 2, Math.min(box.center[i] + box.size[i] / 2, p[i]));
+    const dist = Math.hypot(p[0] - nearest[0], p[1] - nearest[1], p[2] - nearest[2]);
     if (dist >= radius) continue;
     if (dist > 1e-8) {
       for (let i = 0; i < 3; i++) p[i] += (p[i] - nearest[i]) / dist * (radius - dist);
@@ -203,6 +209,11 @@ export function stepBodies(state, map, delta) {
     if (guard.health <= 0 && !guard.ragdoll) reactToHit(guard, {}, true);
     const body = guard.ragdoll;
     if (!body) continue;
+    // A body that has settled stops simulating until it is hit again or the
+    // structure, doors or glass around it change.
+    const surroundings = damageCount(state) + ':' + state.doors.join('') + ':' + (state.windowHealth ?? []).join('');
+    if (body.asleep && body.surroundings === surroundings) continue;
+    body.asleep = false; body.surroundings = surroundings;
     body.accumulator += Math.min(Math.max(delta, 0), 0.25);
     const points = Object.values(body.points);
     // Broad phase once per body/frame, rather than each constraint iteration.
@@ -212,13 +223,14 @@ export function stepBodies(state, map, delta) {
       for (let axis = 0; axis < 3; axis++) if (center[axis] + size[axis] / 2 < low[axis] || center[axis] - size[axis] / 2 > high[axis]) return false;
       return true;
     };
-    const boxes = state.wallPieces.filter(p => p.hp > 0 && near(p.center, p.size));
+    const boxes = piecesInArea(state.wallPieces, low[0], high[0], low[2], high[2]).filter(p => p.hp > 0 && near(p.center, p.size));
     map.doors.forEach((door, i) => { const center = doorCenter(door), size = doorSize(door); if (!state.doors[i] && near(center, size)) boxes.push({ center, size }); });
     (map.windows ?? []).forEach((w, i) => { const center = windowCenter(w), size = windowSize(w); if (state.windowHealth[i] > 0 && near(center, size)) boxes.push({ center, size }); });
     for (const prop of map.props) { const center = [prop.position[0], (prop.elevation ?? 0) + propHeight(prop) / 2, prop.position[1]], size = [prop.size[0], propHeight(prop), prop.size[1]]; if (near(center, size)) boxes.push({ center, size }); }
     const dt = 1 / 120;
+    let stepped = 0;
     while (body.accumulator + 1e-10 >= dt) {
-      body.accumulator -= dt; body.age += dt;
+      body.accumulator -= dt; body.age += dt; stepped++;
       for (const [name, point] of Object.entries(body.points)) {
         const before = [...point.position];
         point.position = point.position.map((v, i) => v + (v - point.previous[i]) * 0.993 - (i === 1 ? 9.8 * dt * dt : 0));
@@ -244,6 +256,13 @@ export function stepBodies(state, map, delta) {
         }
         for (const [name, point] of Object.entries(body.points)) collide(point, radii[name], boxes, map.bounds);
       }
+    }
+    if (stepped) {
+      let motion = 0;
+      for (const point of points) for (let i = 0; i < 3; i++) motion = Math.max(motion, Math.abs(point.position[i] - point.previous[i]));
+      // Under about 3 cm a second for a full second counts as lying still.
+      body.still = motion < RESTING ? (body.still ?? 0) + stepped * dt : 0;
+      if (body.still >= 1) body.asleep = true;
     }
     const root = body.points.pelvis.position;
     guard.position = [root[0], root[2]]; guard.elevation = Math.max(0, root[1] - radii.pelvis);

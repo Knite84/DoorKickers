@@ -1,9 +1,10 @@
 import { rayBox } from './destruction.js';
+import { damageCount } from './spatial.js';
 import { elevation, doorCenter, doorSize, windowCenter, windowSize, playerEye, supportHeight, propHeight } from './world.js';
 
 const colliderCache=new WeakMap();
 function solids(state,map) {
-  const signature=state.wallPieces.reduce((n,p)=>n+Number(p.hp<=0),0)+':'+state.doors.join(',')+':'+state.windowHealth.join(',')+':'+map.props.length;
+  const signature=damageCount(state)+':'+state.doors.join(',')+':'+state.windowHealth.join(',')+':'+map.props.length;
   let cached=colliderCache.get(state);
   if(!cached||cached.signature!==signature||cached.map!==map){
   const boxes=[

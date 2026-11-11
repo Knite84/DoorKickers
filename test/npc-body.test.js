@@ -202,3 +202,17 @@ test('fixed physics steps agree at 30/60/120 fps, and meshes follow simulated jo
   const pose = guardPose(guard), expectedLength = Math.hypot(...pose.pelvis.map((v, i) => v - pose.chest[i]));
   assert.ok(Math.abs(height * shaft.scale.y - expectedLength) < 1e-8, 'rendered torso length matches hit capsule endpoints');
 });
+
+test('a settled body stops simulating, and wakes when it is hit again', () => {
+  const state = ready(), guard = state.guards[0]; shoot(state, 1.2);
+  assert.ok(guard.health > 0 && guard.ragdoll, 'a chest wound drops the guard alive');
+  advance(state, 12);
+  assert.equal(guard.ragdoll.asleep, true, 'body should come to rest once it stops curling');
+  const settled = JSON.stringify(guard.ragdoll.points);
+  advance(state, 1);
+  assert.equal(JSON.stringify(guard.ragdoll.points), settled, 'a sleeping body does not drift');
+  damageGuard(state, guard, 1, { zone: 'chest', joint: 'chest', direction: [1, 0, 0] });
+  assert.equal(guard.ragdoll.asleep, false);
+  advance(state, 0.2);
+  assert.notEqual(JSON.stringify(guard.ragdoll.points), settled, 'the new hit moves the body');
+});

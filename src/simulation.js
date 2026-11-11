@@ -10,6 +10,7 @@ import { darknessSightFactor, roomLights } from './lighting.js';
 import { nearbyInteraction, climbWindow } from './window-traversal.js';
 import { stepGuards } from './guard-ai.js';
 import { stepBodies, guardEye } from './npc-body.js';
+import { piecesInArea } from './spatial.js';
 // Pure gameplay functions: no Three.js or DOM, so rules can be tested independently.
 export const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 export function intersectsBox(a, b, box, padding = 0) {
@@ -40,6 +41,9 @@ export function lineOfSight(a, b, boxes) {
 }
 export function movePlayer(position, delta, map, doors, ghost = false, pieces, options = {}) {
   const next = [...position];
+  // Only structure within reach of this step can block it.
+  const reach = Math.abs(delta[0]) + Math.abs(delta[1]) + 0.4;
+  if (pieces && !ghost) pieces = piecesInArea(pieces, position[0] - reach, position[0] + reach, position[1] - reach, position[1] + reach);
   for (let axis = 0; axis < 2; axis++) {
     const candidate = [...next];
     candidate[axis] += delta[axis];

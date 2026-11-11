@@ -1,0 +1,230 @@
+# Handoff: build the Martelli furniture kit
+
+Updated 2026-11-11 at the end of the performance session, for a fresh session. Read this first, then `references/README.md` (local only, git-ignored) and `docs/DESIGN.md`.
+
+## State of the repo
+
+- The sluggishness work (see the section near the end) is finished and tested but **was not committed** when this was written. Check `git status`; if `src/spatial.js` is untracked, commit that work before starting the kit.
+- No furniture code exists yet. The owner has **approved the plan below**, so build it without asking again. Ask only where this document says something is still unknown.
+
+## The next task: the furniture kit (approved)
+
+1. **New module `src/furniture.js`.** Each component is a function that returns a list of coloured boxes plus a collision height, with size variants and a facing so a piece can sit against a wall.
+2. **Map entries stay plain:** what, where, how big, which way. A model can replace the drawing later without touching the map. Existing `table`, `crate` and `planter` props on other maps must look and collide exactly as before.
+3. **Collision stays one box per piece.** An L- or U-shaped sectional is two or three pieces. Rugs, wall TVs, mirrors, ceiling fans and the yoga mat are drawn only and must not block movement, shots or guard paths.
+4. **Preview page `scripts/furniture-preview.html`**, in the style of the other `scripts/*.html` pages, showing every component side by side. Show it to the owner before filling the house.
+5. **Place room by room, in this order:** bedroom wing (best photo coverage), family room and wet bar, baths and laundry, utility and gym, then kitchen, dining and great room.
+
+After the kit, the agreed order continues: **materials** (wood floor, carpet, tile, siding, brick as textures generated in code; photos are colour and pattern references only and are never shipped), then **lighting** (softer ambient, warm lamps, sky), then **trim** (baseboards, door frames, window casings, pitched roof). Imported models (glTF) are deferred; static props stay procedural.
+
+### Photos not yet looked at
+
+The owner added photos after the inventory below was made. View these before placing the rooms they cover: **kitchen, dining, garage, front porch, the patio under the deck, and a second great-room photo showing the TV and fireplace wall.** List `references/` to find them; they are named by room.
+
+### The owner's decisions
+
+- **Gym:** no machines. Leave it empty except a TV on the wall and a yoga mat in the middle of the floor.
+- **Garage:** ignore all contents. Build only its walls and stairs from the new photos.
+- **Lower storage:** ignore it and wall it off.
+- **Bedroom 4's hall door** is already in the right place. Leave it.
+- **Bedroom 5** is modelled as it is used: an office with a daybed.
+- **Master bath:** the shower is next to the tub, behind the glass door, beside the far vanity. The toilet closet is the other door off the bath; on walking in, the toilet is to the left.
+- **Kitchen, dining, front porch, patio, great-room TV and fireplace wall:** take them from the newly added photos.
+
+## Working agreement with the owner
+
+- For open-ended work, report findings and a short proposal first and wait for a go-ahead. Clearly scoped fixes can be done directly. The furniture kit plan in this document already has that go-ahead.
+- The owner knows the real house and can answer anything the plans or photos leave unclear. Ask rather than guess on layout.
+- The owner is new to game development and wants the game to stay a simple browser game with no asset pipeline.
+- Keep `npm test` green. It was 191 passing on 2026-11-11 and takes about 2 seconds.
+- Commit before any history-rewriting git command. A previous rewrite reset the working tree and lost uncommitted work.
+
+## Privacy
+
+- `references/` (floorplans, photos, its README) is git-ignored and was removed from history. Never re-add it, and never copy photo content, file names with locations, or EXIF data into tracked files.
+- Tracked files may describe rooms and furniture generically. The map name and the screenshots under `docs/` are already public.
+
+## How the Martelli map is built
+
+File: `src/maps/martelli.js`. Everything is authored in **main-floorplan pixels** and converted by `point(x, z)` at 0.02 m per pixel, origin at pixel (600, 500). Plan-up is the lake side.
+
+- `h(z, x1, x2, openings, elevation, exterior)` and `v(x, z1, z2, …)` draw axis-aligned walls. Openings are `door(at, width)`, `win(at, width)` or `gap(at, width)`.
+- `rail(axis, fixed, lo, hi)` draws a 1 m guard rail (blocks movement, not sight).
+- Main floor is elevation 3.2; Foundation is 0.
+- The foundation drawing is about 4% smaller than the main one. Use `fx(x)` and `fz(z)` to convert **foundation-plan pixels** into map pixels.
+- `room(name, x1, z1, x2, z2, elevation)` adds a map label only.
+- `prop(kind, x, z, width, depth, elevation)` adds furniture; `bed(...)` adds a low bed.
+- `posts` near the bottom lists where guards stand. `navCell: 0.2` gives guards a fine walking grid; interior doors are only 0.8 m wide.
+- Walls must be axis-aligned. Angled features (dining bay, corner fireplace, the angled mechanical-room door) are squared off.
+
+A useful trick from this session: crop and upscale regions of the plan images into the scratchpad to read door swings and labels, then express coordinates in plan pixels.
+
+## How props work today, and what the kit needs
+
+- A prop is `{ kind, position, size: [width, depth], elevation, height? }`. Kinds: `table`, `crate`, `planter`, `bed`.
+- **Collision is one box per prop.** Its height is `propHeight(prop)` in `src/world.js`: `prop.height`, else 1.1 m. That one function feeds movement, shots, cover, guard pathfinding, window climbing and ragdolls, so a new kind only needs a sensible `height`.
+- **Drawing** is in `src/scene.js` in the `for (const prop of map.props)` loop: a few coloured boxes per kind. The `bed` branch is the model to copy.
+- Other maps use `table`, `crate` and `planter`; do not change how those look or collide.
+
+Recommended shape for the kit: a new module (for example `src/furniture.js`) that maps each kind to a list of boxes and a collision height, with the scene loop calling it. Add an optional facing so pieces can sit against a wall. Keep the map entry a plain description (what, where, how big, which way) so a model can replace the drawing later without touching the map.
+
+Things to respect when placing furniture:
+
+- Guard posts and the eight legacy `patrols` points must stay clear of props. `test/guard-variation.test.js` and `test/martelli.test.js` check this.
+- Test walking routes in `test/martelli.test.js` pass through specific points; a prop on a route fails the test. Move the route in the test if the furniture is right.
+- Doors need a clear landing on both sides, and the 15 climbable windows need clear ground inside (`test/ceilings-windows.test.js` requires exactly 15).
+- Beds currently float mid-room with headboards on the lake side; reposition them from the photos.
+
+## Furniture inventory from the photos
+
+Sizes are eyeball estimates in metres, width x depth x height. Positions are relative; check each against the photos and floorplans when placing.
+
+**Great room (main):** U-shaped light grey sectional 3.4 x 2.8 x 0.9 with chaise, facing away from the window wall. Blue armchair 1.3 x 1.0 x 0.9 with its back to the kitchen. End table with lamp 0.5 x 0.5 x 0.6 by the window. Area rug 3 x 4. TV and fireplace wall: see the new photo.
+
+**Kitchen and dining:** seen only in the background so far; confirm from the new photos. Island about 2.6 x 1.1 x 0.95 with 3 bar stools on the great-room side. White base and upper cabinets on the back wall, range and hood centred, fridge and tall pantry cabinet at the left end. Dining table about 2.0 x 1.0 x 0.75 with 6 chairs in the window bay.
+
+**Entry and stair head:** bench with shoe shelf 1.2 x 0.4 x 0.5 against the stair guard; entry rug.
+
+**Screened deck:** outdoor sofa 1.9 x 0.8 x 0.8 against the house wall, 2 armchairs 0.8 x 0.8 x 0.8, coffee table 1.0 x 0.6 x 0.45, plant stand, ceiling fan.
+
+**Master bedroom:** king bed 2.0 x 2.2 x 1.3 with upholstered headboard, centred on the wall beside the bath door. 2 nightstands 0.7 x 0.45 x 0.65 with lamps. Bench at the bed foot 1.3 x 0.4 x 0.5. Low dresser 1.6 x 0.5 x 0.85 with TV on the wall opposite the bed. Tall chest 0.9 x 0.5 x 1.3 beside it near the hall door. Second dresser with TV near the window wall.
+
+**Master bath:** 2 single vanities 1.5 x 0.55 x 0.9. Tall linen cabinet 0.6 x 0.55 x 2.1. Drop-in tub in a tiled deck 1.8 x 1.1 x 0.55 in an arched alcove under a window. Walk-in tiled shower 1.2 x 1.2 with glass door. Toilet in its own closet. Layout as in the owner's decisions above.
+
+**Master closet:** rod-and-shelf runs on 3 walls; 2 white cubby towers 0.6 x 0.35 x 2.1.
+
+**Laundry:** washer and dryer on pedestals, each 0.7 x 0.8 x 1.3. Base cabinet with utility sink 0.9 x 0.6 x 0.9, upper cabinets, hanging rod.
+
+**Main floor bath (powder):** toilet; small vanity 0.75 x 0.5 x 0.9; oval mirror.
+
+**Main hall:** flush built-in linen cabinet about 0.9 wide, full height.
+
+**Bedroom 2:** queen bed with shelf headboard 1.6 x 2.1 x 1.1 on the yellow accent wall. Nightstand. Desk with hutch 1.5 x 0.6 x 1.5 and chair. Low bookcase 0.9 x 0.3 x 0.8. Dresser by the door. Vanity alcove 1.2 x 0.55 x 0.9 with mirror. Walk-in closet with rods.
+
+**Bedroom 3:** bunk bed, twin over full, 2.1 x 1.5 x 1.7 with end ladder, on the blue accent wall. Nightstand 0.45 x 0.4 x 0.65. Small desk 0.9 x 0.5 x 0.75 and chair in the corner by the window. Cube bookcase 1.5 x 0.4 x 1.1 on the wall by the vanity opening. Vanity alcove 1.8 x 0.55 x 0.9, single sink. Closet: rods on 2 walls, dresser 1.4 x 0.45 x 0.8, toy chest 0.9 x 0.5 x 0.45.
+
+**Shared bath (bedrooms 2 and 3):** tub/shower alcove 1.5 x 0.8; toilet in a side nook; no sink (the sinks are in each bedroom's vanity alcove).
+
+**Family room (lower):** L-shaped leather sectional 3.6 x 3.0 x 0.95 floating mid-room, facing the TV wall. Media console 2.2 x 0.45 x 0.7 with a TV about 2.1 wide. Corner fireplace (see architecture below). Floor sofa 1.7 x 1.0 x 0.7 and a child's armchair in the nook by the stairs. Ladder shelf 0.6 x 0.35 x 1.7. Wet bar: back counter about 3.5 x 0.6 x 0.9 with sink and upper cabinets; raised bar top about 3.2 x 0.4 x 1.1 on a painted-brick half wall with 4 stools; beverage fridge 0.6 x 0.6 x 0.85.
+
+**Bedroom 4:** queen platform bed 1.6 x 2.1 x 0.5, no headboard, on the long blank wall. Nightstand with lamp. Glass desk 1.2 x 0.6 x 0.75 and chair by the window. Dresser 1.5 x 0.5 x 0.85 opposite the bed. Bookcase 0.8 x 0.3 x 1.8 between the bath and closet doors. Closet: empty double-rod walk-in. En-suite bath: vanity 0.9 x 0.55 x 0.9, toilet, tub/shower 1.5 x 0.8.
+
+**Bedroom 5 (office):** twin daybed 2.0 x 1.0 x 0.8 along the wall beside the door. Executive desk 1.8 x 0.8 x 0.75 and office chair floating near the window. Closet: rods, tall cabinet 0.55 x 0.45 x 1.4.
+
+**Lower level bathroom:** vanity 0.9 wide; toilet; tub/shower.
+
+**Gym:** wall TV and a yoga mat only (owner's decision). Entered through double doors.
+
+**Utility room:** furnace 0.6 x 0.8 x 1.5, water heater 0.5 diameter x 1.5, plastic shelving 0.9 x 0.45 x 1.8, stacked totes.
+
+### Component list for the kit
+
+| Component | Variants and typical size | Count |
+|---|---|---|
+| Bed | king 2.0 x 2.2, queen 1.6 x 2.1, twin daybed 2.0 x 1.0, bunk 2.1 x 1.5 x 1.7 | 1, 2, 1, 1 |
+| Nightstand (optional lamp) | 0.5–0.7 x 0.45 x 0.65 | 5 |
+| Dresser | low 1.5 x 0.5 x 0.85, tall chest 0.9 x 0.5 x 1.3 | 5, 1 |
+| Desk and desk chair | 0.9–1.8 x 0.5–0.8 x 0.75; chair 0.6 x 0.6 x 1.2 | 4 each |
+| Bookcase | tall, low, cube, ladder; 0.6–1.5 x 0.3–0.4 x 0.8–1.8 | 4 |
+| Sectional sofa | L or U, about 3.5 x 3.0 x 0.9 | 2 |
+| Small sofa / armchair | 0.8–1.9 x 0.8–1.0 | 6 |
+| Bench | 1.2 x 0.4 x 0.5 | 2 |
+| Coffee / end table | 0.5–1.0 | 2 |
+| Media console with TV | 2.2 x 0.45 x 0.7 | 1 |
+| Wall TV (drawn only) | about 1.2–2.1 wide | several |
+| Bar stool | 0.45 x 0.45 x 1.0 | 7 |
+| Kitchen island | 2.6 x 1.1 x 0.95 | 1 |
+| Cabinet run | base 0.6 deep x 0.9 high; uppers 0.35 deep | 3 runs |
+| Dining table and chairs | 2.0 x 1.0, 6 chairs | 1 |
+| Fridge | full 0.9 x 0.8 x 1.8, under-counter 0.6 x 0.6 x 0.85 | 1, 2 |
+| Bathroom vanity with mirror | 0.75–1.8 wide x 0.55 x 0.9 | 7 |
+| Toilet | 0.5 x 0.7 x 0.75 | 5 |
+| Tub/shower alcove | 1.5 x 0.8 x 2.0 | 3 |
+| Soaking tub in deck | 1.8 x 1.1 x 0.55 | 1 |
+| Walk-in shower | 1.2 x 1.2 | 1 |
+| Tall linen cabinet | 0.6–0.9 x 0.55 x 2.1 | 2 |
+| Closet rod-and-shelf run | 0.35 deep, at 1.0 and 1.7 high | 5 closets |
+| Cubby tower, toy chest, tall cabinet | assorted | 2, 1, 1 |
+| Washer, dryer | 0.7 x 0.8 x 1.3 | 1 each |
+| Furnace, water heater | see utility room | 1 each |
+| Storage shelf with totes | 0.9 x 0.45 x 1.8 | 1 |
+| Rug, yoga mat (drawn only) | rug 3 x 4 | 2 rugs, 1 mat |
+| Ceiling fan (drawn only) | 1.3 diameter | 4 |
+
+### Surfaces (for the materials step)
+
+- **Great room, kitchen, entry, main hall, powder room:** striped amber bamboo floor with dark streaks, cream-greige walls, tall white baseboards, wide white casings. The great room ceiling is vaulted.
+- **Kitchen:** white cabinets, dark mosaic and white subway backsplash, granite counters.
+- **Master bedroom:** beige carpet, dark charcoal-teal walls, tray ceiling. **Master bath:** grey wood-look tile, tan walls. **Laundry:** grey tile.
+- **Bedroom 2:** beige carpet, grey walls, one yellow accent wall. **Bedroom 3:** the same with a bright blue accent wall. **Shared bath:** beige stone-look tile, navy walls.
+- **Family room:** beige carpet, with pale wood-look plank tile at the bar, the walk-out door and the arched alcove; cream walls, painted taupe brick.
+- **Bedroom 4:** beige carpet, off-white walls. **Bedroom 5:** beige carpet, navy walls. **Lower baths:** beige stone-look tile.
+- **Gym:** warm wood-look vinyl plank, cream walls. **Utility:** bare concrete, open studs and joists.
+- **Deck:** brown composite boards, grey siding, dark screen frames.
+- Doors throughout are white two-panel with dark bronze levers.
+
+### Architecture the photos show that the plans do not
+
+- **Stair guard at the entry:** wood newels and handrail with black iron balusters, about 0.95 high. The lower flight runs between walls, carpeted, with a window above the landing.
+- **Family room fireplace:** diagonal in the corner between the window wall and the TV wall; painted brick to the ceiling with a raised hearth. Walls must be axis-aligned, so square it off.
+- **Wet bar:** entered through a wide painted-brick arch; a brick half wall carries the raised bar top facing the room.
+- **Arched alcove beside the lower stairs**, about 1.2 x 1.2, tiled.
+- **Under-stair nook:** sloped soffit and a half-height cubby door into a crawl space. Whether the cubby should be playable was not asked; treat it as closed.
+- **Kitchen** opens to the great room through a wide cased opening; **dining** is a bay of tall windows.
+- **Window walls:** paired large windows on the lake side of the great room and family room; the master has a large window plus a glazed door to the deck.
+- **Bedrooms 2 and 3** each have a vanity alcove leading into the shared tub and toilet room.
+- **Deck:** screened and roofed with a metal picket rail, doors from the great room and the master, and a screen door to exterior stairs with a mid landing. It stands on posts over a covered concrete patio with a lower walk-out door.
+- **Outside:** brick-capped retaining walls step down both sides; iron fence.
+
+## Known gaps in the Martelli map
+
+- Great-room window wall is two small windows; the plan shows near-continuous glass. Changing window count needs the 15-window test updated.
+- Garage floor should be about four steps below the main floor, with a rear side door and two separate overhead doors. Build walls and stairs only, from the new garage photos; no contents.
+- Lower storage is to be walled off (owner's decision).
+- Family-room corner fireplace, under-stair storage cubby, and bathroom fixtures are missing.
+- Rear deck has no stairs, screens or railing; there is no walk-out patio beneath it. Deck stairs would add an outdoor route between floors. New patio photos exist.
+- Side yards are a sheer drop instead of slopes with retaining walls.
+- No pitched roof; ceilings are flat.
+- `docs/martelli-main.png` and `docs/martelli-foundation.png` predate the wall corrections.
+
+## Guard systems added this session
+
+All of it applies only when the rule "Guard variety & realism" is on, which gives guards a `traits` sheet. With it off, or in tests that pass no `missionSeed`, guards behave exactly as before.
+
+| File | What it does |
+|---|---|
+| `src/guard-traits.js` | Seeded random, the five traits (perception, discipline, communication, handling, nerve), and their multipliers |
+| `src/guard-posts.js` | Weighted posts, per-mission assignment, and the walk-pause-look routine |
+| `src/guard-wounds.js` | Flinch, leg falls, gut-shot clock, surrender, and shot dispersion |
+| `src/guard-weapon.js` | 12-round magazine, reloads, stoppages, falling back to cover |
+| `src/guard-radio.js` | Delayed, sometimes inaccurate radio calls and listener delay |
+
+The mission seed is shown on the mission card and can be pinned with the "Mission seed" rule. "Guard marksmanship" scales guard accuracy.
+
+Not yet done for guards: sound for reloads and jams, securing a surrendered guard, a dropped-weapon model, and a guard in cover no longer leaning out while reloading.
+
+## Sluggishness: investigated and fixed (2026-11-11)
+
+Profiled with Node's CPU profiler (Martelli, eight guards) and frame timing in the browser.
+
+| Situation | Simulation cost per frame, before | After |
+|---|---|---|
+| Guards patrolling | 6.0 ms | 0.35 ms |
+| Firefight, eight guards down | 12.8 ms (never recovered) | 1.75 ms while bodies fall, 0.1 ms once settled |
+
+What was actually slow, and what changed:
+
+- **Every mover scanned all ~7,500 wall pieces twice a frame** (`movePlayer` → `obstacles`). `src/spatial.js` now keeps a 1 m plan grid over the pieces; `piecesInArea` and `piecesAlong` return only nearby ones. Used by movement, `segmentClear`, `supportHeight`, ragdolls and the sight-cone drawing.
+- **Downed guards simulated ragdoll physics forever** (about 1.4 ms per body per frame). A body now sleeps after lying still for a second and wakes when hit again or when walls, doors or glass change.
+- The damage signature used by the walking grid and player cover is counted once per step (`damageCount`), and guard path searches reuse their buffers.
+
+The suspects listed earlier (path searches, sight sweeps, sight cones) were minor by comparison. `test/spatial.test.js` checks the lookup against a full scan; a test in `test/npc-body.test.js` covers sleeping bodies.
+
+Still unmeasured: GPU cost of rendering (lights, shadows). If it still feels slow, record a trace with the browser's Performance tab while it happens. Furniture props are still checked one by one in sight tests; that is fine for dozens, and they can join the grid if the kit grows into hundreds.
+
+## Running and checking
+
+- `npm run dev` starts the game; `npm test` runs the suite.
+- `.claude/launch.json` defines a `dev` server for the in-app browser preview.
+- To see the map: Loadout & planning → Map → Martelli House → Deploy, then **M** for the map and **F** to switch floors. "Live guard tracking" and "Reveal patrol routes" in the rules show guards and their rounds.
+- `scripts/*.html` are small standalone preview pages for poses, cover, lighting and windows; a furniture preview page in the same style would help review pieces quickly.
