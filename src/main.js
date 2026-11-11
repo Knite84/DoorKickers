@@ -78,7 +78,11 @@ function updateMapLabels() {
   $('#floor-toggle').hidden = floors.length < 2;
 }
 updateMapLabels();
-let state = createMission(map, rules, loadout);
+// Each deployment draws a fresh seed unless one is pinned in the rules.
+const missionRules = () => ({ ...rules, missionSeed: rules.guardVariation ? rules.missionSeed || 1 + Math.floor(Math.random() * 999999) : 0 });
+const showSeed = () => { $('.mission-card .eyebrow').textContent = state.missionSeed ? `OPERATION / 01 · SEED ${state.missionSeed}` : 'OPERATION / 01'; };
+let state = createMission(map, missionRules(), loadout);
+showSeed();
 let scene;
 try { scene = createScene($('#world'), map); }
 catch (error) {
@@ -270,7 +274,7 @@ function deploy() {
     releaseMouse(); scene.dispose(); map = nextMap; scene = createScene(canvas, map); scene.setView(view);
     updateMapLabels();
   }
-  held.clear(); state = createMission(map, rules, loadout); state.status = 'active';
+  held.clear(); state = createMission(map, missionRules(), loadout); state.status = 'active'; showSeed();
   mapOpen = false; firing = false; aimed = false; scene.reset(state.spawnYaw); scene.setMap(false);
   $('#map-banner').hidden = true; $('#map-toggle').setAttribute('aria-pressed', 'false');
   $('.viewport').classList.remove('map-open');

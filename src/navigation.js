@@ -2,12 +2,14 @@ import { elevation, stairHeight, propHeight } from './world.js';
 
 // A small shared walking grid, rebuilt when damage changes passable geometry.
 // Doors are authorized guard routes and are opened on approach by the AI.
-const cache = new WeakMap(), CELL = 0.65;
+// Cell size defaults to 0.65 m; maps with ordinary house doors ask for a finer
+// grid so at least one walkable cell always falls inside each doorway.
+const cache = new WeakMap();
 export function navigationFor(state, map) {
   const signature = state.wallPieces.reduce((n, p) => n + Number(p.hp <= 0), 0) + ':' + state.windowHealth?.join(',');
   const prior = cache.get(state);
   if (prior?.signature === signature) return prior;
-  const x0 = map.bounds.minX + 0.3, z0 = map.bounds.minZ + 0.3;
+  const CELL = map.navCell ?? 0.65, x0 = map.bounds.minX + 0.3, z0 = map.bounds.minZ + 0.3;
   const width = Math.floor((map.bounds.maxX - x0 - 0.3) / CELL) + 1;
   const depth = Math.floor((map.bounds.maxZ - z0 - 0.3) / CELL) + 1;
   const bases = (map.levels ?? [{ elevation: 0 }]).map(elevation), plane = width * depth;
@@ -20,12 +22,16 @@ export function navigationFor(state, map) {
     const maxZ = Math.min(depth - 1, Math.floor((center[1] + size[1] / 2 + padding - z0) / CELL));
     for (let z = minZ; z <= maxZ; z++) for (let x = minX; x <= maxX; x++) visit(level * plane + z * width + x);
   }
+  // Slabs between storeys (a half landing) are walkable platforms that join flights.
+  const between = piece => piece.floor && !piece.stair && !piece.ceiling && bases.every(b => Math.abs(piece.center[1] + piece.size[1] / 2 - b) >= 0.15);
   bases.forEach((base, level) => {
-    const supported = new Uint8Array(plane).fill(level === 0 ? 1 : 0);
+    const supported = new Uint8Array(plane).fill(level === 0 ? 1 : 0), landing = new Float32Array(plane).fill(NaN);
+    const landingHere = top => top > base + 0.5 && top < (bases[level + 1] ?? base + 3.2) - 0.5;
     for (const piece of state.wallPieces) {
       if (piece.hp <= 0 || piece.stair) continue;
       const bottom = piece.center[1] - piece.size[1] / 2, top = piece.center[1] + piece.size[1] / 2;
       const center = [piece.center[0], piece.center[2]], size = [piece.size[0], piece.size[2]];
+      if (between(piece) && landingHere(top)) { raster(level, center, size, -0.05, id => { landing[id % plane] = top; }); continue; }
       if (piece.floor && Math.abs(top - base) < 0.15) raster(level, center, size, 0.08, id => { supported[id % plane] = 1; });
       if (bottom < base + 1.8 && top > base + 0.12) raster(level, center, size, 0.28, id => { blocked[id] = 1; });
     }
@@ -34,14 +40,14 @@ export function navigationFor(state, map) {
       if (state.windowHealth[index] > 0 && Math.abs(elevation(window) - base) < 0.5) raster(level, window.position, window.size, 0.28, id => { blocked[id] = 1; });
     });
     for (let at = 0; at < plane; at++) {
-      const id = level * plane + at, stair = stairHeight(map, point(id));
+      const id = level * plane + at, stair = stairHeight(map, point(id)) ?? (Number.isNaN(landing[at]) ? null : landing[at]);
       heights[id] = stair ?? base;
       onStair[id] = Number(stair !== null);
       if (stair !== null) { if (level > 0 && stair < base - 0.5) blocked[id] = 1; }
       else if (!supported[at]) blocked[id] = 1;
     }
   });
-  const graph = { signature, width, depth, bases, plane, blocked, heights, onStair, point };
+  const graph = { signature, cell: CELL, width, depth, bases, plane, blocked, heights, onStair, point };
   cache.set(state, graph); return graph;
 }
 
@@ -88,7 +94,7 @@ export function findGuardPath(state, map, start, startY, target, targetY) {
         if (blocked[next] || closed[next] || Math.abs(heights[next] - heights[id]) > 0.5) continue;
         if (heights[next] - heights[id] > 0.12 && !g.onStair[next]) continue;
         if (dx && dz && (blocked[level * plane + z * width + x + dx] || blocked[level * plane + (z + dz) * width + x])) continue;
-        const cost = costs[id] + CELL * Math.hypot(dx, dz) + Math.abs(heights[next] - heights[id]);
+        const cost = costs[id] + g.cell * Math.hypot(dx, dz) + Math.abs(heights[next] - heights[id]);
         if (cost >= costs[next]) continue;
         costs[next] = cost; parents[next] = id; open.push({ id: next, score: cost + heuristic(next) });
       }

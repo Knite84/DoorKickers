@@ -5,6 +5,8 @@ import { rayBox } from './destruction.js';
 import { findGuardPath, navigationFor } from './navigation.js';
 import { guardDisabled, guardSpeed, guardShotInterval, guardEye } from './npc-body.js';
 import { stepWoundedCover, fireGuardShot, coverClear } from './guard-tactics.js';
+import { sightHalfAngle, suspicionFactor } from './guard-traits.js';
+import { stepRoutine } from './guard-posts.js';
 
 const gap = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const eye = guardEye;
@@ -29,7 +31,7 @@ function observable(state, map, rules, guard, item) {
   const origin = eye(guard), length = Math.hypot(...item.center.map((v, i) => v - origin[i]));
   if (length > weatherRange(rules) + 0.5) return false;
   const angle = Math.atan2(item.center[2] - guard.position[1], item.center[0] - guard.position[0]);
-  if (Math.cos(angle - guard.heading) < Math.cos(Math.PI / 5) && length > 0.8) return false;
+  if (Math.cos(angle - guard.heading) < Math.cos(sightHalfAngle(guard)) && length > 0.8) return false;
   const direction = item.center.map((v, i) => (v - origin[i]) / (length || 1));
   const entry = rayBox(origin, direction, item.center, item.size, length) ?? length;
   const face = origin.map((v, i) => v + direction[i] * Math.max(0, entry - 0.04));
@@ -89,7 +91,7 @@ export function stepGuards(state, map, rules, delta, { canSee, movePlayer }) {
     const rangeFactor = state.gait === 'creep' ? 0.65 : state.gait === 'crouch' ? 0.8 : 1;
     let seen = canSee(guard, state.player, rules, [], { state, map, rangeFactor }) && coverClear(state,map,eye(guard),playerEye(state));
     const gain = state.gait === 'creep' ? 0.15 : state.gait === 'crouch' ? 0.3 : state.gait === 'run' ? 0.9 : 0.6;
-    guard.suspicion = Math.max(0, Math.min(1, guard.suspicion + delta * (seen ? rules.awareness * gain : -0.3)));
+    guard.suspicion = Math.max(0, Math.min(1, guard.suspicion + delta * (seen ? rules.awareness * gain * suspicionFactor(guard) : -0.3)));
     if (seen && rules.awareness > 0 && (guard.suspicion >= 1 || guard.target?.kind === 'player' || guard.mode === 'detain' || guard.mode === 'gather')) {
       const priorArmed = guard.target?.armed, wasDetaining = guard.mode === 'detain';
       const report = { kind: armed && (wasDetaining || priorArmed === false) ? 'weapon' : 'sighting', position: [...state.player], elevation: state.playerY ?? 0, armed, time: state.elapsed };
@@ -135,7 +137,8 @@ export function stepGuards(state, map, rules, delta, { canSee, movePlayer }) {
       const blockedRendezvous = guard.mode === 'gather' && !segmentClear(state, map, eye(guard), [guard.target.position[0], guard.target.elevation + 1.5, guard.target.position[1]]);
       if (gap(guard.position, guard.target.position) > stop || Math.abs(elevation(guard) - guard.target.elevation) > 0.5 || blockedRendezvous) walk(guard, guard.target, rules.patrolSpeed * multiplier, state, map, delta, movePlayer);
       else if (guard.mode !== 'gather') { guard.mode = 'search'; guard.heading += delta * 0.7; }
-    } else {
+    } else if (guard.routine) stepRoutine(guard, state, rules, (target, speed) => walk(guard, target, speed, state, map, delta, movePlayer));
+    else {
       const target = guard.path[guard.waypoint];
       if (gap(guard.position, target) < 0.55) guard.waypoint = (guard.waypoint + 1) % guard.path.length;
       else walk(guard, { position: target, elevation: guard.patrolElevation ?? elevation(guard) }, rules.patrolSpeed, state, map, delta, movePlayer);

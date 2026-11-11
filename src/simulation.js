@@ -62,26 +62,36 @@ export function movePlayer(position, delta, map, doors, ghost = false, pieces, o
   }
   return next;
 }
+import { sightHalfAngle, sightRangeFactor } from './guard-traits.js';
+import { assignGuards } from './guard-posts.js';
 export function canSee(guard, player, rules, boxes, context) {
   if(context) { const eye=playerEye(context.state);player=[eye[0],eye[2]]; }
-  const range = rules.sightRange * (rules.weather === 'fog' ? 0.6 : rules.weather === 'rain' ? 0.85 : 1) * (context?.rangeFactor ?? 1) * (context?darknessSightFactor(context.state,context.map,rules):1);
+  const range = rules.sightRange * (rules.weather === 'fog' ? 0.6 : rules.weather === 'rain' ? 0.85 : 1) * (context?.rangeFactor ?? 1) * (context?darknessSightFactor(context.state,context.map,rules):1) * sightRangeFactor(guard);
   if (distance(guard.position, player) > range) return false;
   const angle = Math.atan2(player[1] - guard.position[1], player[0] - guard.position[0]);
   const difference = Math.atan2(Math.sin(angle - guard.heading), Math.cos(angle - guard.heading));
   const clear = context ? segmentClear(context.state, context.map, guardEye(guard), playerEye(context.state), -1, { glass: false }) : lineOfSight(guard.position, player, boxes);
-  return Math.abs(difference) < Math.PI / 5 && clear;
+  return Math.abs(difference) < sightHalfAngle(guard) && clear;
 }
 export function createMission(map, rules, loadout) {
   const entry = map.entries?.[rules.entryPoint];
   const inventory = createInventory(loadout);
   const doorMaxHealth = map.doors.map(door => door.health ?? rules.doorDurability ?? DEFAULT_DOOR_HEALTH);
+  // A positive seed draws posts, rounds and temperaments; without one the map's
+  // fixed patrol lines are used unchanged.
+  const missionSeed = rules.missionSeed > 0 ? Math.floor(rules.missionSeed) : 0;
+  const guard = index => ({ id: index, armored: index < (rules.armoredGuards ?? 0), armorHits: index < (rules.armoredGuards ?? 0) ? 10 : 0, mode: 'patrol', evidenceSeen: [], suspicion: 0, health: 100, alertUntil: 0, nextShot: 0, stunnedUntil: 0 });
+  const guards = missionSeed
+    ? assignGuards(map, Math.min(rules.guardCount, 8), missionSeed).map((plan, index) => ({ ...guard(index), ...plan, position: [...plan.path[0]], elevation: plan.pathElevations[0], patrolElevation: plan.pathElevations[0], waypoint: 1 % plan.path.length, heading: Math.atan2(plan.path[1 % plan.path.length][1] - plan.path[0][1], plan.path[1 % plan.path.length][0] - plan.path[0][0]) }))
+    : map.patrols.slice(0, rules.guardCount).map((path, index) => ({ ...guard(index), position: [...path[0]], elevation: map.guardElevations?.[index] ?? 0, patrolElevation: map.guardElevations?.[index] ?? 0, path, waypoint: 1, heading: Math.atan2(path[1][1] - path[0][1], path[1][0] - path[0][0]) }));
   return {
+    missionSeed,
     timeOfDay: rules.timeOfDay??'day', powerOn: true, destroyedLights: roomLights(map).map(() => false),
     player: [...(entry?.position ?? map.spawn)], playerY: elevation(entry), velocityY: 0, crouched: false, gait: 'walk', spawnYaw: entry?.yaw ?? 0, doors: map.doors.map(() => false), lockedDoors: map.doors.map(d => !!d.locked), windowHealth: (map.windows ?? []).map(() => 1), wallPieces: buildWallPieces(map),
     doorHealth: [...doorMaxHealth], doorMaxHealth,
     inventory, ammo: inventory.magazines[inventory.equipped], reloadUntil: 0, nextShot: 0, shots: 0, kills: 0,
     health: 100, hurtUntil: 0, flashUntil: 0, nextUse: 0, projectiles: [], devices: [], fires: [], events: [], facing: [0, -1], guardReports: [], lastGuardReport: '', guardReportUntil: 0, detainingGuardId: null,
-    guards: map.patrols.slice(0, rules.guardCount).map((path, index) => ({ id: index, armored: index < (rules.armoredGuards ?? 0), armorHits: index < (rules.armoredGuards ?? 0) ? 10 : 0, mode: 'patrol', evidenceSeen: [], position: [...path[0]], elevation: map.guardElevations?.[index] ?? 0, patrolElevation: map.guardElevations?.[index] ?? 0, path, waypoint: 1, heading: Math.atan2(path[1][1] - path[0][1], path[1][0] - path[0][0]), suspicion: 0, health: 100, alertUntil: 0, nextShot: 0, stunnedUntil: 0 })),
+    guards,
     status: 'planning', collected: false, elapsed: 0, budget: rules.budget, scanUntil: 0,
   };
 }

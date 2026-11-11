@@ -15,6 +15,11 @@ export function coverClear(state,map,a,b,concealment = true) {
     return rayBox(a,direction,[prop.position[0],elevation(prop)+height/2,prop.position[1]],[prop.size[0],height,prop.size[1]],length-0.02)!==null;
   });
 }
+// On a fine walking grid, consider every few cells so searches stay cheap.
+function skipped(graph,id) {
+  const stride=Math.max(1,Math.round(0.6/(graph.cell??0.65))), at=id%graph.plane;
+  return at%graph.width%stride!==0 || Math.floor(at/graph.width)%stride!==0;
+}
 function hidden(state,map,position,y,threat) {
   return !coverClear(state,map,threat,[position[0],y+0.85,position[1]]) &&
     !coverClear(state,map,threat,[position[0],y+0.58,position[1]]);
@@ -32,7 +37,7 @@ export function findWoundedCover(state,map,guard) {
   const graph=navigationFor(state,map), threat=guard.woundThreat, options=[];
   if (!threat) return null;
   for (let id=0; id<graph.blocked.length; id++) {
-    if (graph.blocked[id] || graph.onStair[id] || Math.abs(graph.heights[id]-elevation(guard))>0.15) continue;
+    if (skipped(graph,id) || graph.blocked[id] || graph.onStair[id] || Math.abs(graph.heights[id]-elevation(guard))>0.15) continue;
     const position=graph.point(id), travel=distance(position,guard.position);
     if (travel>8 || distance(position,[threat[0],threat[2]])<1.5) continue;
     if (!hidden(state,map,position,elevation(guard),threat)) continue;
@@ -65,7 +70,7 @@ export function stepWoundedCover(state,map,rules,guard,delta,seen,walk) {
       const graph=navigationFor(state,map), dx=guard.position[0]-guard.woundThreat[0], dz=guard.position[1]-guard.woundThreat[2], length=Math.hypot(dx,dz)||1;
       const options=[];
       for (let id=0;id<graph.blocked.length;id++) {
-        if (graph.blocked[id] || graph.onStair[id] || Math.abs(graph.heights[id]-elevation(guard))>0.15) continue;
+        if (skipped(graph,id) || graph.blocked[id] || graph.onStair[id] || Math.abs(graph.heights[id]-elevation(guard))>0.15) continue;
         const p=graph.point(id), d=distance(p,guard.position);
         if (d>5 || d<1) continue;
         options.push({position:p,elevation:elevation(guard),score:(p[0]-guard.position[0])*dx/length+(p[1]-guard.position[1])*dz/length});

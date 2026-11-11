@@ -199,6 +199,8 @@ export const martelli = {
   version: 2, id: 'martelli-01', name: 'Martelli House', stamp: 'MARTELLI HOUSE · MAIN + FOUNDATION · LAKE ↑',
   description: 'Enter from the front walk on Main, explore the great room and bedroom wing, then take the return staircase down to Foundation. Retrieve the archive in lower storage and return to the front walk. Layout traced from the supplied plans; scale and furnishings are approximate. Plan-up faces the lake, south in the north-up aerial.',
   bounds: { minX: -16, maxX: 16, minZ: -14, maxZ: 14 },
+  // Interior doors are 0.8 m; a 0.2 m walking grid always finds a way through.
+  navCell: 0.2,
   levels: [{ name: 'Foundation', elevation: 0 }, { name: 'Main', elevation: main }],
   spawn: point(677,1010),
   entries: {
@@ -224,4 +226,17 @@ export const martelli = {
     [point(780,700),point(950,700)], [point(1005,550),point(1140,550)],
   ],
   guardElevations: [main, main, main, 0, 0, 0, 0, 0],
+  // Places guards gravitate to. Weight is how often a post is someone's home;
+  // dwell stretches how long they stand there. The archive, stairs and entry
+  // are usually covered, never always.
+  posts: [
+    ['entry', 670, 545, main, 2.5, 1.3], ['stair head', 592, 488, main, 2], ['great room', 585, 330, main, 1.5],
+    ['deck windows', 560, 235, main, 1], ['kitchen', 330, 440, main, 1], ['dining', 290, 190, main, 0.6],
+    ['bedroom hall', 890, 483, main, 2], ['primary bedroom', 770, 280, main, 1], ['primary bath', 1050, 230, main, 0.4],
+    ['bedroom 3', 1100, 620, main, 0.8], ['bedroom 2', 880, 700, main, 0.8], ['garage', 300, 720, main, 1],
+    ['mudroom', 480, 555, main, 0.8], ['rear deck', 585, 120, main, 1, 1.5],
+    ['family room', 500, 330, 0, 1.5], ['stair foot', 537, 470, 0, 2], ['bar', 340, 440, 0, 1, 1.5],
+    ['lower hall', 830, 465, 0, 2], ['archive', 900, 700, 0, 3, 1.6], ['storage east', 1100, 550, 0, 1.5],
+    ['bedroom 5', 760, 200, 0, 0.7], ['bedroom 4', 980, 180, 0, 0.7],
+  ].map(([name, x, z, elevation, weight, dwell = 1]) => ({ name, position: point(x, z), elevation, weight, dwell })),
 };

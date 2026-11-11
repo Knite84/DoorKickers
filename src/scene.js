@@ -3,6 +3,7 @@ import { distance, lineOfSight, obstacles } from './simulation.js';
 import { buildWallPieces } from './destruction.js';
 import { weapons, items } from './kit.js';
 import { elevation, eyeHeight, playerEye, doorCenter, doorSize, windowCenter, windowSize } from './world.js';
+import { sightHalfAngle, sightRangeFactor } from './guard-traits.js';
 import { segmentClear } from './combat.js';
 import { createGuardVisual } from './npc-visual.js';
 import { guardDisabled, guardEye } from './npc-body.js';
@@ -407,14 +408,20 @@ export function createScene(canvas, map) {
       cones[i].visible = visible && !guardDisabled(guard) && rules.showVision && (view !== 'first' || mapOpen);
       routes[i].visible = !!guard && onLevel(guard) && !guardDisabled(guard) && rules.showRoutes && overview;
       if (!guard) continue;
+      // Rounds are drawn per mission, so the revealed route follows the guard.
+      if (routes[i].userData.path !== guard.path) {
+        routes[i].userData.path = guard.path;
+        const stops = guard.path.map((p, n) => new THREE.Vector3(p[0], (guard.pathElevations?.[n] ?? guard.patrolElevation ?? 0) + 0.16, p[1]));
+        routes[i].geometry.dispose(); routes[i].geometry = new THREE.BufferGeometry().setFromPoints([...stops, stops[0]]); routes[i].computeLineDistances();
+      }
       guards[i].userData.update(guard);
       if (!cones[i].visible) continue;
       const boxes = obstacles(map, state.doors, state.wallPieces, false, elevation(guard));
       cones[i].material.color.setHex(guard.stunnedUntil > state.elapsed ? 0xc7d8ec : ({ retreat: 0xf2ae63, cover: 0xf2ae63, peek: 0xff8067, detain: 0xffd278, gather: 0x77cced, pursue: 0xff8067, investigate: 0xd6a0e8, search: 0xd6a0e8 })[guard.mode] ?? (guard.suspicion > 0.2 ? 0xff8067 : 0xeac777));
-      const range = rules.sightRange * (rules.weather === 'fog' ? 0.6 : rules.weather === 'rain' ? 0.85 : 1);
+      const range = rules.sightRange * (rules.weather === 'fog' ? 0.6 : rules.weather === 'rain' ? 0.85 : 1) * sightRangeFactor(guard), half = sightHalfAngle(guard);
       const points = [];
       for (let ray = 0; ray <= 32; ray++) {
-        const angle = guard.heading - Math.PI / 5 + ray / 32 * Math.PI * 2 / 5;
+        const angle = guard.heading - half + ray / 32 * half * 2;
         let low = 0, high = range;
         for (let j = 0; j < 8; j++) {
           const mid = (low + high) / 2;
