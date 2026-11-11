@@ -2,7 +2,7 @@ import { damageWall, rayBox, removeUnsupportedPieces } from './destruction.js';
 import { items, weapons } from './kit.js';
 import { alertGuards, damageGuard, damagePlayer, segmentClear, shatterWindow } from './combat.js';
 import { damageDoor } from './doors.js';
-import { doorCenter, doorSize, elevation, playerEye, windowCenter, windowSize } from './world.js';
+import { doorCenter, doorSize, elevation, playerEye, windowCenter, windowSize, propHeight } from './world.js';
 import { hitGuard, guardPose } from './npc-body.js';
 
 function nearbyHit(state, map, origin, direction, reach, blockProps = false) {
@@ -14,7 +14,7 @@ function nearbyHit(state, map, origin, direction, reach, blockProps = false) {
   for (const piece of state.wallPieces) if (piece.hp > 0) consider(piece.center, piece.size, 'wall', piece);
   map.doors.forEach((door, i) => { if (!state.doors[i]) consider(doorCenter(door), doorSize(door), 'door', i); });
   (map.windows ?? []).forEach((window, i) => { if (state.windowHealth[i] > 0) consider(windowCenter(window), windowSize(window), 'glass', i); });
-  if (blockProps) for (const prop of map.props) consider([prop.position[0], elevation(prop) + 0.55, prop.position[1]], [prop.size[0], 1.1, prop.size[1]], 'prop', prop);
+  if (blockProps) for (const prop of map.props) consider([prop.position[0], elevation(prop) + propHeight(prop) / 2, prop.position[1]], [prop.size[0], propHeight(prop), prop.size[1]], 'prop', prop);
   for (const guard of state.guards) if (guard.health > 0) {
     const bodyHit = hitGuard(guard, origin, direction, closest);
     if (bodyHit && bodyHit.distance < closest) { closest = bodyHit.distance; hit = { ...bodyHit, kind: 'guard', object: guard, position: origin.map((v, i) => v + direction[i] * closest) }; }

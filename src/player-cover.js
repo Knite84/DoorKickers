@@ -1,5 +1,5 @@
 import { rayBox } from './destruction.js';
-import { elevation, doorCenter, doorSize, windowCenter, windowSize, playerEye, supportHeight } from './world.js';
+import { elevation, doorCenter, doorSize, windowCenter, windowSize, playerEye, supportHeight, propHeight } from './world.js';
 
 const colliderCache=new WeakMap();
 function solids(state,map) {
@@ -8,7 +8,7 @@ function solids(state,map) {
   if(!cached||cached.signature!==signature||cached.map!==map){
   const boxes=[
     ...state.wallPieces.filter(p=>p.hp>0&&!p.stair).map(p=>({center:p.center,size:p.size,kind:'wall',id:p.wall,floor:p.floor})),
-    ...map.props.map((p,id)=>({center:[p.position[0],elevation(p)+.55,p.position[1]],size:[p.size[0],1.1,p.size[1]],kind:'prop',id})),
+    ...map.props.map((p,id)=>({center:[p.position[0],elevation(p)+propHeight(p)/2,p.position[1]],size:[p.size[0],propHeight(p),p.size[1]],kind:'prop',id})),
     ...map.doors.flatMap((d,id)=>state.doors[id]?[]:[{center:doorCenter(d),size:doorSize(d),kind:'door',id}]),
     ...(map.windows??[]).flatMap((w,id)=>state.windowHealth[id]>0?[{center:windowCenter(w),size:windowSize(w),kind:'glass',id}]:[]),
   ];

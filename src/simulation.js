@@ -4,7 +4,7 @@ import { finishReload } from './weapons.js';
 import { segmentClear } from './combat.js';
 import { stepEquipment } from './equipment.js';
 import { DEFAULT_DOOR_HEALTH } from './doors.js';
-import { elevation, bodyHeight, eyeHeight, playerEye, stairHeight, supportHeight } from './world.js';
+import { elevation, bodyHeight, eyeHeight, playerEye, stairHeight, supportHeight, propHeight } from './world.js';
 import { stepPlayerCover, leavePlayerCover } from './player-cover.js';
 import { darknessSightFactor, roomLights } from './lighting.js';
 import { nearbyInteraction, climbWindow } from './window-traversal.js';
@@ -33,7 +33,7 @@ export function intersectsBox(a, b, box, padding = 0) {
 export function obstacles(map, doors, pieces, movement = false, baseY = 0, height = 1.8, windowHealth = []) {
   const overlaps = (bottom, top) => movement ? bottom < baseY + height && top > baseY + 0.12 : bottom <= baseY + 1.5 && top >= baseY + 1.5;
   const walls = pieces ? pieces.filter(p => p.hp > 0 && !(movement && p.stair) && overlaps(p.center[1] - p.size[1] / 2, p.center[1] + p.size[1] / 2)).map(p => ({ center: [p.center[0], p.center[2]], size: [p.size[0], p.size[2]] })) : map.walls.filter(w => overlaps(elevation(w), elevation(w) + (w.height ?? 2.8)));
-  return [...walls, ...map.props.filter(p => overlaps(elevation(p), elevation(p) + 1.1)).map(p => ({ center: p.position, size: p.size, prop: true })), ...map.doors.filter((d, i) => !doors[i] && overlaps(elevation(d), elevation(d) + 2.8)).map(d => ({ center: d.position, size: d.size })), ...(movement ? (map.windows ?? []).filter((w, i) => windowHealth[i] > 0 && overlaps(elevation(w) + (w.sill??.8), elevation(w) + (w.sill??.8) + (w.height??1.5))).map(w => ({ center: w.position, size: w.size })) : [])];
+  return [...walls, ...map.props.filter(p => overlaps(elevation(p), elevation(p) + propHeight(p))).map(p => ({ center: p.position, size: p.size, prop: true })), ...map.doors.filter((d, i) => !doors[i] && overlaps(elevation(d), elevation(d) + 2.8)).map(d => ({ center: d.position, size: d.size })), ...(movement ? (map.windows ?? []).filter((w, i) => windowHealth[i] > 0 && overlaps(elevation(w) + (w.sill??.8), elevation(w) + (w.sill??.8) + (w.height??1.5))).map(w => ({ center: w.position, size: w.size })) : [])];
 }
 export function lineOfSight(a, b, boxes) {
   return !boxes.some(box => intersectsBox(a, b, box));
@@ -111,7 +111,7 @@ export function jump(state, map) {
 function playerSupport(state, map, fromY) {
   let floor = supportHeight(state, map, state.player, fromY);
   for (const prop of map.props) {
-    const top = elevation(prop) + 1.1;
+    const top = elevation(prop) + propHeight(prop);
     if (top <= fromY + 0.12 && top > floor && intersectsBox(state.player, state.player, { center: prop.position, size: prop.size })) floor = top;
   }
   return floor;

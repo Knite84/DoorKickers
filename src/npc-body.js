@@ -1,4 +1,4 @@
-import { doorCenter, doorSize, windowCenter, windowSize } from './world.js';
+import { doorCenter, doorSize, windowCenter, windowSize, propHeight } from './world.js';
 
 // Metres, Y up, local +X forward. These joints drive visuals AND shot capsules.
 const rest = {
@@ -199,7 +199,7 @@ export function stepBodies(state, map, delta) {
     const boxes = state.wallPieces.filter(p => p.hp > 0 && near(p.center, p.size));
     map.doors.forEach((door, i) => { const center = doorCenter(door), size = doorSize(door); if (!state.doors[i] && near(center, size)) boxes.push({ center, size }); });
     (map.windows ?? []).forEach((w, i) => { const center = windowCenter(w), size = windowSize(w); if (state.windowHealth[i] > 0 && near(center, size)) boxes.push({ center, size }); });
-    for (const prop of map.props) { const center = [prop.position[0], (prop.elevation ?? 0) + 0.55, prop.position[1]], size = [prop.size[0], 1.1, prop.size[1]]; if (near(center, size)) boxes.push({ center, size }); }
+    for (const prop of map.props) { const center = [prop.position[0], (prop.elevation ?? 0) + propHeight(prop) / 2, prop.position[1]], size = [prop.size[0], propHeight(prop), prop.size[1]]; if (near(center, size)) boxes.push({ center, size }); }
     const dt = 1 / 120;
     while (body.accumulator + 1e-10 >= dt) {
       body.accumulator -= dt; body.age += dt;

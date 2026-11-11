@@ -1,4 +1,4 @@
-import { elevation, stairHeight } from './world.js';
+import { elevation, stairHeight, propHeight } from './world.js';
 
 // A small shared walking grid, rebuilt when damage changes passable geometry.
 // Doors are authorized guard routes and are opened on approach by the AI.
@@ -29,7 +29,7 @@ export function navigationFor(state, map) {
       if (piece.floor && Math.abs(top - base) < 0.15) raster(level, center, size, 0.08, id => { supported[id % plane] = 1; });
       if (bottom < base + 1.8 && top > base + 0.12) raster(level, center, size, 0.28, id => { blocked[id] = 1; });
     }
-    for (const prop of map.props) if (elevation(prop) < base + 1.8 && elevation(prop) + 1.1 > base + 0.12) raster(level, prop.position, prop.size, 0.28, id => { blocked[id] = 1; });
+    for (const prop of map.props) if (elevation(prop) < base + 1.8 && elevation(prop) + propHeight(prop) > base + 0.12) raster(level, prop.position, prop.size, 0.28, id => { blocked[id] = 1; });
     (map.windows ?? []).forEach((window, index) => {
       if (state.windowHealth[index] > 0 && Math.abs(elevation(window) - base) < 0.5) raster(level, window.position, window.size, 0.28, id => { blocked[id] = 1; });
     });

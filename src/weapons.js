@@ -2,7 +2,7 @@ import { damageWall, rayBox } from './destruction.js';
 import { weapons, ammoTypes } from './kit.js';
 import { alertGuards, damageGuard, shatterWindow } from './combat.js';
 import { damageDoor } from './doors.js';
-import { doorCenter, doorSize, elevation, windowCenter, windowSize } from './world.js';
+import { doorCenter, doorSize, elevation, windowCenter, windowSize, propHeight } from './world.js';
 import { hitGuard } from './npc-body.js';
 import { roomLights } from './lighting.js';
 export const MAGAZINE = 30;
@@ -31,7 +31,7 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
   for (const piece of state.wallPieces) if (piece.hp > 0) consider(piece.center, piece.size, 'wall', piece);
   map.doors.forEach((door, i) => { if (!state.doors[i]) consider(doorCenter(door), doorSize(door), 'door', i); });
   (map.windows ?? []).forEach((window, i) => { if (state.windowHealth[i] > 0) consider(windowCenter(window), windowSize(window), 'glass', i); });
-  for (const prop of map.props) consider([prop.position[0], elevation(prop) + 0.55, prop.position[1]], [prop.size[0], 1.1, prop.size[1]], 'prop', prop);
+  for (const prop of map.props) consider([prop.position[0], elevation(prop) + propHeight(prop) / 2, prop.position[1]], [prop.size[0], propHeight(prop), prop.size[1]], 'prop', prop);
   for (const guard of state.guards) if (guard.health > 0) {
     const hit = hitGuard(guard, origin, direction);
     if (hit) hits.push({ ...hit, kind: 'guard', object: guard });

@@ -123,3 +123,11 @@ test('stair guard rails stop movement but leave sight lines open above them',()=
   assert.equal(segmentClear(state,martelli,eye(point(660,550),4.7),eye(point(592.5,550),4.7),-1,{glass:false}),true);
   assert.equal(segmentClear(state,martelli,eye(point(660,550),3.7),eye(point(592.5,550),3.7),-1,{glass:false}),false);
 });
+test('Bedroom 4 bath is sealed from storage and beds are low furniture',()=>{
+  const state=ready();
+  const at=([x,z],y)=>[x,y,z];
+  assert.equal(segmentClear(state,martelli,at(point(1100,480),1.2),at(point(1165,480),1.2),-1,{glass:false}),false);
+  assert.equal(segmentClear(state,martelli,at(point(1100,480),1.2),at(point(1100,540),1.2),-1,{glass:false}),false);
+  const beds=martelli.props.filter(p=>p.kind==='bed');
+  assert.equal(beds.length,5); assert.ok(beds.every(b=>b.height<=0.6));
+});

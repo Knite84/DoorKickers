@@ -39,6 +39,7 @@ function room(name, x1, z1, x2, z2, elevation = main) {
 function floor(x1, z1, x2, z2, elevation = main, extra = {}) {
   floors.push({ center: point((x1 + x2) / 2, (z1 + z2) / 2), size: [(x2 - x1) * scale, (z2 - z1) * scale], elevation, ...extra });
 }
+const bed = (x, z, width, depth, elevation = main) => props.push({ kind: 'bed', height: 0.6, position: point(x, z), size: [width * scale, depth * scale], elevation });
 function prop(kind, x, z, width, depth, elevation = main) {
   props.push({ kind, position: point(x, z), size: [width * scale, depth * scale], elevation });
 }
@@ -160,6 +161,8 @@ v(fx(932),90,fz(570),[door(fz(390),44),door(480,44)],0);
 // Bedroom 4 over its closet and bath, both entered from the bedroom.
 h(fz(422),fx(932),1133,[door(fx(1000),40),door(fx(1090),40)],0);
 v(fx(1027),fz(422),fz(565),[],0); h(fz(513),fx(932),fx(1027),[],0); h(fz(565),fx(1027),1133,[],0);
+// The bath's east wall continues past the facade jog, sealing it from storage.
+v(1133,452,fz(565),[],0);
 // Double doors from the lower hall into unfinished storage.
 h(fz(570),720,fx(932),[door(fx(803),80)],0);
 // Wet bar beneath the kitchen behind the brick wall's 6 ft arch, and the arched
@@ -184,9 +187,9 @@ room('CLOSET',fx(932),fz(422),fx(1027),fz(513),0); room('LOWER BATH',fx(1027),fz
 room('UTILITY / STORAGE',740,fz(570),1005,780,0);
 room('UNEXCAVATED / BELOW GARAGE',14,590,510,900,0);
 prop('table',370,265,110,48); prop('table',350,365,75,38); prop('crate',265,420,20,95);
-prop('table',704,358,24,90); prop('table',850,200,95,85);
-prop('table',810,690,80,90); prop('table',1100,550,90,85);
-prop('table',340,fz(471),150,30,0); prop('table',340,fz(559),150,26,0); prop('table',850,180,85,80,0); prop('table',1030,lowerZ(330),85,80,0);
+prop('table',704,358,24,90); bed(850,200,95,85);
+bed(810,690,80,90); bed(1100,550,90,85);
+prop('table',340,fz(471),150,30,0); prop('table',340,fz(559),150,26,0); bed(850,180,85,80,0); bed(1030,lowerZ(330),85,80,0);
 prop('crate',1110,lowerZ(660),55,40,0); prop('crate',1040,lowerZ(665),45,40,0);
 prop('planter',740,900,70,30); prop('planter',580,795,35,75);
 const stairWindow=windows.find(w=>w.elevation===main&&Math.abs(w.position[0]-point(565,646)[0])<.01&&Math.abs(w.position[1]-point(565,646)[1])<.01);

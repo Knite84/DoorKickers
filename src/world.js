@@ -1,4 +1,6 @@
 export const elevation = object => object?.elevation ?? 0;
+// Furniture is waist-high cover unless a prop states its own height (beds are low).
+export const propHeight = prop => prop.height ?? 1.1;
 export const eyeHeight = state => (state.playerY ?? 0) + (state.playerCover ? state.playerCover.peeking ? 1.65 : .85 : state.crouched ? 1 : 1.65);
 export const playerEye = state => [state.player[0]+(state.playerCover?.offset?.[0]??0),eyeHeight(state),state.player[1]+(state.playerCover?.offset?.[1]??0)];
 export const bodyHeight = state => state.playerCover ? state.playerCover.peeking ? 1.8 : 1.08 : state.crouched ? 1.1 : 1.8;

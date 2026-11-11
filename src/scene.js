@@ -211,7 +211,15 @@ export function createScene(canvas, map) {
   for (const prop of map.props) {
     const firstMesh = scene.children.length, base = elevation(prop);
     const [x, z] = prop.position;
-    box([x, base + 0.45, z], [prop.size[0], 0.9, prop.size[1]], prop.kind === 'crate' ? 0x776347 : 0x394e46);
+    if (prop.kind === 'bed') {
+      // Low frame, mattress, blanket and pillows, with a headboard on the lake side.
+      const [w, d] = prop.size, head = z - d / 2;
+      box([x, base + 0.15, z], [w, 0.3, d], 0x5a4632);
+      box([x, base + 0.42, z], [w - 0.08, 0.24, d - 0.08], 0xe4dfd2);
+      box([x, base + 0.5, z + d * 0.17], [w - 0.04, 0.12, d * 0.62], 0x5f7f96);
+      for (const side of [-1, 1]) box([x + side * w * 0.24, base + 0.6, head + 0.3], [w * 0.36, 0.12, 0.36], 0xf4f1e8);
+      box([x, base + 0.5, head + 0.04], [w, 1.0, 0.08], 0x4a3828);
+    } else box([x, base + 0.45, z], [prop.size[0], 0.9, prop.size[1]], prop.kind === 'crate' ? 0x776347 : 0x394e46);
     if (prop.kind === 'planter') {
       for (let i = -1; i <= 1; i++) {
         const bush = new THREE.Mesh(new THREE.IcosahedronGeometry(0.65, 0), material(0x658267));
