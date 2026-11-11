@@ -2,10 +2,12 @@ import * as THREE from 'three';
 import { distance, lineOfSight, obstacles } from './simulation.js';
 import { buildWallPieces } from './destruction.js';
 import { weapons, items } from './kit.js';
-import { elevation, eyeHeight, doorCenter, doorSize, windowCenter, windowSize } from './world.js';
+import { elevation, eyeHeight, playerEye, doorCenter, doorSize, windowCenter, windowSize } from './world.js';
 import { segmentClear } from './combat.js';
 import { createGuardVisual } from './npc-visual.js';
-import { guardDisabled } from './npc-body.js';
+import { guardDisabled, guardEye } from './npc-body.js';
+import { coverClear } from './guard-tactics.js';
+import { createSceneLighting } from './scene-lighting.js';
 
 // Asset boundary: replace these factories with GLB-backed factories later.
 // The simulation only knows positions and collision boxes, never meshes.
@@ -40,16 +42,17 @@ export function createScene(canvas, map) {
     }
   };
   canvas.addEventListener('pointermove', pointerMove);
-  scene.add(new THREE.HemisphereLight(0xd9ecdf, 0x344438, 2.5));
+  const lighting=createSceneLighting(map);
+  const ambient=new THREE.HemisphereLight(0xd9ecdf,0x344438,2.5);scene.add(ambient);
   const sun = new THREE.DirectionalLight(0xffebc4, 3.2);
-  sun.position.set(-12, 25, 8);
+  sun.position.set(...lighting.sunDirection.map(v=>v*35));
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -24, right: 24, top: 24, bottom: -24 });
   sun.shadow.normalBias = 0.03;
   scene.add(sun);
   const materials = {};
-  const material = (color, roughness = 0.85) => materials[color] ??= new THREE.MeshStandardMaterial({ color, roughness });
+  const material = (color, roughness = 0.85) => materials[color] ??= lighting.decorate(new THREE.MeshStandardMaterial({ color, roughness }));
   function box(position, size, color) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material(color));
     mesh.position.set(...position);
@@ -71,13 +74,13 @@ export function createScene(canvas, map) {
   const unitBox = new THREE.BoxGeometry(1, 1, 1), instanceTransform = new THREE.Object3D();
   for (const kind of new Set(structure.map(piece => piece.material))) {
     const indices = structure.flatMap((piece, index) => piece.material === kind ? [index] : []);
-    const mesh = new THREE.InstancedMesh(unitBox, material(({ timber: 0xa16d3f, drywall: 0xd5ceb5, particleboard: 0xa68552, truss: 0x79512e, earth: 0x59734c, concrete: 0xaaa99d, deck: 0x8c7253 })[kind] ?? 0xb7b198), indices.length);
+    const mesh = new THREE.InstancedMesh(unitBox, material(({ ceiling: 0xd8d7cd, timber: 0xa16d3f, drywall: 0xd5ceb5, particleboard: 0xa68552, truss: 0x79512e, earth: 0x59734c, concrete: 0xaaa99d, deck: 0x8c7253 })[kind] ?? 0xb7b198), indices.length);
     mesh.castShadow = mesh.receiveShadow = true; mesh.frustumCulled = false; scene.add(mesh);
     wallBatches.push({ mesh, indices });
   }
   const windowMeshes = (map.windows ?? []).map(window => {
     const mesh = box(windowCenter(window), windowSize(window), 0x8bdce4);
-    mesh.material = new THREE.MeshStandardMaterial({ color: 0x8bdce4, transparent: true, opacity: 0.27, roughness: 0.1, side: THREE.DoubleSide, depthWrite: false }); mesh.castShadow = false;
+    mesh.material = lighting.decorate(new THREE.MeshStandardMaterial({ color: 0x8bdce4, transparent: true, opacity: 0.27, roughness: 0.1, side: THREE.DoubleSide, depthWrite: false })); mesh.castShadow = false;
     return mesh;
   });
   const windowFrames = (map.windows ?? []).map(window => {
@@ -92,7 +95,7 @@ export function createScene(canvas, map) {
   });
   const doors = map.doors.map(d => {
     const mesh = box(doorCenter(d), doorSize(d), 0x92784e);
-    mesh.material = mesh.material.clone(); return mesh;
+    mesh.material = lighting.decorate(mesh.material.clone()); return mesh;
   });
   const doorColor = new THREE.Color(0x92784e), damagedDoorColor = new THREE.Color(0x3f2d20);
   const doorCracks = map.doors.map(d => {
@@ -237,6 +240,11 @@ export function createScene(canvas, map) {
     scene.add(sprite); return sprite;
   }
   const labels = map.rooms.map(r => label(r.name, r.center[0], r.center[1], elevation(r)));
+  const electricFixtures=lighting.fixtures.map(fixture=>{
+    const mesh=box(fixture.position,[.46,.07,.46],0xffd79a);
+    mesh.material=new THREE.MeshBasicMaterial({color:0xffd79a});
+    return mesh;
+  });
   function actor(color) {
     const group = new THREE.Group();
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.25, 0.9, 4, 8), material(color));
@@ -248,6 +256,7 @@ export function createScene(canvas, map) {
     scene.add(group); return group;
   }
   const player = actor(0x95d9bb);
+  const playerLean = new THREE.Vector3(), playerUp = new THREE.Vector3(0,1,0);
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.4, 0.46, 32), new THREE.MeshBasicMaterial({ color: 0x9ef5ca, side: THREE.DoubleSide }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.15; player.add(ring);
   const objective = box([map.objective.position[0], elevation(map.objective) + 0.5, map.objective.position[1]], [0.65, 0.7, 0.5], 0xe9b55d);
@@ -257,8 +266,10 @@ export function createScene(canvas, map) {
   scene.add(extraction);
   const extractionLabel = label('EXTRACT', map.extraction.position[0], map.extraction.position[1] + 2.2, elevation(map.extraction));
   const guards = [], cones = [], routes = [];
+  const heatMaterials={};
+  const heatMaterial=color=>heatMaterials[color]??=lighting.decorate(new THREE.MeshStandardMaterial({color}),color===0xd5bd91?1:.82);
   for (let i = 0; i < 8; i++) {
-    const guardVisual = createGuardVisual(material); scene.add(guardVisual); guards.push(guardVisual);
+    const guardVisual = createGuardVisual(heatMaterial); scene.add(guardVisual); guards.push(guardVisual);
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(32 * 9), 3));
     const cone = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ color: 0xeac777, transparent: true, opacity: 0.13, side: THREE.DoubleSide, depthWrite: false }));
@@ -307,11 +318,13 @@ export function createScene(canvas, map) {
   };
   canvas.addEventListener('wheel', zoomWheel, { passive: false });
   function draw(state, rules, dt, controls = {}) {
+    lighting.update(state,rules,mapOpen);
     currentCamera = mapOpen ? mapCamera : view === 'first' ? firstPerson : camera;
-    firstPerson.position.set(state.player[0], eyeHeight(state), state.player[1]);
+    firstPerson.position.set(...playerEye(state));
     if (view === 'first' && !mapOpen) selectedLevel = Math.max(0, Math.round((state.playerY ?? 0) / 3.2));
     const overview = view !== 'first' || mapOpen;
     const onLevel = object => !overview || Math.round(elevation(object) / 3.2) === selectedLevel;
+    electricFixtures.forEach((mesh,i)=>{mesh.visible=onLevel(lighting.fixtures[i]);mesh.material.color.setHex(state.powerOn===false||state.destroyedLights?.[i]?0x22252a:0xffd79a);});
     firstPerson.rotation.set(pitch + recoil * 0.4, yaw, 0);
     const equipped = state.inventory.equipped, spec = weapons[equipped], config = state.inventory.weapons[equipped];
     const scoped = controls.aimed && equipped === 'sniper' && !mapOpen && view === 'first';
@@ -323,13 +336,16 @@ export function createScene(canvas, map) {
       suppressor.visible = config.suppressor; suppressor.position.z = -0.6 - spec.length;
       scopeModel.visible = equipped === 'sniper'; flash.position.z = suppressor.position.z - 0.13;
     }
-    weapon.position.set(-0.03, -0.05 + Math.sin(state.elapsed * (controls.running ? 14 : 9)) * (controls.moving ? 0.008 : 0), -0.2 + recoil);
-    weapon.rotation.x = state.reloadUntil > state.elapsed ? -0.5 : recoil;
+    const strike = state.status === 'active' ? Math.sin(Math.PI * Math.max(0, Math.min(1, ((state.meleeUntil ?? 0) - state.elapsed) / .65))) : 0;
+    weapon.position.set(-0.03 + strike * 0.12, -0.05 + Math.sin(state.elapsed * (controls.running ? 14 : 9)) * (controls.moving ? 0.008 : 0), -0.2 + recoil);
+    weapon.rotation.z = -strike * 0.55;
+    weapon.rotation.x = state.playerCover&&!state.playerCover.peeking ? -0.7 : state.reloadUntil > state.elapsed ? -0.5 : recoil;
     const weaponVisible = !!spec && view === 'first' && !mapOpen && !scoped && !controls.menuVisible;
     weapon.visible = weaponVisible && equipped !== 'minigun';
     minigun.visible = weaponVisible && equipped === 'minigun';
     minigun.position.y = -0.35 + recoil * 0.1;
-    minigun.rotation.x = state.reloadUntil > state.elapsed ? -0.4 : recoil * 0.3;
+    minigun.rotation.z = -strike * 0.4;
+    minigun.rotation.x = state.playerCover&&!state.playerCover.peeking ? -0.7 : state.reloadUntil > state.elapsed ? -0.4 : recoil * 0.3;
     if (equipped === 'minigun' && controls.firing && state.reloadUntil <= state.elapsed && (state.ammo > 0 || rules.unlimitedAmmo)) rotor.rotation.z += dt * 35;
     miniFlash.visible = recoil > 0.025 && state.status === 'active' && !config?.suppressor;
     for (const [id, model] of Object.entries(heldItems)) { model.visible = id === equipped && view === 'first' && !mapOpen && !controls.menuVisible; model.rotation.x = recoil * 5; }
@@ -344,7 +360,7 @@ export function createScene(canvas, map) {
     for (const { mesh, indices } of wallBatches) {
       let changed = false;
       indices.forEach((index, instance) => {
-        const piece = state.wallPieces[index], visible = Number(piece.hp > 0 && (!overview || piece.stair || (piece.level ?? 0) === selectedLevel));
+        const piece = state.wallPieces[index], visible = Number(piece.hp > 0 && (!overview || !piece.ceiling&&(piece.stair || (piece.level ?? 0) === selectedLevel)));
         if (wallDisplay[index] === visible) return;
         wallDisplay[index] = visible; instanceTransform.position.set(...piece.center); instanceTransform.scale.set(...(visible ? piece.size : [0, 0, 0]));
         instanceTransform.updateMatrix(); mesh.setMatrixAt(instance, instanceTransform.matrix); changed = true;
@@ -354,7 +370,13 @@ export function createScene(canvas, map) {
     windowMeshes.forEach((mesh, i) => { mesh.visible = state.windowHealth[i] > 0 && onLevel(map.windows[i]); windowFrames[i].forEach(frame => { frame.visible = onLevel(map.windows[i]); }); });
     propMeshes.forEach((meshes, i) => meshes.forEach(mesh => { mesh.visible = onLevel(map.props[i]); }));
     syncDynamic(state);
-    player.position.set(state.player[0], state.playerY ?? 0, state.player[1]); player.scale.y = state.crouched ? 0.65 : 1;
+    const exposed=playerEye(state);
+    player.position.set(state.player[0], state.playerY ?? 0, state.player[1]); player.scale.y = state.playerCover&&!state.playerCover.peeking ? 0.51 : state.crouched&&!state.playerCover ? 0.65 : 1;
+    playerLean.set(exposed[0]-state.player[0],0,exposed[2]-state.player[1]).applyAxisAngle(playerUp,-player.rotation.y);
+    player.children[0].position.set(playerLean.x*.5,.85,playerLean.z*.5);
+    player.children[0].quaternion.setFromUnitVectors(playerUp,playerLean.clone().setY(1).normalize());
+    player.children[1].position.set(playerLean.x,1.65,playerLean.z);
+    player.children[2].position.set(.27+playerLean.x*.6,1.15,playerLean.z*.6);
     player.visible = overview && Math.round((state.playerY ?? 0) / 3.2) === selectedLevel;
     doors.forEach((mesh, i) => {
       mesh.visible = !state.doors[i] && onLevel(map.doors[i]);
@@ -372,7 +394,7 @@ export function createScene(canvas, map) {
     scenery.forEach(mesh => { mesh.visible = !overview || selectedLevel === 0; });
     for (let i = 0; i < 8; i++) {
       const guard = state.guards[i];
-      const visible = !!guard && onLevel(guard) && (!overview || rules.fullIntel || state.scanUntil > state.elapsed || (distance(guard.position, state.player) < 9 && segmentClear(state, map, [state.player[0], eyeHeight(state), state.player[1]], [guard.position[0], elevation(guard) + 1.5, guard.position[1]], -1, { glass: false })));
+      const visible = !!guard && onLevel(guard) && (!overview || rules.fullIntel || state.scanUntil > state.elapsed || (distance(guard.position, state.player) < 9 && coverClear(state,map,playerEye(state),guardEye(guard))));
       guards[i].visible = visible;
       cones[i].visible = visible && !guardDisabled(guard) && rules.showVision && (view !== 'first' || mapOpen);
       routes[i].visible = !!guard && onLevel(guard) && !guardDisabled(guard) && rules.showRoutes && overview;
@@ -380,7 +402,7 @@ export function createScene(canvas, map) {
       guards[i].userData.update(guard);
       if (!cones[i].visible) continue;
       const boxes = obstacles(map, state.doors, state.wallPieces, false, elevation(guard));
-      cones[i].material.color.setHex(guard.stunnedUntil > state.elapsed ? 0xc7d8ec : ({ detain: 0xffd278, gather: 0x77cced, pursue: 0xff8067, investigate: 0xd6a0e8, search: 0xd6a0e8 })[guard.mode] ?? (guard.suspicion > 0.2 ? 0xff8067 : 0xeac777));
+      cones[i].material.color.setHex(guard.stunnedUntil > state.elapsed ? 0xc7d8ec : ({ retreat: 0xf2ae63, cover: 0xf2ae63, peek: 0xff8067, detain: 0xffd278, gather: 0x77cced, pursue: 0xff8067, investigate: 0xd6a0e8, search: 0xd6a0e8 })[guard.mode] ?? (guard.suspicion > 0.2 ? 0xff8067 : 0xeac777));
       const range = rules.sightRange * (rules.weather === 'fog' ? 0.6 : rules.weather === 'rain' ? 0.85 : 1);
       const points = [];
       for (let ray = 0; ray <= 32; ray++) {
@@ -403,7 +425,13 @@ export function createScene(canvas, map) {
     }
     const foggy = rules.weather === 'fog';
     fog.density = foggy ? 0.018 : 0;
-    sun.intensity = rules.weather === 'clear' ? 3.2 : 1.5;
+    const day=(state.timeOfDay??rules.timeOfDay??'day')==='day';
+    const vision=mapOpen?'off':state.inventory.vision??'off';
+    sun.intensity=mapOpen?3.2:day?(rules.weather==='clear'?3.2:1.3):.04;
+    sun.color.setHex(day?0xffebc4:0x718ebd);
+    ambient.intensity=mapOpen?2.5:day?1.8:.15;
+    renderer.setClearColor(vision==='nightvision'?0x031207:vision==='thermal'?0x040711:day?0x8eaba9:0x020611);
+    fog.color.setHex(vision==='nightvision'?0x123719:vision==='thermal'?0x070b1a:day?0x9baaa0:0x020611);
     rain.visible = rules.weather === 'rain';
     if (rain.visible) {
       for (let i = 1; i < rainPositions.length; i += 3) rainPositions[i] = (rainPositions[i] - dt * 12 + 15) % 15;
@@ -414,6 +442,7 @@ export function createScene(canvas, map) {
   return {
     draw, shotEffect, eventEffect,
     dispose: () => {
+      lighting.dispose();
       resizeObserver.disconnect(); canvas.removeEventListener('pointermove', pointerMove); canvas.removeEventListener('wheel', zoomWheel);
       const geometries = new Set([chipGeometry]), sceneMaterials = new Set(Object.values(materials)), textures = new Set();
       scene.traverse(object => {
@@ -436,7 +465,7 @@ export function createScene(canvas, map) {
     reset: (heading = -0.55) => { yaw = heading; pitch = 0; recoil = 0; selectedLevel = 0; for (const effect of effects) { scene.remove(effect.mesh); if (effect.disposable) { effect.mesh.geometry.dispose(); effect.mesh.material.dispose(); } } effects.length = 0; },
     movement: (x, z) => view === 'first' ? [x * Math.cos(yaw) + z * Math.sin(yaw), -x * Math.sin(yaw) + z * Math.cos(yaw)] : [x, z],
     aim: state => {
-      const origin = [state.player[0], eyeHeight(state), state.player[1]];
+      const origin = playerEye(state);
       if (view === 'first') return { origin, direction: [-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)] };
       plane.constant = -eyeHeight(state); raycaster.setFromCamera(pointer, mapOpen ? mapCamera : camera);
       const target = raycaster.ray.intersectPlane(plane, new THREE.Vector3());

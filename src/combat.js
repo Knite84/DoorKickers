@@ -1,5 +1,5 @@
 import { rayBox } from './destruction.js';
-import { doorCenter, doorSize, windowCenter, windowSize } from './world.js';
+import { doorCenter, doorSize, windowCenter, windowSize, playerEye } from './world.js';
 import { reactToHit, guardDisabled } from './npc-body.js';
 export function shatterWindow(state, map, index) {
   if (!(state.windowHealth?.[index] > 0)) return false;
@@ -11,6 +11,9 @@ export function damageGuard(state, guard, damage, hit) {
   if (guard.health <= 0 || damage <= 0) return false;
   guard.health = Math.max(0, guard.health - damage);
   if (guard.health === 0) { state.kills++; guard.suspicion = 0; reactToHit(guard, hit, true); return true; }
+  guard.wounded = true;
+  guard.woundThreat = hit?.origin ? [...hit.origin] : playerEye(state);
+  guard.cover = null; guard.nextCoverAt = 0;
   if (!guard.injuryReported || state.elapsed >= (guard.nextInjuryCall ?? 0)) {
     guard.injuryReported = true; guard.nextInjuryCall = state.elapsed + 1;
     sendGuardReport(state, guard, { kind: 'injury', position: [...guard.position], elevation: guard.elevation ?? 0 });

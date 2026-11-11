@@ -19,6 +19,21 @@ export function createKitMenu(callbacks) {
       }).join('')}</section><section class="kit-equipment"><div class="section-title"><h3>Equipment</h3><span>${planning ? 'Set quantities before deploying' : 'Select an item, close inventory, then left click to use'}</span></div>${Object.entries(items).map(([id, item]) => `<article class="item-card ${!planning && current.equipped === id ? 'selected' : ''}"><div class="item-heading"><h4>${item.name}</h4>${planning ? `<input type="number" min="0" max="${item.max}" step="1" value="${current.items[id]}" data-quantity="${id}" aria-label="${item.name} quantity">` : `<span class="item-count">×${current.items[id]}</span>`}</div><p>${item.description}</p>${!planning ? `<button class="secondary" data-equip="${id}" ${current.items[id] <= 0 ? 'disabled' : ''}>${current.equipped === id ? 'Equipped' : `Equip ${item.name}`}</button>` : ''}</article>`).join('')}</section></div>
       <div class="kit-bottom"><div><p id="kit-status" role="status">${planning ? 'Your map and kit are saved locally. New deployment restores walls and guards.' : 'Debug restock refills equipment and restores support cash to $10,000. Ammo changes preserve magazine count.'}</p><small>Penetration: solid core &gt; standard &gt; hollow-point; sniper &gt; rifle / M134 &gt; pistol &gt; shotgun pellet. Subsonic reduces penetration. Each layer or NPC reduces body and wall damage. Drywall is easiest to penetrate; framing and bodies have equal, greater resistance. Masonry stops rounds. Hollow-point can still pass through thin layers.</small></div>${planning ? '<button id="kit-deploy" class="primary">Deploy with this kit ↗</button>' : '<div class="kit-actions"><button id="kit-restock" class="secondary" title="Debug: refill equipment and support cash to $10,000">Restock equipment & cash</button><button id="kit-detonate" class="secondary">Detonate placed charges · B</button></div>'}</div>`;
     dialog.querySelector('#kit-close').addEventListener('click', close);
+    // Vision is worn independently of the weapon, with one active device.
+    for(const button of dialog.querySelectorAll('[data-equip]')){
+      const id=button.dataset.equip;
+      if(!planning&&items[id]?.wearable){
+        button.textContent=current.vision===id?`Remove ${items[id].name}`:`Wear ${items[id].name}`;
+        button.closest('.item-card').classList.toggle('selected',current.vision===id);
+      }
+    }
+    if(planning){
+      const visionLabel=document.createElement('label');visionLabel.className='vision-planning';visionLabel.textContent='Starting worn vision device';
+      const select=document.createElement('select');select.id='plan-vision';
+      select.replaceChildren(new Option('Off — normal vision','off'),...['nightvision','thermal'].filter(id=>current.items[id]>0).map(id=>new Option(items[id].name,id)));
+      select.value=current.vision??'off';visionLabel.append(select);dialog.querySelector('.kit-equipment').prepend(visionLabel);
+      select.addEventListener('change',()=>{current.vision=select.value;callbacks.saveLoadout(current);status('Starting vision updated. Only one device can be worn at a time.');});
+    }
     if (!planning) {
       const holster = document.createElement('button'); holster.className = 'secondary holster-button';
       holster.textContent = current.equipped === 'unarmed' ? 'Empty hands · equipped' : 'Holster · empty hands';
@@ -37,6 +52,10 @@ export function createKitMenu(callbacks) {
       dialog.querySelector('#kit-restock').focus();
     });
     if (planning) {
+      const timeLabel=document.createElement('label');timeLabel.textContent='Time of day';
+      const timeSelect=document.createElement('select');timeSelect.id='plan-time';timeSelect.append(new Option('Day','day'),new Option('Night','night'));timeSelect.value=callbacks.getRules().timeOfDay??'day';
+      timeLabel.append(timeSelect);dialog.querySelector('.plan-strip').insertBefore(timeLabel,dialog.querySelector('.plan-strip > div'));
+      timeSelect.addEventListener('change',()=>callbacks.changeRule('timeOfDay',timeSelect.value));
       const enemyLabel = document.createElement('label'); enemyLabel.textContent = 'Enemies (0–8)';
       const enemyCount = document.createElement('input'); enemyCount.id = 'plan-enemies'; enemyCount.type = 'number'; enemyCount.min = '0'; enemyCount.max = '8'; enemyCount.step = '1'; enemyCount.value = callbacks.getRules().guardCount;
       enemyLabel.append(enemyCount); dialog.querySelector('.plan-strip').insertBefore(enemyLabel, dialog.querySelector('.plan-strip > div'));
@@ -46,6 +65,14 @@ export function createKitMenu(callbacks) {
         callbacks.changeRule('guardCount', value);
         dialog.querySelector('.plan-strip > div p').textContent = `${value} guards · $${callbacks.getRules().budget.toLocaleString()} support`;
         status(`Next deployment: ${value} enemies.`);
+      });
+      const armorLabel = document.createElement('label'); armorLabel.textContent = 'Armored enemies (0�8)';
+      const armorCount = document.createElement('input'); armorCount.id = 'plan-armor'; armorCount.type = 'number'; armorCount.min = '0'; armorCount.max = '8'; armorCount.step = '1'; armorCount.value = callbacks.getRules().armoredGuards;
+      armorLabel.append(armorCount); const armorHelp = document.createElement('small'); armorHelp.textContent = 'Armor reduces torso bullet damage to 35% for 10 hits; head and limbs are unprotected. Capped at enemy count.'; armorLabel.append(armorHelp); dialog.querySelector('.plan-strip').insertBefore(armorLabel, dialog.querySelector('.plan-strip > div'));
+      armorCount.addEventListener('change', () => {
+        const value = Number(armorCount.value);
+        if (!armorCount.value.trim() || !Number.isInteger(value) || value < 0 || value > 8) { armorCount.value = callbacks.getRules().armoredGuards; status('Choose a whole armored enemy count from 0 to 8.'); return; }
+        callbacks.changeRule('armoredGuards', value); status(`Next deployment: up to ${value} enemies wear armor. Armor reduces bullet damage to the torso.`);
       });
       dialog.querySelector('#plan-map').addEventListener('change', e => { callbacks.changeMap(e.target.value); render(); });
       dialog.querySelector('#plan-entry').value = callbacks.getRules().entryPoint;
@@ -68,7 +95,10 @@ export function createKitMenu(callbacks) {
     dialog.querySelectorAll('[data-quantity]').forEach(control => control.addEventListener('change', () => {
       const item = items[control.dataset.quantity], value = Number(control.value);
       if (!Number.isInteger(value) || value < 0 || value > item.max) { control.value = current.items[control.dataset.quantity]; status(`Choose 0–${item.max}.`); return; }
-      current.items[control.dataset.quantity] = value; callbacks.saveLoadout(current);
+      current.items[control.dataset.quantity] = value;
+      if(current.vision===control.dataset.quantity&&value===0)current.vision='off';
+      callbacks.saveLoadout(current);
+      if(item.wearable)render();
     }));
     dialog.querySelectorAll('[data-equip]').forEach(button => button.addEventListener('click', () => {
       if (planning) { current.primary = button.dataset.equip; callbacks.saveLoadout(current); }

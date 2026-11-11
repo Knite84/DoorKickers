@@ -4,9 +4,10 @@ import { alertGuards, damageGuard, shatterWindow } from './combat.js';
 import { damageDoor } from './doors.js';
 import { doorCenter, doorSize, elevation, windowCenter, windowSize } from './world.js';
 import { hitGuard } from './npc-body.js';
+import { roomLights } from './lighting.js';
 export const MAGAZINE = 30;
 // Drywall is easy to cross; framing and bodies consume the same heavier budget.
-const penetrationCosts = { drywall: 1, timber: 4, body: 4, door: 3, particleboard: 6, truss: 12 };
+const penetrationCosts = { drywall: 1, ceiling: 1, timber: 4, body: 4, door: 3, particleboard: 6, truss: 12 };
 export function reload(state) {
   const weapon = weapons[state.inventory.equipped];
   if (!weapon || state.status !== 'active' || state.reloadUntil > state.elapsed || state.ammo === weapon.magazine) return false;
@@ -26,6 +27,7 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
     const d = rayBox(origin, direction, center, size, 80);
     if (d !== null) hits.push({ distance: d, kind, object, zone });
   }
+  roomLights(map).forEach((fixture, i) => { if (!state.destroyedLights?.[i]) consider(fixture.position, [.46, .07, .46], 'light', i); });
   for (const piece of state.wallPieces) if (piece.hp > 0) consider(piece.center, piece.size, 'wall', piece);
   map.doors.forEach((door, i) => { if (!state.doors[i]) consider(doorCenter(door), doorSize(door), 'door', i); });
   (map.windows ?? []).forEach((window, i) => { if (state.windowHealth[i] > 0) consider(windowCenter(window), windowSize(window), 'glass', i); });
@@ -37,18 +39,24 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
   if (direction[1] < 0) hits.push({ distance: origin[1] / -direction[1], kind: 'ground' });
   hits.sort((a, b) => a.distance - b.distance);
   let last = { distance: 80, kind: 'miss' }, removed = [], killed = false, guardHit = false, headshot = false, doorDestroyed = false, doorHit = null;
-  const hitGuards = new Set();
+  const hitGuards = new Set(), drywallImpacts = new Set();
   const impacts = [];
   for (const hit of hits) {
     if (hit.distance > 80 || hit.kind === 'wall' && hit.object.hp <= 0 || hit.kind === 'door' && state.doors[hit.object] || hit.kind === 'guard' && (hit.object.health <= 0 || hitGuards.has(hit.object))) continue;
+    if (hit.kind === 'wall' && hit.object.material === 'drywall') {
+      const key = `${hit.object.wall}:${Math.round(hit.distance * 1e7)}`;
+      if (drywallImpacts.has(key)) continue;
+      drywallImpacts.add(key);
+    }
     last = hit;
     const position = origin.map((v, i) => v + direction[i] * hit.distance);
     impacts.push({ position, material: hit.kind === 'door' ? 'timber' : hit.object?.material, kind: hit.kind, zone: hit.zone, wall: hit.kind === 'wall' ? hit.object.wall : null, damage, penetration });
     let resistance = Infinity;
     if (hit.kind === 'wall' && rules.destructibleWalls) {
-      removed.push(...damageWall(state.wallPieces, hit.object, wallPower));
+      removed.push(...damageWall(state.wallPieces, hit.object, wallPower, ['pistol', 'rifle', 'sniper'].includes(state.inventory.equipped) ? 'precise' : 'impact'));
       resistance = penetrationCosts[hit.object.material] ?? Infinity;
     }
+    if (hit.kind === 'light') { (state.destroyedLights ??= [])[hit.object] = true; resistance = 0.1; }
     if (hit.kind === 'glass') { shatterWindow(state, map, hit.object); resistance = 0.1; }
     if (hit.kind === 'door') {
       doorHit = hit.object;
@@ -59,7 +67,10 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
     }
     if (hit.kind === 'guard') {
       headshot ||= hit.zone === 'head';
-      killed = damageGuard(state, hit.object, hit.zone === 'head' ? hit.object.health : damage, { zone: hit.zone, joint: hit.joint, direction, position }) || killed;
+      const protectedHit = hit.object.armored && (hit.object.armorHits ?? 0) > 0 && (hit.zone === 'chest' || hit.zone === 'stomach');
+      if (protectedHit) hit.object.armorHits--;
+      const bodyDamage = protectedHit ? damage * 0.35 : damage;
+      killed = damageGuard(state, hit.object, hit.zone === 'head' ? hit.object.health : bodyDamage, { zone: hit.zone, joint: hit.joint, direction, position, origin, protectedHit }) || killed;
       hitGuards.add(hit.object); guardHit = true; resistance = penetrationCosts.body;
     }
     if (penetration <= resistance) break;
@@ -68,6 +79,7 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
   return { origin, position: origin.map((v, i) => v + direction[i] * last.distance), kind: guardHit ? 'guard' : last.kind, material: last.kind === 'door' ? 'timber' : last.object?.material, removed, killed, headshot, doorDestroyed, doorHit, impacts };
 }
 export function fireWeapon(state, map, rules, origin, rawDirection) {
+  if(state.playerCover&&!state.playerCover.peeking) return null;
   const weapon = weapons[state.inventory.equipped];
   if (!weapon || state.status !== 'active' || state.elapsed < state.nextShot || state.reloadUntil > state.elapsed || (!rules.unlimitedAmmo && state.ammo === 0)) return null;
   const length = Math.hypot(...rawDirection);

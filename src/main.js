@@ -1,14 +1,16 @@
 import './style.css';
 import { schema, defaults, presets, restoreSavedRules } from './rules.js';
 import { maps, resolveMap } from './maps/index.js';
-import { createMission, stepMission, interact, distance, movementGait, toggleCrouch } from './simulation.js';
+import { createMission, stepMission, interact, distance, movementGait, toggleCrouch, jump } from './simulation.js';
 import { createScene } from './scene.js';
 import { fireWeapon, reload } from './weapons.js';
 import { createGunAudio } from './audio.js';
 import { weapons, items, ammoTypes, defaultLoadout, validateLoadout, equip, toggleHolster, restockEquipment } from './kit.js';
-import { useEquipment, detonateCharges } from './equipment.js';
+import { useEquipment, detonateCharges, weaponStrike } from './equipment.js';
 import { createKitMenu } from './menus.js';
 import { bindCombatMouse } from './combat-input.js';
+import { togglePlayerCover, setPlayerPeek } from './player-cover.js';
+import { cutPower } from './lighting.js';
 
 const app = document.querySelector('#app');
 document.body.classList.add('rules-hidden');
@@ -21,21 +23,24 @@ app.innerHTML = `
   </header>
   <main>
     <section class="viewport" aria-label="Playable mission">
-      <canvas id="world" tabindex="0" aria-label="3D mission. WASD moves, Hold Shift to run, Ctrl creeps, C toggles crouch, F switches map floors, Tab opens inventory, E interacts, V changes view, M opens map, left mouse fires including while aiming or scoped, R reloads, H holsters, Z aims, B detonates charges."></canvas>
+      <canvas id="world" tabindex="0" aria-label="3D mission. WASD moves, Q toggles nearby cover, hold X to peek and release to hide, Hold Shift to run, Ctrl creeps, C toggles crouch, F switches map floors, Tab opens inventory, E interacts, V changes view, M opens map, left mouse fires including while aiming or scoped, R reloads, H holsters, Z aims, B detonates charges."></canvas>
+      <div id="cover-status" hidden role="status"></div>
       <div id="crosshair" aria-hidden="true">+</div><div id="hit-marker" aria-hidden="true">×</div>
       <div id="scope-overlay" hidden aria-label="Sniper scope"><div class="scope-reticle"></div><span id="scope-zoom">4×</span></div><div id="damage-overlay" aria-hidden="true"></div><div id="flash-overlay" aria-hidden="true"></div>
       <button id="capture-mouse" class="capture-hint">Click here to aim · Esc releases mouse</button>
       <div id="detainment-banner" hidden role="status"></div>
       <section id="map-banner" hidden aria-label="Tactical map controls">
         <strong>TACTICAL MAP · PAUSED</strong><span>M to return to play</span>
+        <div class="map-kills">ENEMIES KILLED <strong id="map-kills">0/0</strong></div>
         <div class="map-floor-controls"><label for="map-floor">Viewing floor</label><select id="map-floor"></select><button id="floor-toggle" class="quiet" title="Cycle the displayed floor">F · Next floor</button></div>
         <button id="scan" title="Spend $250 to track every guard for 10 mission seconds">Intel pulse <span>$250</span></button>
         <p id="scan-status" role="status" aria-live="polite">Reveal guards on every floor for 10 mission seconds.</p>
+        <button id="cut-power">Cut building power</button><p id="power-status" role="status">Building electricity on.</p>
       </section>
       <div class="mission-card"><div class="eyebrow">OPERATION / 01</div><h1>The quiet house</h1><p id="objective">Retrieve the archive and extract.</p><div class="mission-line"><span class="status-dot"></span><span id="phase">PLANNING</span><span id="clock">00:00</span></div></div>
       <div class="map-stamp">N ↑<br><span>COURTYARD RESIDENCE<br>1 UNIT = 1 METRE</span></div>
       <div class="center-card" id="briefing"><div class="eyebrow">YOUR PLAN. YOUR RULES.</div><h2>Choose your kit.<br>Find your way.</h2><p>Retrieve the archive and extract. Plan your entry, choose weapons, ammunition and tools, then deploy. Doors and destructible interior partitions are alternative routes in the same guarded mission.</p><p class="muted">Tab opens inventory. E interacts. Left click fires while aimed or scoped. Headshots are lethal with every weapon and ammo configuration.</p><button id="deploy" class="primary">Loadout & planning <span>↗</span></button></div>
-      <div class="bottom-hud"><div class="telemetry"><div class="health-panel"><span class="eyebrow">PLAYER HEALTH</span><div class="health-value"><strong id="health">100</strong><span>/ 100</span></div><div id="health-meter" role="meter" aria-label="Player health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div id="health-fill"></div></div><span id="health-status">HEALTHY</span></div><div><span class="eyebrow">EXPOSURE</span><div class="meter"><div id="exposure"></div></div></div><div><span class="eyebrow">SUPPORT FUNDS</span><strong id="funds">$1,000</strong></div><div class="weapon-hud"><span class="eyebrow"><span id="equipped-name">ASSAULT RIFLE</span> / <span id="gait">WALK</span></span><strong id="ammo">30 / ∞</strong></div></div><p id="message" role="status" aria-live="polite">Choose your kit and plan your approach.</p><p id="guard-radio" hidden role="status" aria-live="polite"></p><div class="controls"><span><kbd>WASD</kbd> Move</span><span><kbd>Tab</kbd> Inventory</span><span><kbd>E</kbd> Door / climb</span><span><kbd>Shift</kbd> Hold to run</span><span><kbd>Ctrl</kbd> Creep</span><span><kbd>C</kbd> Crouch</span><span><kbd>LMB</kbd> Use/fire</span><span><kbd>1–5</kbd> Weapons</span><span><kbd>H</kbd> Holster</span><span><kbd>R</kbd> Reload</span><span><kbd>Z</kbd> Aim/scope</span><span><kbd>B</kbd> Detonate</span><span><kbd>V/M</kbd> View/map</span></div></div>
+      <div class="bottom-hud"><div class="telemetry"><div class="health-panel"><span class="eyebrow">PLAYER HEALTH</span><div class="health-value"><strong id="health">100</strong><span>/ 100</span></div><div id="health-meter" role="meter" aria-label="Player health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div id="health-fill"></div></div><span id="health-status">HEALTHY</span></div><div><span class="eyebrow">EXPOSURE</span><div class="meter"><div id="exposure"></div></div></div><div><span class="eyebrow">SUPPORT FUNDS</span><strong id="funds">$1,000</strong></div><div class="weapon-hud"><span class="eyebrow"><span id="equipped-name">ASSAULT RIFLE</span> / <span id="gait">WALK</span></span><strong id="ammo">30 / ∞</strong></div></div><p id="message" role="status" aria-live="polite">Choose your kit and plan your approach.</p><p id="guard-radio" hidden role="status" aria-live="polite"></p><div class="controls"><span><kbd>WASD</kbd> Move</span><span><kbd>Tab</kbd> Inventory</span><span><kbd>E</kbd> Door / climb</span><span><kbd>Shift</kbd> Hold to run</span><span><kbd>Ctrl</kbd> Creep</span><span><kbd>C</kbd> Crouch</span><span><kbd>Space</kbd> Jump</span><span><kbd>Mouse 4</kbd> Weapon strike</span><span><kbd>P</kbd> Pause</span><span><kbd>LMB</kbd> Use/fire</span><span><kbd>1–5</kbd> Weapons</span><span><kbd>H</kbd> Holster</span><span><kbd>R</kbd> Reload</span><span><kbd>Z</kbd> Aim/scope</span><span><kbd>B</kbd> Detonate</span><span><kbd>V/M</kbd> View/map</span></div></div>
     </section>
     <aside id="rules-panel" aria-label="Sandbox rules">
       <div class="panel-heading"><div class="eyebrow">MAKE IT YOURS</div><h2>Sandbox rules</h2><p>A starting point, never a restriction.</p></div>
@@ -50,6 +55,9 @@ app.innerHTML = `
   </main>`;
 
 const $ = selector => document.querySelector(selector);
+$('.controls').insertAdjacentHTML('beforeend','<span><kbd>Q</kbd> Cover</span><span><kbd>X</kbd> Hold to peek</span>');
+$('.controls').insertAdjacentHTML('beforeend','<span><kbd>N</kbd> Night vision</span><span><kbd>T</kbd> Thermals</span>');
+$('.telemetry').insertAdjacentHTML('afterbegin','<div class="vision-panel"><span>LIGHT / VISION</span><strong id="vision-status">DAY · NORMAL</strong></div>');
 let rules = { ...defaults };
 try {
   const saved = localStorage.getItem('stealth-rules-v1');
@@ -125,6 +133,7 @@ let view = 'first', mapOpen = false, mapWasActive = false, firing = false, captu
 const canvas = $('#world');
 function releaseMouse() {
   firing = false;
+  held.delete('KeyX'); setPlayerPeek(state,map,false);
   if (document.pointerLockElement === canvas) document.exitPointerLock();
 }
 function captureMouse() {
@@ -142,6 +151,7 @@ function captureFallback() {
 }
 $('#capture-mouse').addEventListener('click', () => { if (state.status === 'paused' && !mapOpen) pause(); captureMouse(); });
 canvas.addEventListener('contextmenu', event => event.preventDefault());
+canvas.addEventListener('auxclick', event => { if (event.button === 3) event.preventDefault(); });
 bindCombatMouse(canvas, window, {
   primaryDown: () => {
     if (state.status !== 'active' || mapOpen || menuVisible) return;
@@ -151,9 +161,14 @@ bindCombatMouse(canvas, window, {
   },
   primaryUp: () => { firing = false; },
   secondaryDown: () => { if (document.pointerLockElement === canvas) toggleAim(); },
+  meleeDown: () => {
+    if (state.status !== 'active' || mapOpen || menuVisible || !scene) return;
+    const aim = scene.aim(state), result = weaponStrike(state, map, rules, aim.origin, aim.direction);
+    if (result?.kind === 'guard') { hitUntil = performance.now() + 150; message(result.killed ? 'Guard down from weapon strike.' : 'Weapon strike hit.'); }
+  },
 });
 document.addEventListener('pointerlockchange', () => {
-  if (document.pointerLockElement !== canvas) { firing = false; held.clear(); if (state.status === 'active' && view === 'first' && !mapOpen && !menuVisible) pause(); }
+  if (document.pointerLockElement !== canvas) { firing = false; held.clear(); setPlayerPeek(state,map,false); if (state.status === 'active' && view === 'first' && !mapOpen && !menuVisible) pause(); }
 });
 function toggleView() {
   aimed = false;
@@ -276,6 +291,11 @@ $('#scan').addEventListener('click', () => {
   message('Intel pulse active: all guards tracked for 10 mission seconds.');
   $('#world').focus();
 });
+$('#cut-power').addEventListener('click',()=>{
+  if(!mapOpen||state.status!=='paused')return;
+  if(cutPower(state))message('Building power cut. Electric lights are off until the next deployment; daylight remains. N toggles night vision; T toggles thermals.');
+  canvas.focus();
+});
 $('#export').addEventListener('click', () => {
   const url = URL.createObjectURL(new Blob([JSON.stringify({ version: 1, rules }, null, 2)], { type: 'application/json' }));
   const link = document.createElement('a'); link.href = url; link.download = 'sandbox-rules.json'; link.click();
@@ -297,7 +317,7 @@ $('#rules-file').addEventListener('change', async event => {
 });
 function pause() {
   if (mapOpen || menuVisible) return;
-  if (state.status === 'active') { state.status = 'paused'; held.clear(); releaseMouse(); message('Paused. Space resumes, or click the aim button.'); }
+  if (state.status === 'active') { state.status = 'paused'; held.clear(); releaseMouse(); message('Paused. P resumes, or click the aim button.'); }
   else if (state.status === 'paused') { state.status = 'active'; message('Mission resumed.'); }
 }
 window.addEventListener('keydown', event => {
@@ -320,15 +340,26 @@ window.addEventListener('keydown', event => {
   if (event.code === 'KeyM') toggleMap();
   if (event.code === 'KeyF') toggleFloor();
   if (event.code === 'KeyH') { toggleHolster(state); aimed = false; firing = false; }
+  if(['KeyN','KeyT'].includes(event.code)&&state.status==='active'&&!mapOpen){
+    const id=event.code==='KeyN'?'nightvision':'thermal';
+    message(equip(state,id)?`${state.inventory.vision==='off'?'Normal vision':items[id].name} active.`:`${items[id].name} not carried. Add it in loadout planning.`);
+  }
+  if (event.code === 'KeyQ' && state.status === 'active' && !mapOpen) {
+    const direction=scene?.aim(state).direction;
+    if(direction) state.facing=[direction[0],direction[2]];
+    message(togglePlayerCover(state,map));
+  }
+  if (event.code === 'KeyX' && state.status === 'active' && !mapOpen) setPlayerPeek(state,map,true);
   if (event.code === 'KeyC' && state.status === 'active' && !mapOpen) message(toggleCrouch(state, map));
   if (event.code === 'KeyR' && reload(state)) message('Reloading…');
   if (event.code === 'KeyZ') toggleAim();
   if (event.code === 'KeyB') detonate();
   if (event.code.startsWith('Digit') && Number(event.code.slice(5)) >= 1 && Number(event.code.slice(5)) <= 5) { equip(state, ['rifle', 'pistol', 'shotgun', 'sniper', 'minigun'][Number(event.code.slice(5)) - 1]); aimed = false; }
-  if (event.code === 'Space') pause();
+  if (event.code === 'KeyP') pause();
+  if (event.code === 'Space' && !mapOpen) jump(state, map);
   if (event.code === 'KeyE') { const result = interact(state, map); if (result) message(result); }
 });
-window.addEventListener('keyup', event => held.delete(event.code));
+window.addEventListener('keyup', event => { held.delete(event.code); if(event.code==='KeyX') setPlayerPeek(state,map,false); });
 window.addEventListener('blur', () => { held.clear(); firing = false; if (state.status === 'active') pause(); });
 document.addEventListener('visibilitychange', () => { if (document.hidden && state.status === 'active') pause(); });
 let previous = performance.now(), oldStatus = state.status;
@@ -338,6 +369,7 @@ function frame(now) {
     x: Number(held.has('KeyD') || held.has('ArrowRight')) - Number(held.has('KeyA') || held.has('ArrowLeft')),
     z: Number(held.has('KeyS') || held.has('ArrowDown')) - Number(held.has('KeyW') || held.has('ArrowUp')),
     creep: held.has('ControlLeft') || held.has('ControlRight'), running: held.has('ShiftLeft') || held.has('ShiftRight'),
+    peek: held.has('KeyX') && !menuVisible && !mapOpen,
   };
   if (!menuVisible) scene?.look((Number(held.has('KeyL')) - Number(held.has('KeyJ'))) * dt * 1.5, (Number(held.has('KeyI')) - Number(held.has('KeyK'))) * dt * 1.2);
   const movement = scene?.movement(localInput.x, localInput.z) ?? [localInput.x, localInput.z];
@@ -348,9 +380,11 @@ function frame(now) {
   for (const effect of state.events.splice(0)) scene?.eventEffect(effect);
   const facing = scene?.aim(state).direction; if (facing) state.facing = [facing[0], facing[2]];
   if (state.status === 'active') scene?.face(input.x, input.z);
-  const scoped = aimed && state.inventory.equipped === 'sniper' && view === 'first' && !mapOpen && !menuVisible;
-  scene?.draw(state, rules, dt, { moving: !!(input.x || input.z) && state.status === 'active', running: gait === 'run', firing: firing && state.status === 'active', aimed, scopeZoom, menuVisible });
+  const exposed=!state.playerCover||state.playerCover.peeking;
+  const scoped = exposed && aimed && state.inventory.equipped === 'sniper' && view === 'first' && !mapOpen && !menuVisible;
+  scene?.draw(state, rules, dt, { moving: !!(input.x || input.z) && state.status === 'active', running: gait === 'run', firing: firing && state.status === 'active' && exposed, aimed:aimed&&exposed, scopeZoom, menuVisible });
   if (scene) $('#map-floor').value = String(scene.getFloor());
+  $('#map-kills').textContent = `${state.kills}/${state.guards.length}`;
   $('#scope-overlay').hidden = !scoped; $('#scope-zoom').textContent = `${scopeZoom}×`;
   $('#damage-overlay').style.opacity = state.hurtUntil > state.elapsed ? '0.45' : '0';
   $('#flash-overlay').style.opacity = Math.max(0, (state.flashUntil - state.elapsed) / 1.5) * 0.9;
@@ -373,6 +407,10 @@ function frame(now) {
   if ($('#guard-radio').textContent !== radioText) $('#guard-radio').textContent = radioText;
   const floorName = map.levels?.reduce((nearest, floor) => Math.abs(floor.elevation - state.playerY) < Math.abs(nearest.elevation - state.playerY) ? floor : nearest).name;
   $('#gait').textContent = `${gait.toUpperCase()}${gait === 'creep' && state.crouched ? ' · CROUCHED' : ''}${floorName ? ` · ${floorName.toUpperCase()}` : ''}`;
+  const cover=state.playerCover;
+  $('#cover-status').hidden=!cover||mapOpen||menuVisible;
+  const coverText=cover?.peeking?'PEEKING · Release X to duck back':cover?.blocked?'NO CLEAR PEEK · Move closer to an edge · Q / WASD leaves cover':`IN ${cover?.concealment?'CONCEALMENT':'COVER'} · Hold X to pop out · Q / WASD leaves cover`;
+  if($('#cover-status').textContent!==coverText) $('#cover-status').textContent=coverText;
   $('#crosshair').hidden = view !== 'first' || mapOpen || menuVisible || scoped || state.status !== 'active';
   $('#hit-marker').hidden = now > hitUntil;
   $('#capture-mouse').hidden = view !== 'first' || mapOpen || menuVisible || scoped || !['active', 'paused'].includes(state.status) || document.pointerLockElement === canvas;
@@ -380,6 +418,10 @@ function frame(now) {
   $('#exposure').style.width = `${exposure * 100}%`;
   $('#exposure').style.background = exposure > 0.6 ? '#f18c76' : '#b8d4a0';
   $('#funds').textContent = `$${state.budget.toLocaleString()}`;
+  $('#vision-status').textContent=`${(state.timeOfDay??'day').toUpperCase()} · ${state.inventory.vision==='nightvision'?'NIGHT VISION':state.inventory.vision==='thermal'?'THERMAL':'NORMAL'}`;
+  $('#cut-power').disabled=!mapOpen||state.powerOn===false;
+  $('#cut-power').textContent=state.powerOn===false?'Building power cut':'Cut building power';
+  $('#power-status').textContent=state.powerOn===false?'Electricity off. Daylight and battery-powered optics remain.':'Building electricity on. Cutting it lasts until the next deployment.';
   const pulseRemaining = Math.max(0, Math.ceil(state.scanUntil - state.elapsed));
   $('#scan').disabled = !mapOpen || state.status !== 'paused' || state.budget < 250 || pulseRemaining > 0;
   const scanStatus = pulseRemaining ? `Tracking guards · ${pulseRemaining}s remaining. Timer pauses with the map.` : state.budget < 250 ? 'Not enough support funds ($250 required).' : 'Reveal guards on every floor for 10 mission seconds.';

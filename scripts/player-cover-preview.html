@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Player cover · hold to peek</title>
+<style>
+body{margin:0;background:#17251f;color:#ecebdc;font:15px system-ui}canvas{display:block;width:100vw;height:100vh}header{position:absolute;top:20px;left:24px;max-width:750px;z-index:2;background:#142b24ed;padding:18px}h1{font-size:24px;margin:0 0 8px}p{line-height:1.5}button{padding:10px 14px;margin:0 6px 6px 0;border:0;background:#d8e7c9;cursor:pointer}#status{font-size:20px;color:#ffc77d}#cross{position:absolute;top:50%;left:50%;pointer-events:none}footer{position:absolute;bottom:20px;left:24px;background:#142b24ed;padding:12px}
+</style>
+<header><h1>Player cover · hold to peek</h1><p>Q takes cover. Hold X to expose yourself and shoot; release X to duck back. This fixture uses the game's scene, cover, gunplay and enemy AI. Damage immunity is enabled.</p>
+<button id="cover">Q · Take / leave cover</button><button id="peek">Latch peek (preview)</button><button id="low">Low crate</button><button id="wall">Tall wall edge</button><button id="break">Remove cover</button><button id="view">Switch view</button><p id="status" role="status"></p></header>
+<canvas tabindex="0"></canvas><div id="cross">+</div><footer>Click the scene to fire. IJKL looks around. The preview latch lets you inspect the exposed camera without holding X.</footer>
+<script type="module">
+import { courtyard } from '/src/maps/courtyard.js';
+import { defaults } from '/src/rules.js';
+import { createMission,stepMission } from '/src/simulation.js';
+import { togglePlayerCover,setPlayerPeek } from '/src/player-cover.js';
+import { createScene } from '/src/scene.js';
+import { fireWeapon } from '/src/weapons.js';
+const canvas=document.querySelector('canvas'),keys=new Set(),rules={...defaults,guardCount:1,patrolSpeed:0,awareness:3,sightRange:16,invulnerable:true};
+let map,state,scene,latched=false,view='first';
+function reset(tall=false){
+  scene?.dispose();
+  map={...courtyard,bounds:{minX:-8,maxX:8,minZ:-7,maxZ:7},walls:tall?[{center:[0,1.5],size:[.4,3]}]:[],doors:[],props:tall?[]:[{kind:'crate',position:[0,0],size:[1,3]}],rooms:[],scenery:[],patrols:Array.from({length:8},()=>[[4,0],[5,0]])};
+  state=createMission(map,rules);state.status='active';state.player=[tall?-.7:-1,tall?.2:0];state.facing=[1,0];state.guards[0].heading=Math.PI;state.guards[0].suspicion=1;
+  scene=createScene(canvas,map);scene.reset(-Math.PI/2);scene.setView(view);latched=false;keys.clear();togglePlayerCover(state,map);canvas.focus();
+}
+reset();
+function latch(){latched=!latched;setPlayerPeek(state,map,latched);}
+document.querySelector('#cover').onclick=()=>{togglePlayerCover(state,map);latched=false;};
+document.querySelector('#peek').onclick=latch;
+document.querySelector('#low').onclick=()=>reset();document.querySelector('#wall').onclick=()=>reset(true);
+document.querySelector('#break').onclick=()=>{state.wallPieces.forEach(p=>p.hp=0);map.props.splice(0);latched=false;};
+document.querySelector('#view').onclick=()=>{view=view==='first'?'overhead':'first';scene.setView(view);};
+window.addEventListener('keydown',event=>{if(event.target.closest('button'))return;keys.add(event.code);if(event.repeat)return;if(event.code==='KeyQ')togglePlayerCover(state,map);if(event.code==='KeyX')setPlayerPeek(state,map,true);});
+window.addEventListener('keyup',event=>{keys.delete(event.code);if(event.code==='KeyX'){latched=false;setPlayerPeek(state,map,false);}});
+window.addEventListener('blur',()=>{keys.clear();latched=false;setPlayerPeek(state,map,false);});
+canvas.addEventListener('mousedown',()=>{const aim=scene.aim(state),shot=fireWeapon(state,map,rules,aim.origin,aim.direction);if(shot)scene.shotEffect(shot);canvas.focus();});
+let previous=performance.now();
+function frame(now){const dt=Math.min(.05,(now-previous)/1000);previous=now;
+  scene.look((Number(keys.has('KeyL'))-Number(keys.has('KeyJ')))*dt*1.5,(Number(keys.has('KeyI'))-Number(keys.has('KeyK')))*dt*1.2);
+  const movement=scene.movement(Number(keys.has('KeyD'))-Number(keys.has('KeyA')),Number(keys.has('KeyS'))-Number(keys.has('KeyW')));
+  stepMission(state,map,rules,dt,{x:movement[0],z:movement[1],peek:latched||keys.has('KeyX')});
+  for(const event of state.events.splice(0))scene.eventEffect(event);
+  scene.draw(state,rules,dt);
+  const c=state.playerCover;document.querySelector('#status').textContent=c?.peeking?'PEEKING · Exposed camera and weapon':c?.blocked?'BLOCKED · Move to a clear edge':c?'IN COVER · Weapon lowered · Hold X to peek':'OUT OF COVER · Q near a surface';
+  document.querySelector('#peek').textContent=latched?'Return to cover':'Latch peek (preview)';
+  requestAnimationFrame(frame);
+}requestAnimationFrame(frame);
+</script></html>

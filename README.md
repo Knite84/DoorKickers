@@ -40,11 +40,12 @@ Player health is the large bordered panel at the bottom left, with a thick bar a
 - H: holster to empty hands; press again to draw your last firearm.
 - R: reload. Each weapon has a separate magazine, firing cadence, damage, and reload time. Reserve ammunition is unlimited; magazine consumption is configurable.
 - Z, or right click while mouse is captured: toggle aim. The sniper has a scope; scroll while scoped adjusts 2×–8× zoom. Without mouse capture, right-drag still looks around; Z aims.
+- **Q: take / leave cover. Hold X: peek; release X: duck back immediately.** Face a wall, crate, table or planter within 1.6 metres and press Q. Low cover allows popping up; near a tall wall's edge you lean around it. A cover banner shows whether you are hidden, peeking or blocked. Move closer to an edge if no safe peek is available. WASD, C or E leaves the stance. Tucked players cannot fire firearms. Walls and solid props provide protection through collision; flanking enemies and foliage concealment still leave you vulnerable. Map, inventory, pause, blur and lost mouse capture drop the peek. Cover does not grant damage immunity. The [player-cover preview](http://127.0.0.1:5179/scripts/player-cover-preview.html) demonstrates low and tall cover with the live camera and enemy AI.
 - Left-click fires while aiming or scoped, including the first click before mouse capture succeeds. Head hits instantly eliminate a guard with every weapon, suppressor, velocity, and projectile choice. Body hits retain configured damage and wall obstruction still applies.
 - Right and left mouse buttons are handled independently: keep right held while clicking left to fire a pistol or another single-shot weapon. Releasing right does not cancel held left-button rifle fire.
 - B: detonate placed charges while the mission is running.
 - Return to the green ring to extract.
-- Space: pause/resume. Changing browser focus automatically pauses.
+- Mouse button 4: strike at close range with the equipped firearm. Space: jump. P: pause/resume. Changing browser focus automatically pauses.
 - Scroll over the overhead scene: zoom.
 - Intel pulse: open the map with **M**, then spend $250 from its controls to reveal every guard for ten mission seconds across all floors. Its timer pauses while the map is open; an active pulse cannot be purchased again until it expires.
 - Sandbox rules: change the simulation live. Entry point, guard count, budget, and door durability require **New deployment**.
@@ -56,9 +57,19 @@ Every visible setting is connected to this prototype. In overhead/map views, nor
 
 ## Loadout and equipment (0.3)
 
+Choose **Day** or **Night** in **Loadout & planning → Time of day** before deploying. Electric fixtures light interior rooms. Daylight fades with distance from windows and is blocked by walls; sunny days add directional patches of sunlight through window openings. At night, window light is faint. Open **M → Cut building power** to extinguish all building electric lights for that deployment. Sunlight and battery-powered goggles continue working; a new deployment restores power. The tactical map remains readable during a blackout.
+
+Darkness reduces guard detection range according to the player's local lighting, while nearby targets remain detectable. Your worn optics do not improve the guards' vision.
+
+**Night vision goggles** and **Thermal goggles** are carried equipment with one worn vision slot. Select a starting device in planning, use their **Wear / Remove** inventory buttons, or press **N** for night vision and **T** for thermals. Activating one replaces the other while keeping your firearm and ammunition ready. Night vision amplifies dark areas in green; thermals show visible warm bodies against a cool environment, with ordinary wall occlusion. Goggles are reusable. The [lighting development preview](http://127.0.0.1:5179/scripts/lighting-preview.html) compares a window room and a windowless room under sun, night, power cuts and both optics. Lighting uses an architectural light-field approximation rather than full global illumination; structural light-field geometry is generated on scene creation.
+
 ### Guard communication and response
 
 Guards now use articulated procedural bodies with separate head, chest, stomach, left/right arm, and left/right leg hit capsules. The visible pose drives firearm and melee targeting, including wounded guards on the ground. Damage and penetration retain their existing settings; headshots remain lethal.
+
+When guards engage you, they face you, raise their arms and aim a visible pistol at your current eye height, including crouching and different floors. Arms stay raised between shots; recoil, muzzle flashes and tracers come from the held weapon. One wounded arm leaves the healthy arm firing alone. Losing sight, holstering, stun or incapacitation ends the aiming pose. The NPC reaction preview also has an **Aim / fire preview** toggle.
+
+Mobile guards who survive a hit retreat toward nearby reachable cover, preferring solid protection over foliage. They crouch while hiding, occasionally rise or lean out to return fire, then duck back. Their exposed head, torso and arms remain hittable. Wounds increase shot spread, with greater damage and arm injuries worsening accuracy; missed shots no longer automatically damage the player. Planters offer visual concealment above their solid base, while walls and solid props stop incoming fire. Guards re-evaluate broken cover and newly seen threat positions. With no usable cover they retreat away; incapacitated chest/stomach casualties retain their downed behavior. New deployments clear wounds and cover state. See the [live wounded-cover development preview](http://127.0.0.1:5179/scripts/cover-preview.html) to watch the actual behavior, freeze a peek, or break its cover.
 
 - A surviving leg hit causes a persistent limp and reduces movement to 48%; both legs injured reduce it to 25%.
 - A surviving arm hit bends the wounded arm and brings the opposite hand across to support it. Firing slows from 0.8 to 1.8 seconds between shots; two wounded arms prevent firing.
@@ -86,6 +97,8 @@ Set **Enemies (0–8)** beside the map, entry point, and weather in loadout plan
 **C toggles crouching. Ctrl holds creeping.** Both use the creep-speed setting. Crouching lowers the camera and collision body, allows low breaches, reduces suspicion gain to half of walking, and reduces detection range to 80%. Creeping reduces suspicion gain to a quarter of walking and range to 65%; you can creep while crouched. Running cannot override either posture. Standing is refused if there is not enough headroom.
 
 Shoot a pane or strike it within reach with an axe or crowbar to shatter it. Grenades, flashbangs, and Molotovs can be thrown through intact glass: the pane shatters and the item keeps flying. Glass alone does not trigger the item's explosion, flash, or fire. Walls, closed doors, and the window sill/frame still obstruct throws. Intact glass permits vision, blocks character movement, and does not protect against blasts. After breaking a window, approach and press **E** to climb through the opening. Upper-story windows can lead to a fall. Windows and their actual wall openings exist on both floors.
+
+Buildings now have physical ceiling panels, including roof caps and lower-floor ceilings with open stair shafts. They block sight, shots and body clearance, and can be breached. Ceiling panels hide in overhead/tactical cutaways so rooms remain visible. E selects the nearest visible door/window with a facing preference; window traversal checks lateral alignment, clearance above the sill, the entire vault path and a safe standing/crouched landing. Upper windows warn when the ground outside is lower. Martelli's stairwell window has no level landing and directs you to the nearby front door. The [Martelli window preview](http://127.0.0.1:5179/scripts/window-preview.html) lets you inspect each opening and the real ceilings. Its other 15 windows are checked in both directions, standing/crouched and slightly off center; level landings are also tested repeatedly with physics running.
 
 Equip **Door picking gun** in Tab inventory, close inventory, aim at a nearby locked door, then left-click. This reusable placeholder immediately unlocks and opens the door without damage or a noise alert. E opens unlocked doors normally. Existing saved kits gain the new tool automatically.
 

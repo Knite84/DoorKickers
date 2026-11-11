@@ -53,12 +53,16 @@ The build currently produces a JavaScript chunk above Vite's size-warning thresh
 | `src/scene.js` | Three.js scene/cameras, instanced structure, procedural actors/items/scenery, effects, floor cutaways, resource disposal |
 | `src/simulation.js` | Mission lifecycle, player movement/collision, crouch, vision helpers, interaction, collection/extraction |
 | `src/world.js` | Elevation, eye/body dimensions, door/window bounds, stair height, remaining floor support |
+| `src/player-cover.js` | Nearby cover attachment, safe pop-up/edge peeks, immediate tuck-back, clearance and destroyed-cover validation |
+| `src/window-traversal.js`, `src/maps/ceilings.js` | Visible interaction selection, collision-checked window vaults, polygon ceiling coverage and stair-shaft cutouts |
+| `src/lighting.js`, `src/scene-lighting.js` | Architectural room/window light field, sunny directional admission, electric fixtures/power cuts, night-vision amplification and occluded thermal materials |
 | `src/npc-body.js` | Shared anatomical capsules and articulated poses, persistent deployment injuries, fixed 120 Hz Verlet ragdolls with distance/bend constraints and world contacts |
 | `src/npc-visual.js` | Procedural capsule-segment guards rendered directly from simulation joints |
 | `src/destruction.js` | Layered wall/floor pieces, exterior segments, ray/AABB intersection, damage, structural connectivity |
 | `src/weapons.js` | Firearms, pellet rays, hit ordering, penetration, head/body hits, ammunition and reloads |
 | `src/combat.js` | Shared damage, obstruction checks, noise alerts, radio reports, window shattering |
 | `src/guard-ai.js` | Perception, evidence discovery, radio consumption, pursuit/search, detention/gathering, incoming fire |
+| `src/guard-tactics.js` | Wounded retreat, reachable cover selection, concealment, duck/peek cycles, injury dispersion and guard shot collision |
 | `src/navigation.js` | Shared walking-grid cache and A* routes around obstacles, through doors and between stories |
 | `src/kit.js` | Weapon/item/ammo catalogues, validation/migrations, inventory, equipping/holstering, armed classification |
 | `src/equipment.js` | Knife and other melee/tools, picking gun, planted charges, thrown items, traps, blasts, flash and fire |

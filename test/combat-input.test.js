@@ -40,3 +40,10 @@ test('button binding does not duplicate clicks and can be detached', () => {
   mouse(surface, 'pointerdown', 0, 1); mouse(surface, 'mousedown', 0, 1); assert.equal(fired, 1);
   detach(); mouse(surface, 'mousedown', 0, 1); assert.equal(fired, 1);
 });
+
+test('mouse button 4 triggers melee independently of left and right buttons', () => {
+  const surface = new EventTarget(), releaseTarget = new EventTarget(); let strikes = 0, shots = 0;
+  bindCombatMouse(surface, releaseTarget, { primaryDown: () => shots++, primaryUp: () => {}, secondaryDown: () => {}, meleeDown: () => strikes++ });
+  mouse(surface, 'mousedown', 3, 8); mouse(surface, 'mousedown', 0, 9);
+  assert.equal(strikes, 1); assert.equal(shots, 1);
+});

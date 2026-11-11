@@ -1,3 +1,4 @@
+import { ceilingsFor, rectangle } from './ceilings.js';
 // Metres, Y-up: gameplay coordinates are [x, z].
 // Geometry and missions are data, independent of the rendering assets.
 export const courtyard = {
@@ -6,6 +7,7 @@ export const courtyard = {
   name: 'The quiet house',
   bounds: { minX: -14, maxX: 14, minZ: -12, maxZ: 12 },
   spawn: [-10, 8],
+  ceilings: ceilingsFor([{outline:rectangle(-10,-9,10,1)}]),
   entries: { courtyard: { position: [-10, 8], yaw: -0.55 }, 'west gallery': { position: [-3, -6], yaw: -Math.PI / 2 } },
   extraction: { position: [-10, 8], radius: 1.7 },
   objective: { position: [7, -5], radius: 1.5, label: 'Archive' },

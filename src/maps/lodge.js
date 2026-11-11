@@ -1,3 +1,4 @@
+import { ceilingsFor, rectangle } from './ceilings.js';
 // Fictional, two-story lodge. Every opening is absent from the wall geometry.
 const walls = [], windows = [], doors = [], rooms = [];
 function wall(center, size, level, extra = {}) { walls.push({ center, size, elevation: level * 3.2, level, ...extra }); }
@@ -59,6 +60,10 @@ export const lodge = {
   description: 'Two stories with rooms, central and cross hallways, and a west stairwell. The archive is upstairs behind a locked door. Shoot window glass, then E to climb through. Equip the door picking gun for quiet entry. Explosives breach exterior masonry.',
   bounds: { minX: -20, maxX: 20, minZ: -18, maxZ: 18 },
   levels: [{ name: 'Ground floor', elevation: 0 }, { name: 'Upper floor', elevation: 3.2 }],
+  ceilings: ceilingsFor([
+    {outline:rectangle(-14,-12,14,12),height:2.4,holes:[rectangle(-13.6,-8.4,-10.4,.4)]},
+    {outline:rectangle(-14,-12,14,12),elevation:3.2},
+  ]),
   spawn: [0, 15],
   entries: { courtyard: { position: [0, 15], yaw: 0, label: 'Front approach · locked entry' }, 'west gallery': { position: [-12, 0.5], yaw: 0, label: 'West stair hall · inside' } },
   objective: { position: [8, -9], elevation: 3.2, radius: 1.5, label: 'Archive' },

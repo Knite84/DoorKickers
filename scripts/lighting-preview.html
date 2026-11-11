@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Day, night and optics · lighting preview</title>
+<style>body{margin:0;background:#101a19;color:#e6e9df;font:15px system-ui}canvas{display:block;width:100vw;height:100vh}header{position:absolute;top:20px;left:24px;max-width:800px;padding:18px;background:#142b24ed;z-index:2}h1{font-size:24px;margin:0 0 10px}p{line-height:1.5}button{padding:10px 14px;margin:0 6px 6px 0;background:#d8e7c9;border:0;cursor:pointer}#status{color:#ffc77d}</style>
+<header><h1>Daylight, electric lights and battery-powered optics</h1><p>The west room has a south-facing window. The east room is windowless. The shared world lighting, actual occlusion and warm guard materials are used here.</p>
+<button id="day">Sunny day</button><button id="night">Night</button><button id="power">Cut building power</button><button id="normal">Normal vision</button><button id="nv">Night vision</button><button id="thermal">Thermals</button><button id="plan">Plan view</button><button id="west">Window room</button><button id="east">Windowless room</button><p id="status" role="status"></p></header><canvas tabindex="0"></canvas>
+<script type="module">
+import { createScene } from '/src/scene.js';
+import { createMission } from '/src/simulation.js';
+import { defaults } from '/src/rules.js';
+import { equip } from '/src/kit.js';
+import { cutPower } from '/src/lighting.js';
+const map={bounds:{minX:-9,maxX:9,minZ:-7,maxZ:7},spawn:[-3,1.5],entries:{},
+  objective:{position:[-5,-2],radius:1},extraction:{position:[-7,5],radius:1},scenery:[],
+  rooms:[{name:'WINDOW ROOM',center:[-3,0],size:[6,8]},{name:'WINDOWLESS ROOM',center:[3,0],size:[6,8]}],
+  walls:[{center:[-5.125,4],size:[1.75,.3]},{center:[-.875,4],size:[1.75,.3]},{center:[-3,4],size:[2.5,.3],height:.8},{center:[-3,4],size:[2.5,.3],elevation:2.3,height:.5},
+    {center:[3,4],size:[6,.3]},{center:[0,-4],size:[12,.3]},{center:[-6,0],size:[.3,8]},{center:[6,0],size:[.3,8]},
+    {center:[0,-2.3],size:[.2,3.4],destructible:true},{center:[0,2.3],size:[.2,3.4],destructible:true}],
+  doors:[{position:[0,0],size:[.2,1.2]}],windows:[{position:[-3,4],size:[2.5,.08],sill:.8,height:1.5}],
+  props:[{kind:'table',position:[-4,0],size:[1.2,.7]},{kind:'crate',position:[4,1.5],size:[1,1]}],patrols:Array.from({length:8},()=>[[-3,-2],[-2,-2]])};
+const rules={...defaults,guardCount:1,awareness:0},state=createMission(map,rules),canvas=document.querySelector('canvas'),scene=createScene(canvas,map);state.status='active';state.guards[0].heading=Math.PI/2;scene.reset(0);scene.setView('overhead');let view='overhead';
+document.querySelector('#day').onclick=()=>{state.timeOfDay='day';};document.querySelector('#night').onclick=()=>{state.timeOfDay='night';};
+document.querySelector('#power').onclick=()=>{if(state.powerOn===false)state.powerOn=true;else cutPower(state);};
+document.querySelector('#normal').onclick=()=>{state.inventory.vision='off';};document.querySelector('#nv').onclick=()=>equip(state,'nightvision');document.querySelector('#thermal').onclick=()=>equip(state,'thermal');
+document.querySelector('#plan').onclick=()=>{view='overhead';scene.setView(view);};
+function enter(x){state.player=[x,1.5];view='first';scene.setView(view);scene.reset(0);canvas.focus();}
+document.querySelector('#west').onclick=()=>enter(-3);document.querySelector('#east').onclick=()=>enter(3);
+const keys=new Set();window.addEventListener('keydown',e=>keys.add(e.code));window.addEventListener('keyup',e=>keys.delete(e.code));
+let previous=performance.now();function frame(now){const dt=Math.min(.05,(now-previous)/1000);previous=now;scene.look((Number(keys.has('KeyL'))-Number(keys.has('KeyJ')))*dt,(Number(keys.has('KeyI'))-Number(keys.has('KeyK')))*dt);scene.draw(state,rules,dt);document.querySelector('#status').textContent=`${state.timeOfDay.toUpperCase()} · ${state.powerOn?'POWER ON':'POWER CUT'} · ${state.inventory.vision.toUpperCase()}`;document.querySelector('#power').textContent=state.powerOn?'Cut building power':'Restore power (preview only)';requestAnimationFrame(frame);}requestAnimationFrame(frame);
+</script></html>

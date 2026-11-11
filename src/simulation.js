@@ -4,9 +4,12 @@ import { finishReload } from './weapons.js';
 import { segmentClear } from './combat.js';
 import { stepEquipment } from './equipment.js';
 import { DEFAULT_DOOR_HEALTH } from './doors.js';
-import { elevation, bodyHeight, eyeHeight, stairHeight, supportHeight } from './world.js';
+import { elevation, bodyHeight, eyeHeight, playerEye, stairHeight, supportHeight } from './world.js';
+import { stepPlayerCover, leavePlayerCover } from './player-cover.js';
+import { darknessSightFactor, roomLights } from './lighting.js';
+import { nearbyInteraction, climbWindow } from './window-traversal.js';
 import { stepGuards } from './guard-ai.js';
-import { stepBodies } from './npc-body.js';
+import { stepBodies, guardEye } from './npc-body.js';
 // Pure gameplay functions: no Three.js or DOM, so rules can be tested independently.
 export const distance = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 export function intersectsBox(a, b, box, padding = 0) {
@@ -30,7 +33,7 @@ export function intersectsBox(a, b, box, padding = 0) {
 export function obstacles(map, doors, pieces, movement = false, baseY = 0, height = 1.8, windowHealth = []) {
   const overlaps = (bottom, top) => movement ? bottom < baseY + height && top > baseY + 0.12 : bottom <= baseY + 1.5 && top >= baseY + 1.5;
   const walls = pieces ? pieces.filter(p => p.hp > 0 && !(movement && p.stair) && overlaps(p.center[1] - p.size[1] / 2, p.center[1] + p.size[1] / 2)).map(p => ({ center: [p.center[0], p.center[2]], size: [p.size[0], p.size[2]] })) : map.walls.filter(w => overlaps(elevation(w), elevation(w) + (w.height ?? 2.8)));
-  return [...walls, ...map.props.filter(p => overlaps(elevation(p), elevation(p) + 1.1)).map(p => ({ center: p.position, size: p.size })), ...map.doors.filter((d, i) => !doors[i] && overlaps(elevation(d), elevation(d) + 2.8)).map(d => ({ center: d.position, size: d.size })), ...(movement ? (map.windows ?? []).filter((w, i) => windowHealth[i] > 0 && overlaps(elevation(w) + w.sill, elevation(w) + w.sill + w.height)).map(w => ({ center: w.position, size: w.size })) : [])];
+  return [...walls, ...map.props.filter(p => overlaps(elevation(p), elevation(p) + 1.1)).map(p => ({ center: p.position, size: p.size, prop: true })), ...map.doors.filter((d, i) => !doors[i] && overlaps(elevation(d), elevation(d) + 2.8)).map(d => ({ center: d.position, size: d.size })), ...(movement ? (map.windows ?? []).filter((w, i) => windowHealth[i] > 0 && overlaps(elevation(w) + (w.sill??.8), elevation(w) + (w.sill??.8) + (w.height??1.5))).map(w => ({ center: w.position, size: w.size })) : [])];
 }
 export function lineOfSight(a, b, boxes) {
   return !boxes.some(box => intersectsBox(a, b, box));
@@ -48,16 +51,24 @@ export function movePlayer(position, delta, map, doors, ghost = false, pieces, o
     // must not catch on the adjacent landing's panel or truss edges.
     const collisionPieces = stair !== null && Math.abs(stair - baseY) < 0.5 ? pieces?.filter(p => !p.floor) : pieces;
     const boxes = ghost ? [] : obstacles(map, doors, collisionPieces, true, nextY, options.height ?? 1.8, options.windows);
-    if (!boxes.some(box => intersectsBox(next, candidate, box, 0.28))) next[axis] = candidate[axis];
+    if (!boxes.some(box => {
+      if (!intersectsBox(next, candidate, box, 0.28)) return false;
+      if (box.prop && intersectsBox(next, next, box, 0.28)) {
+        const before = next[axis] - box.center[axis], after = candidate[axis] - box.center[axis];
+        if (Math.abs(after) > Math.abs(before) && before * after >= 0) return false;
+      }
+      return true;
+    })) next[axis] = candidate[axis];
   }
   return next;
 }
 export function canSee(guard, player, rules, boxes, context) {
-  const range = rules.sightRange * (rules.weather === 'fog' ? 0.6 : rules.weather === 'rain' ? 0.85 : 1) * (context?.rangeFactor ?? 1);
+  if(context) { const eye=playerEye(context.state);player=[eye[0],eye[2]]; }
+  const range = rules.sightRange * (rules.weather === 'fog' ? 0.6 : rules.weather === 'rain' ? 0.85 : 1) * (context?.rangeFactor ?? 1) * (context?darknessSightFactor(context.state,context.map,rules):1);
   if (distance(guard.position, player) > range) return false;
   const angle = Math.atan2(player[1] - guard.position[1], player[0] - guard.position[0]);
   const difference = Math.atan2(Math.sin(angle - guard.heading), Math.cos(angle - guard.heading));
-  const clear = context ? segmentClear(context.state, context.map, [guard.position[0], elevation(guard) + 1.65, guard.position[1]], [player[0], eyeHeight(context.state), player[1]], -1, { glass: false }) : lineOfSight(guard.position, player, boxes);
+  const clear = context ? segmentClear(context.state, context.map, guardEye(guard), playerEye(context.state), -1, { glass: false }) : lineOfSight(guard.position, player, boxes);
   return Math.abs(difference) < Math.PI / 5 && clear;
 }
 export function createMission(map, rules, loadout) {
@@ -65,20 +76,23 @@ export function createMission(map, rules, loadout) {
   const inventory = createInventory(loadout);
   const doorMaxHealth = map.doors.map(door => door.health ?? rules.doorDurability ?? DEFAULT_DOOR_HEALTH);
   return {
+    timeOfDay: rules.timeOfDay??'day', powerOn: true, destroyedLights: roomLights(map).map(() => false),
     player: [...(entry?.position ?? map.spawn)], playerY: elevation(entry), velocityY: 0, crouched: false, gait: 'walk', spawnYaw: entry?.yaw ?? 0, doors: map.doors.map(() => false), lockedDoors: map.doors.map(d => !!d.locked), windowHealth: (map.windows ?? []).map(() => 1), wallPieces: buildWallPieces(map),
     doorHealth: [...doorMaxHealth], doorMaxHealth,
     inventory, ammo: inventory.magazines[inventory.equipped], reloadUntil: 0, nextShot: 0, shots: 0, kills: 0,
     health: 100, hurtUntil: 0, flashUntil: 0, nextUse: 0, projectiles: [], devices: [], fires: [], events: [], facing: [0, -1], guardReports: [], lastGuardReport: '', guardReportUntil: 0, detainingGuardId: null,
-    guards: map.patrols.slice(0, rules.guardCount).map((path, index) => ({ id: index, mode: 'patrol', evidenceSeen: [], position: [...path[0]], elevation: map.guardElevations?.[index] ?? 0, patrolElevation: map.guardElevations?.[index] ?? 0, path, waypoint: 1, heading: Math.atan2(path[1][1] - path[0][1], path[1][0] - path[0][0]), suspicion: 0, health: 100, alertUntil: 0, nextShot: 0, stunnedUntil: 0 })),
+    guards: map.patrols.slice(0, rules.guardCount).map((path, index) => ({ id: index, armored: index < (rules.armoredGuards ?? 0), armorHits: index < (rules.armoredGuards ?? 0) ? 10 : 0, mode: 'patrol', evidenceSeen: [], position: [...path[0]], elevation: map.guardElevations?.[index] ?? 0, patrolElevation: map.guardElevations?.[index] ?? 0, path, waypoint: 1, heading: Math.atan2(path[1][1] - path[0][1], path[1][0] - path[0][0]), suspicion: 0, health: 100, alertUntil: 0, nextShot: 0, stunnedUntil: 0 })),
     status: 'planning', collected: false, elapsed: 0, budget: rules.budget, scanUntil: 0,
   };
 }
 export function movementGait(state, input) {
+  if(state.playerCover&&!state.playerCover.peeking) return 'crouch';
   if (input.creep) return 'creep';
   if (input.crouch || state.crouched) return 'crouch';
   return input.running && weapons[state.inventory.equipped]?.canRun !== false ? 'run' : 'walk';
 }
 export function toggleCrouch(state, map) {
+  if(state.playerCover) leavePlayerCover(state,map);
   if (state.crouched) {
     const boxes = obstacles(map, state.doors, state.wallPieces, true, (state.playerY ?? 0) + 1.1, 0.7, state.windowHealth);
     if (boxes.some(box => intersectsBox(state.player, state.player, box, 0.25))) return 'Not enough clearance to stand.';
@@ -86,21 +100,52 @@ export function toggleCrouch(state, map) {
   state.crouched = !state.crouched;
   return state.crouched ? 'Crouched. C to stand; hold Ctrl to creep even more quietly.' : 'Standing.';
 }
+export function jump(state, map) {
+  if (state.status !== 'active' || Math.abs(state.velocityY) > 0.001) return false;
+  const floor = playerSupport(state, map, state.playerY);
+  if (Math.abs(state.playerY - floor) > 0.15) return false;
+  if (state.playerCover) leavePlayerCover(state, map);
+  state.velocityY = 5.2;
+  return true;
+}
+function playerSupport(state, map, fromY) {
+  let floor = supportHeight(state, map, state.player, fromY);
+  for (const prop of map.props) {
+    const top = elevation(prop) + 1.1;
+    if (top <= fromY + 0.12 && top > floor && intersectsBox(state.player, state.player, { center: prop.position, size: prop.size })) floor = top;
+  }
+  return floor;
+}
 export function stepMission(state, map, rules, delta, input) {
   if (state.status !== 'active') return;
   state.elapsed += delta;
   finishReload(state);
+  stepPlayerCover(state,map,input);
   const gait = movementGait(state, input), slow = gait === 'creep' || gait === 'crouch'; state.gait = gait;
   const speed = rules.playerSpeed * (slow ? rules.creepMultiplier : gait === 'run' ? rules.runMultiplier : 1);
   const length = Math.hypot(input.x, input.z) || 1;
   state.player = movePlayer(state.player, [input.x / length * speed * delta, input.z / length * speed * delta], map, state.doors, rules.ghost, state.wallPieces, { elevation: state.playerY, height: bodyHeight(state), windows: state.windowHealth });
   const stair = stairHeight(map, state.player);
-  if (stair !== null && Math.abs(stair - state.playerY) < 0.5) { state.playerY = stair; state.velocityY = 0; }
+  if (state.velocityY <= 0 && stair !== null && Math.abs(stair - state.playerY) < 0.5) { state.playerY = stair; state.velocityY = 0; }
   else {
-    const floor = supportHeight(state, map, state.player, state.playerY);
-    state.velocityY -= 9.8 * delta; state.playerY = Math.max(floor, state.playerY + state.velocityY * delta);
-    if (state.playerY === floor) state.velocityY = 0;
+    const previousY = state.playerY;
+    state.velocityY -= 9.8 * delta;
+    let nextY = previousY + state.velocityY * delta;
+    if (nextY > previousY && !rules.ghost) {
+      const head = previousY + bodyHeight(state), nextHead = nextY + bodyHeight(state);
+      for (const piece of state.wallPieces) {
+        if (piece.hp <= 0 || !piece.floor) continue;
+        const bottom = piece.center[1] - piece.size[1] / 2;
+        if (head <= bottom && nextHead > bottom && intersectsBox(state.player, state.player, { center: [piece.center[0], piece.center[2]], size: [piece.size[0], piece.size[2]] }, 0.25)) {
+          nextY = Math.min(nextY, bottom - bodyHeight(state)); state.velocityY = 0;
+        }
+      }
+    }
+    const floor = playerSupport(state, map, previousY);
+    state.playerY = Math.max(floor, nextY);
+    if (state.playerY === floor && state.velocityY < 0) state.velocityY = 0;
   }
+  if(state.playerCover&&Math.abs(state.playerY-state.playerCover.elevation)>.25) leavePlayerCover(state,map);
   stepGuards(state, map, rules, delta, { canSee, movePlayer });
   stepEquipment(state, map, rules, delta);
   stepBodies(state, map, delta);
@@ -108,11 +153,13 @@ export function stepMission(state, map, rules, delta, input) {
 }
 export function interact(state, map) {
   if (state.status !== 'active') return '';
+  if(state.playerCover) leavePlayerCover(state,map);
   if (!state.collected && Math.abs((state.playerY ?? 0) - elevation(map.objective)) < 0.5 && distance(state.player, map.objective.position) < map.objective.radius) {
     state.collected = true;
     return 'Archive secured. Return to the green extraction zone.';
   }
-  const doorIndex = map.doors.findIndex(d => Math.abs((state.playerY ?? 0) - elevation(d)) < 0.5 && distance(state.player, d.position) < 1.8);
+  const nearby=nearbyInteraction(state,map);
+  const doorIndex=nearby?.kind==='door'?nearby.index:-1;
   if (doorIndex !== -1) {
     if (state.doorHealth[doorIndex] <= 0) return 'Door destroyed. The doorway is clear.';
     if (state.lockedDoors?.[doorIndex]) return 'Door locked. Equip the door picking gun for quiet entry, or breach it.';
@@ -121,15 +168,6 @@ export function interact(state, map) {
     state.doors[doorIndex] = !state.doors[doorIndex];
     return state.doors[doorIndex] ? 'Door opened.' : 'Door closed.';
   }
-  const windowIndex = (map.windows ?? []).findIndex(w => Math.abs((state.playerY ?? 0) - elevation(w)) < 0.5 && distance(state.player, w.position) < 1.8);
-  if (windowIndex !== -1) {
-    const window = map.windows[windowIndex];
-    if (state.windowHealth[windowIndex] > 0) return 'Window glass intact. Break it before climbing through.';
-    const axis = window.size[0] < window.size[1] ? 0 : 1;
-    const target = [...window.position]; target[axis] -= (Math.sign(state.player[axis] - window.position[axis]) || 1) * 0.85;
-    if (!insideBounds(target, map) || obstacles(map, state.doors, state.wallPieces, true, state.playerY, bodyHeight(state), state.windowHealth).some(box => intersectsBox(target, target, box, 0.25))) return 'The landing beyond this window is blocked.';
-    state.player = target; return 'Climbed through the broken window.';
-  }
+  if(nearby?.kind==='window')return climbWindow(state,map,nearby.index);
   return 'Move closer to a door, window, or the archive to interact.';
 }
-function insideBounds(position, map) { return position[0] > map.bounds.minX && position[0] < map.bounds.maxX && position[1] > map.bounds.minZ && position[1] < map.bounds.maxZ; }

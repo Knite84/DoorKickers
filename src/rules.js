@@ -3,8 +3,10 @@
 export const schema = {
   entryPoint: { label: 'Entry point', group: 'Mission', options: ['courtyard', 'west gallery'], value: 'courtyard', setup: true },
   guardCount: { label: 'Guard count', group: 'Mission', min: 0, max: 8, step: 1, value: 3, setup: true },
+  armoredGuards: { label: 'Armored guards', group: 'Mission', min: 0, max: 8, step: 1, value: 0, setup: true },
   budget: { label: 'Support budget', group: 'Mission', min: 0, max: 10000, step: 250, value: 1000, setup: true, unit: '$' },
   weather: { label: 'Weather', group: 'World', options: ['clear', 'rain', 'fog'], value: 'clear' },
+  timeOfDay: { label: 'Time of day', group: 'World', options: ['day', 'night'], value: 'day', setup: true },
   playerSpeed: { label: 'Movement speed', group: 'World', min: 1, max: 8, step: 0.5, value: 3.5, unit: 'm/s' },
   runMultiplier: { label: 'Running speed', group: 'World', min: 1, max: 3, step: 0.1, value: 1.7, unit: '×' },
   creepMultiplier: { label: 'Creeping speed', group: 'World', min: 0.1, max: 1, step: 0.1, value: 0.4, unit: '×' },

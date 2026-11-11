@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Martelli · ceilings and window traversal</title>
+<style>body{margin:0;background:#101a19;color:#e6e9df;font:15px system-ui}canvas{display:block;width:100vw;height:100vh}header{position:absolute;top:18px;left:22px;max-width:800px;padding:16px;background:#142b24ed;z-index:2}h1{font-size:23px;margin:0 0 8px}p{line-height:1.5}button,select{padding:9px 12px;margin:0 6px 6px 0;background:#d8e7c9;color:#17251f;border:0;cursor:pointer}#status{color:#ffc77d}footer{position:absolute;bottom:18px;left:22px;background:#142b24ed;padding:10px}</style>
+<header><h1>Martelli · ceiling and window checks</h1><p>The actual map, collision, broken glass, floor support and first-person camera. Pick an opening, break it and climb in either direction.</p>
+<label>Window <select id="window"></select></label><button id="minus">Approach − side</button><button id="plus">Approach + side</button><button id="break">Break glass</button><button id="climb">E · Climb / interact</button><button id="up">Look up at ceiling</button><button id="view">Switch view</button><p id="status" role="status"></p></header><canvas tabindex="0"></canvas><footer>IJKL looks around. WASD moves. E climbs. Ceiling panels hide in overhead view; collision remains active.</footer>
+<script type="module">
+import { martelli as map } from '/src/maps/martelli.js';
+import { createMission,stepMission,interact } from '/src/simulation.js';
+import { createScene } from '/src/scene.js';
+import { defaults } from '/src/rules.js';
+import { shatterWindow } from '/src/combat.js';
+const rules={...defaults,guardCount:0,invulnerable:true},state=createMission(map,rules);state.status='active';
+const canvas=document.querySelector('canvas'),scene=createScene(canvas,map),select=document.querySelector('#window'),keys=new Set();let view='first',message='Break the selected pane, then E to climb.';
+select.replaceChildren(...map.windows.map((w,i)=>new Option(`${w.elevation===0?'Foundation':'Main'} · Window ${i+1}${w.climbable===false?' · stairwell':''}`,String(i))));select.value='7';
+function approach(side){const w=map.windows[Number(select.value)],axis=w.size[0]<w.size[1]?0:1;state.player=[...w.position];state.player[axis]+=side*.65;state.playerY=w.elevation;state.velocityY=0;state.facing=axis===0?[-side,0]:[0,-side];scene.reset(Math.atan2(-state.facing[0],-state.facing[1]));message='Approached selected window. Break glass, then E.';canvas.focus();}
+function climb(){message=interact(state,map);const w=map.windows[Number(select.value)],axis=w.size[0]<w.size[1]?0:1,side=Math.sign(state.player[axis]-w.position[axis]);state.facing=axis===0?[-side,0]:[0,-side];scene.reset(Math.atan2(-state.facing[0],-state.facing[1]));}
+select.onchange=()=>approach(-1);document.querySelector('#minus').onclick=()=>approach(-1);document.querySelector('#plus').onclick=()=>approach(1);
+document.querySelector('#break').onclick=()=>{shatterWindow(state,map,Number(select.value));message='Glass broken. E checks the vault path and landing.';};
+document.querySelector('#climb').onclick=climb;document.querySelector('#up').onclick=()=>scene.look(0,.85);
+document.querySelector('#view').onclick=()=>{view=view==='first'?'overhead':'first';scene.setView(view);};
+window.addEventListener('keydown',e=>{if(e.target.closest('button,select'))return;keys.add(e.code);if(e.code==='KeyE'&&!e.repeat)climb();});window.addEventListener('keyup',e=>keys.delete(e.code));window.addEventListener('blur',()=>keys.clear());
+approach(-1);let previous=performance.now();function frame(now){const dt=Math.min(.05,(now-previous)/1000);previous=now;scene.look((Number(keys.has('KeyL'))-Number(keys.has('KeyJ')))*dt,(Number(keys.has('KeyI'))-Number(keys.has('KeyK')))*dt);const d=scene.movement(Number(keys.has('KeyD'))-Number(keys.has('KeyA')),Number(keys.has('KeyS'))-Number(keys.has('KeyW')));stepMission(state,map,rules,dt,{x:d[0],z:d[1]});for(const e of state.events.splice(0))scene.eventEffect(e);scene.draw(state,rules,dt);document.querySelector('#status').textContent=message;requestAnimationFrame(frame);}requestAnimationFrame(frame);
+</script></html>

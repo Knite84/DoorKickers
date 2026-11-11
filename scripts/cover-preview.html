@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><title>Wounded guard · cover preview</title>
+<style>
+body{margin:0;background:#17251f;color:#ecebdc;font:16px system-ui}canvas{display:block;width:100vw;height:100vh}header{position:absolute;top:22px;left:28px;max-width:670px}h1{margin:0 0 8px;font-size:26px}p{line-height:1.5}button{padding:10px 16px;margin:0 8px 8px 0;background:#d8e7c9;border:0;cursor:pointer}#phase{font-size:22px;color:#ffc77d}footer{position:absolute;bottom:25px;left:28px}
+</style>
+<header><h1>Wounded guard · retreat, hide, peek</h1><p>Live gameplay AI and shared hit skeleton. One surviving arm wound; the guard seeks the wall, ducks behind it, then leans out to fire. The yellow marker is the player's position.</p>
+<button id="reset">Restart retreat</button><button id="pause">Pause</button><button id="freeze">Freeze next peek</button><button id="break">Break cover</button><button id="view">Player view</button>
+<p id="phase" role="status"></p></header><canvas></canvas><footer>Orange traces are actual shots. Damage immunity is enabled for this development fixture.</footer>
+<script type="module">
+import * as THREE from 'three';
+import { createMission,stepMission } from '/src/simulation.js';
+import { defaults } from '/src/rules.js';
+import { courtyard } from '/src/maps/courtyard.js';
+import { damageGuard } from '/src/combat.js';
+import { createGuardVisual } from '/src/npc-visual.js';
+const map={...courtyard,bounds:{minX:-9,maxX:9,minZ:-8,maxZ:8},walls:[{center:[1,1.5],size:[0.4,3]}],doors:[],props:[],patrols:[[[3,-2],[4,-2]]]};
+const rules={...defaults,guardCount:1,awareness:3,patrolSpeed:2,sightRange:16,invulnerable:true};
+const canvas=document.querySelector('canvas'),renderer=new THREE.WebGLRenderer({canvas,antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0x17251f);
+const scene=new THREE.Scene(),camera=new THREE.PerspectiveCamera(43,1,.05,100);
+scene.add(new THREE.HemisphereLight(0xfff4de,0x465b4f,3));const sun=new THREE.DirectionalLight(0xffedcd,3);sun.position.set(0,8,-4);scene.add(sun);
+const materials={},material=color=>materials[color]??=new THREE.MeshStandardMaterial({color});
+function box(position,size,color){const m=new THREE.Mesh(new THREE.BoxGeometry(...size),material(color));m.position.set(...position);scene.add(m);return m;}
+box([0,-.1,0],[18,.2,16],0x516152);scene.add(new THREE.GridHelper(18,18,0x899582,0x65775f));
+const wall=box([1,1.4,1.5],[.4,2.8,3],0xb7b198);box([-5,.85,0],[.4,1.7,.4],0xe9b55d);
+const visual=createGuardVisual(material);scene.add(visual);
+let state,paused=false,freeze=false,playerView=false,shot=null,shotUntil=0;
+function reset(){state=createMission(map,rules);state.status='active';state.player=[-5,0];const g=state.guards[0];g.heading=Math.PI;g.suspicion=1;damageGuard(state,g,25,{zone:'leftArm'});paused=false;freeze=false;wall.visible=true;document.querySelector('#pause').textContent='Pause';}
+reset();
+document.querySelector('#reset').onclick=reset;
+document.querySelector('#pause').onclick=e=>{paused=!paused;e.target.textContent=paused?'Resume':'Pause';};
+document.querySelector('#freeze').onclick=()=>{freeze=true;paused=false;document.querySelector('#pause').textContent='Pause';};
+document.querySelector('#break').onclick=()=>{state.wallPieces.forEach(p=>p.hp=0);wall.visible=false;};
+document.querySelector('#view').onclick=e=>{playerView=!playerView;e.target.textContent=playerView?'Side view':'Player view';};
+let previous=performance.now();
+function frame(now){
+  const dt=Math.min(.05,(now-previous)/1000);previous=now;
+  if(!paused){state.events=[];stepMission(state,map,rules,dt,{x:0,z:0});
+    const event=state.events.find(e=>e.type==='guard-shot');
+    if(event){if(shot){scene.remove(shot);shot.geometry.dispose();shot.material.dispose();}shot=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...event.origin),new THREE.Vector3(...event.position)]),new THREE.LineBasicMaterial({color:0xffa958}));scene.add(shot);shotUntil=state.elapsed+.18;}
+    if(freeze&&state.guards[0].mode==='peek'){paused=true;freeze=false;document.querySelector('#pause').textContent='Resume';}
+  }
+  if(shot)shot.visible=state.elapsed<shotUntil;
+  const guard=state.guards[0];visual.userData.update(guard);
+  document.querySelector('#phase').textContent=`${guard.mode.toUpperCase()} · ${guard.health} health · ${state.elapsed.toFixed(1)} s`;
+  camera.position.set(...(playerView?[-5,1.65,0]:[8,6,-9]));camera.lookAt(...(playerView?[3,1,0]:[1,.8,0]));
+  if(canvas.width!==innerWidth*renderer.getPixelRatio()||canvas.height!==innerHeight*renderer.getPixelRatio()){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+  renderer.render(scene,camera);requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script></html>

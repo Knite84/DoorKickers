@@ -1,3 +1,4 @@
+import { ceilingsFor, rectangle } from './ceilings.js';
 // Three successive rooms, with a clear inspection corridor along the south side.
 export const partitions = {
   version: 1, id: 'partitions-01', name: 'The long house',
@@ -5,6 +6,7 @@ export const partitions = {
   stamp: 'LONG HOUSE',
   bounds: { minX: -14, maxX: 14, minZ: -12, maxZ: 12 },
   spawn: [-11, 7],
+  ceilings: ceilingsFor([{outline:rectangle(-10,-9,10,1)}]),
   entries: {
     courtyard: { position: [-11, 7], yaw: 0, label: 'Courtyard approach' },
     'west gallery': { position: [-8, -4.25], yaw: -Math.PI / 2, label: 'West Gallery · face three partitions' },

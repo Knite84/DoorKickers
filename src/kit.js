@@ -14,6 +14,8 @@ export const ammoTypes = {
   solid: { name: 'Solid core', damage: 0.85, wall: 2, penetration: 4, description: 'Highest penetration through soft walls and guards; reduced body damage.' },
 };
 export const items = {
+  nightvision: { name: 'Night vision goggles', max: 1, count: 1, wearable: true, description: 'Battery-powered light amplification. Wear with your weapon; replaces thermals. N toggles night vision.', action: 'Wear' },
+  thermal: { name: 'Thermal goggles', max: 1, count: 1, wearable: true, description: 'Highlights warm bodies in view. Walls still obscure them. Replaces night vision. T toggles thermals.', action: 'Wear' },
   knife: { name: 'Knife', max: 1, count: 1, description: 'Reusable melee weapon. Close rear attacks kill silently; front attacks wound and can trigger an injury call. Bodies can still be discovered.', action: 'Stab' },
   pickgun: { name: 'Door picking gun', max: 1, count: 1, description: 'Reusable placeholder. Aim at a nearby locked door and use to unlock and open it quietly.', action: 'Unlock quietly' },
   medkit: { name: 'Med kit', max: 5, count: 2, description: 'Restore 50 health. Consumed only when hurt.', action: 'Heal' },
@@ -26,7 +28,7 @@ export const items = {
   molotov: { name: 'Molotov cocktail', max: 8, count: 2, description: 'Throw through window glass, shattering it. Creates a temporary fire patch on solid impact or landing that damages anyone inside.', action: 'Throw Molotov' },
 };
 export function defaultLoadout() {
-  return { primary: 'rifle', weapons: Object.fromEntries(Object.keys(weapons).map(id => [id, { carried: true, suppressor: false, velocity: 'supersonic', ammoType: 'standard' }])), items: Object.fromEntries(Object.entries(items).map(([id, item]) => [id, item.count])) };
+  return { primary: 'rifle', vision: 'off', weapons: Object.fromEntries(Object.keys(weapons).map(id => [id, { carried: true, suppressor: false, velocity: 'supersonic', ammoType: 'standard' }])), items: Object.fromEntries(Object.entries(items).map(([id, item]) => [id, item.count])) };
 }
 export function validateLoadout(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid loadout.');
@@ -42,10 +44,13 @@ export function validateLoadout(input) {
   result.primary = result.weapons[input.primary]?.carried ? input.primary : Object.keys(weapons).find(id => result.weapons[id].carried);
   for (const [id, item] of Object.entries(items)) {
     const count = input.items?.[id];
-    if (['pickgun', 'knife'].includes(id) && count === undefined && input.items) continue;
+    if (['pickgun', 'knife', 'nightvision', 'thermal'].includes(id) && count === undefined && input.items) continue;
     if (!Number.isInteger(count) || count < 0 || count > item.max) throw new Error(`Invalid ${item.name} quantity.`);
     result.items[id] = count;
   }
+  const vision=input.vision??'off';
+  if(!['off','nightvision','thermal'].includes(vision)||vision!=='off'&&result.items[vision]<1)throw new Error('Choose one carried vision device, or Off.');
+  result.vision=vision;
   return result;
 }
 export function createInventory(loadout = defaultLoadout()) {
@@ -65,6 +70,10 @@ export function restockEquipment(state) {
   return added;
 }
 export function equip(state, id) {
+  if(items[id]?.wearable){
+    if(!(state.inventory.items[id]>0))return false;
+    state.inventory.vision=state.inventory.vision===id?'off':id;return true;
+  }
   if (id !== 'unarmed' && !state.inventory.weapons[id]?.carried && !(state.inventory.items[id] > 0)) return false;
   if (weapons[state.inventory.equipped]) state.inventory.magazines[state.inventory.equipped] = state.ammo;
   if (weapons[state.inventory.equipped]) state.inventory.lastWeapon = state.inventory.equipped;

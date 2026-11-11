@@ -1,11 +1,11 @@
 import { damageWall, rayBox, removeUnsupportedPieces } from './destruction.js';
-import { items } from './kit.js';
+import { items, weapons } from './kit.js';
 import { alertGuards, damageGuard, damagePlayer, segmentClear, shatterWindow } from './combat.js';
 import { damageDoor } from './doors.js';
-import { doorCenter, doorSize, elevation, eyeHeight, windowCenter, windowSize } from './world.js';
+import { doorCenter, doorSize, elevation, playerEye, windowCenter, windowSize } from './world.js';
 import { hitGuard, guardPose } from './npc-body.js';
 
-function nearbyHit(state, map, origin, direction, reach) {
+function nearbyHit(state, map, origin, direction, reach, blockProps = false) {
   let hit = null, closest = reach;
   const consider = (center, size, kind, object) => {
     const d = rayBox(origin, direction, center, size, closest);
@@ -14,6 +14,7 @@ function nearbyHit(state, map, origin, direction, reach) {
   for (const piece of state.wallPieces) if (piece.hp > 0) consider(piece.center, piece.size, 'wall', piece);
   map.doors.forEach((door, i) => { if (!state.doors[i]) consider(doorCenter(door), doorSize(door), 'door', i); });
   (map.windows ?? []).forEach((window, i) => { if (state.windowHealth[i] > 0) consider(windowCenter(window), windowSize(window), 'glass', i); });
+  if (blockProps) for (const prop of map.props) consider([prop.position[0], elevation(prop) + 0.55, prop.position[1]], [prop.size[0], 1.1, prop.size[1]], 'prop', prop);
   for (const guard of state.guards) if (guard.health > 0) {
     const bodyHit = hitGuard(guard, origin, direction, closest);
     if (bodyHit && bodyHit.distance < closest) { closest = bodyHit.distance; hit = { ...bodyHit, kind: 'guard', object: guard, position: origin.map((v, i) => v + direction[i] * closest) }; }
@@ -53,7 +54,8 @@ function blast(state, map, rules, position, radius = 3, power = 120, heading, in
     const torso = guardPose(guard).chest;
     return within([torso[0], torso[2]], torso[1] - 1);
   });
-  const playerExposure = within(state.player, state.playerY ?? 0);
+  const exposed=playerEye(state);
+  const playerExposure = Math.max(within(state.player, state.playerY ?? 0),within([exposed[0],exposed[2]],exposed[1]-1));
   if (rules.destructibleWalls) for (const piece of state.wallPieces) {
     const d = Math.hypot(...piece.center.map((v, axis) => Math.max(0, Math.abs(v - position[axis]) - piece.size[axis] / 2)));
     if (piece.hp > 0 && Number.isFinite(piece.hp) && d < radius * 0.6) piece.hp = Math.max(0, piece.hp - power / 8 * rules.blastDamage * (1 - d / (radius * 0.75)));
@@ -91,6 +93,23 @@ export function detonateCharges(state, map, rules) {
     blast(state, map, rules, charge.position, 2.5, 100);
   }
   return charges.length;
+}
+// A close-range blunt strike with the equipped firearm. It does not consume ammo.
+export function weaponStrike(state, map, rules, origin, rawDirection) {
+  if (state.status !== 'active' || !weapons[state.inventory.equipped] || state.reloadUntil > state.elapsed || state.elapsed < (state.meleeUntil ?? 0) || (state.playerCover && !state.playerCover.peeking)) return null;
+  const length = Math.hypot(...rawDirection);
+  if (length < 0.001) return null;
+  const direction = rawDirection.map(value => value / length);
+  state.meleeUntil = state.elapsed + 0.65;
+  state.nextShot = Math.max(state.nextShot, state.meleeUntil);
+  const hit = nearbyHit(state, map, origin, direction, 1.6, true);
+  if (hit) {
+    if (hit.kind === 'guard') damageGuard(state, hit.object, 25);
+    if (hit.kind === 'glass') shatterWindow(state, map, hit.object);
+    event(state, 'strike', hit.position);
+    alertGuards(state, rules, hit.position, 5);
+  }
+  return { kind: hit?.kind ?? 'miss', killed: hit?.kind === 'guard' && hit.object.health <= 0 };
 }
 export function useEquipment(state, map, rules, origin, rawDirection) {
   const id = state.inventory.equipped, item = items[id];
@@ -179,8 +198,8 @@ export function stepEquipment(state, map, rules, delta) {
     if (projectile.type === 'grenade') blast(state, map, rules, p, 4, 220, undefined, 1.5);
     if (projectile.type === 'flashbang') {
       for (const guard of state.guards) if (guard.health > 0 && Math.hypot(guard.position[0] - p[0], guard.position[1] - p[2], elevation(guard) + 1.5 - p[1]) < 6 && segmentClear(state, map, p, [guard.position[0], elevation(guard) + 1.5, guard.position[1]], -1, { glass: false })) { guard.stunnedUntil = state.elapsed + 5; guard.suspicion = 0; }
-      const dx = p[0] - state.player[0], dz = p[2] - state.player[1];
-      if (Math.hypot(dx, dz, eyeHeight(state) - p[1]) < 5 && segmentClear(state, map, [state.player[0], eyeHeight(state), state.player[1]], p, -1, { glass: false }) && dx * state.facing[0] + dz * state.facing[1] > 0) state.flashUntil = state.elapsed + 1.5;
+      const eye=playerEye(state),dx = p[0] - eye[0], dz = p[2] - eye[2];
+      if (Math.hypot(dx, dz, eye[1] - p[1]) < 5 && segmentClear(state, map, eye, p, -1, { glass: false }) && dx * state.facing[0] + dz * state.facing[1] > 0) state.flashUntil = state.elapsed + 1.5;
       event(state, 'flash', p, { radius: 6 }); alertGuards(state, rules, p, 10);
     }
     if (projectile.type === 'molotov') { state.fires.push({ position: [...p], until: state.elapsed + 8, radius: 2 }); event(state, 'fire', p); alertGuards(state, rules, p, 10); }

@@ -4,11 +4,11 @@ export function buildWallPieces(map) {
   const pieces = [];
   const add = (wall, center, size, material, hp, extra = {}) => pieces.push({ id: pieces.length, wall, center, size, material, hp, maxHp: hp, ...extra });
   map.walls.forEach((wall, index) => {
-    const along = wall.size[0] > wall.size[1] ? 0 : 2;
+    const along = wall.axis==='x'?0:wall.axis==='z'?2:wall.size[0] > wall.size[1] ? 0 : 2;
     const across = along === 0 ? 2 : 0;
     const origin = [wall.center[0], wall.elevation ?? 0, wall.center[1]];
     const height = wall.height ?? 2.8, level = wall.level ?? Math.round(origin[1] / 3.2);
-    const length = Math.max(...wall.size);
+    const length = wall.size[along===0?0:1];
     if (!wall.destructible) {
       const columns = Math.ceil(length), rows = Math.ceil(height / 0.7);
       for (let column = 0; column < columns; column++) for (let row = 0; row < rows; row++) {
@@ -58,11 +58,15 @@ export function buildWallPieces(map) {
       add(map.walls.length + index, [floor.center[0] - floor.size[0] / 2 + floor.size[0] * x / trusses, floor.elevation - 0.46, floor.center[1] - floor.size[1] / 2 + depth * (z + 0.5)], [0.2, 0.6, depth], 'truss', 80, extra);
     }
   }
+  for(const [index,ceiling] of (map.ceilings??[]).entries()){
+    const columns=Math.ceil(ceiling.size[0]/1.2),rows=Math.ceil(ceiling.size[1]/1.2),width=ceiling.size[0]/columns,depth=ceiling.size[1]/rows;
+    for(let x=0;x<columns;x++)for(let z=0;z<rows;z++)add(map.walls.length+(map.floors?.length??0)+index,[ceiling.center[0]-ceiling.size[0]/2+(x+.5)*width,ceiling.elevation+.08,ceiling.center[1]-ceiling.size[1]/2+(z+.5)*depth],[width,.16,depth],'ceiling',6,{floor:true,ceiling:true,level:ceiling.level??Math.floor(ceiling.elevation/3.2)});
+  }
   for (const [index, stair] of (map.stairs ?? []).entries()) {
     const count = 16, dx = stair.to[0] - stair.from[0], dz = stair.to[1] - stair.from[1];
     for (let step = 0; step < count; step++) {
       const t = (step + 0.5) / count, height = stair.bottom + (step + 1) / count * (stair.top - stair.bottom);
-      add(map.walls.length + (map.floors?.length ?? 0) + index, [stair.from[0] + dx * t, height / 2, stair.from[1] + dz * t], [Math.abs(dx) / count || stair.size[0], height, Math.abs(dz) / count || stair.size[1]], 'masonry', Infinity, { stair: true, level: 0 });
+      add(map.walls.length + (map.floors?.length ?? 0) + (map.ceilings?.length??0) + index, [stair.from[0] + dx * t, height / 2, stair.from[1] + dz * t], [Math.abs(dx) / count || stair.size[0], height, Math.abs(dz) / count || stair.size[1]], 'masonry', Infinity, { stair: true, level: 0 });
     }
   }
   return pieces;
@@ -131,7 +135,7 @@ export function damageWall(pieces, hit, amount, source = 'impact') {
   for (const piece of pieces) {
     if (piece.hp <= 0 || piece.wall !== hit.wall || piece.material !== hit.material) continue;
     const across = hit.size[0] < hit.size[2] ? 0 : 2;
-    const near = piece === hit || (hit.material === 'drywall' && Math.abs(piece.center[across] - hit.center[across]) < 0.01 && Math.hypot(...piece.center.map((v, i) => v - hit.center[i])) < 0.57);
+    const near = piece === hit || (source !== 'precise' && hit.material === 'drywall' && Math.abs(piece.center[across] - hit.center[across]) < 0.01 && Math.hypot(...piece.center.map((v, i) => v - hit.center[i])) < 0.57);
     if (!near) continue;
     piece.hp -= amount;
     if (piece.hp <= 0) removed.push(piece);
