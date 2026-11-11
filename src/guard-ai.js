@@ -7,6 +7,9 @@ import { guardDisabled, guardSpeed, guardShotInterval, guardEye } from './npc-bo
 import { stepWoundedCover, fireGuardShot, coverClear } from './guard-tactics.js';
 import { sightHalfAngle, suspicionFactor } from './guard-traits.js';
 import { stepRoutine } from './guard-posts.js';
+import { stepWounds } from './guard-wounds.js';
+import { stepWeapon, weaponReady, afterShot } from './guard-weapon.js';
+import { stepRadio } from './guard-radio.js';
 
 const gap = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const eye = guardEye;
@@ -69,16 +72,18 @@ function walk(guard, target, speed, state, map, delta, movePlayer) {
 
 export function stepGuards(state, map, rules, delta, { canSee, movePlayer }) {
   const armed = isArmed(state), priorLeader = state.guards.find(g => g.id === state.detainingGuardId && !g.wounded && !guardDisabled(g) && g.stunnedUntil <= state.elapsed);
+  stepRadio(state);
   let leader = priorLeader && !armed ? priorLeader : null;
   state.detainingGuardId = null;
   const candidates = state.guards.some(g => g.health > 0 && state.elapsed >= (g.nextEvidenceAt ?? 0)) ? evidence(state, map) : [];
   for (const guard of state.guards) {
     guard.aimTarget = null;
     guard.recoil = Math.max(0, (guard.recoil ?? 0) - delta * 7);
-    if (guardDisabled(guard)) { guard.suspicion = 0; guard.mode = guard.health <= 0 ? 'incapacitated' : 'wounded'; continue; }
+    stepWounds(state, guard);
+    if (guardDisabled(guard)) { guard.suspicion = 0; guard.mode = guard.health <= 0 ? 'incapacitated' : guard.incapacitated ? 'wounded' : 'surrender'; continue; }
     if (guard.stunnedUntil > state.elapsed) { guard.mode = 'stunned'; guard.duck=0; guard.lean=[0,0]; continue; }
     guard.mode ??= 'patrol'; guard.evidenceSeen ??= [];
-    if (guard.pendingReport) {
+    if (guard.pendingReport && state.elapsed >= (guard.pendingReportAt ?? 0)) {
       const report = guard.pendingReport; delete guard.pendingReport;
       const keepDetaining = guard === leader && guard.mode === 'detain' && report.armed === false;
       if (!(guard.target?.kind === 'player' && state.elapsed - guard.target.time < 10 && !['sighting', 'weapon', 'detain'].includes(report.kind))) remember(guard, report);
@@ -90,6 +95,7 @@ export function stepGuards(state, map, rules, delta, { canSee, movePlayer }) {
     }
     const rangeFactor = state.gait === 'creep' ? 0.65 : state.gait === 'crouch' ? 0.8 : 1;
     let seen = canSee(guard, state.player, rules, [], { state, map, rangeFactor }) && coverClear(state,map,eye(guard),playerEye(state));
+    stepWeapon(state, guard, seen);
     const gain = state.gait === 'creep' ? 0.15 : state.gait === 'crouch' ? 0.3 : state.gait === 'run' ? 0.9 : 0.6;
     guard.suspicion = Math.max(0, Math.min(1, guard.suspicion + delta * (seen ? rules.awareness * gain * suspicionFactor(guard) : -0.3)));
     if (seen && rules.awareness > 0 && (guard.suspicion >= 1 || guard.target?.kind === 'player' || guard.mode === 'detain' || guard.mode === 'gather')) {
@@ -129,6 +135,7 @@ export function stepGuards(state, map, rules, delta, { canSee, movePlayer }) {
     if (guard.target && state.elapsed - guard.target.time > 14 && guard.mode !== 'detain') { guard.target = null; guard.route = []; guard.mode = 'patrol'; }
     const defense=stepWoundedCover(state,map,rules,guard,delta,seen,(target,speed)=>walk(guard,target,speed,state,map,delta,movePlayer));
     if (!defense) { guard.duck=0; guard.lean=[0,0]; }
+    if (guard.down) guard.duck = 1;
     if (defense) { /* Wounded movement and cover cycles take priority over pursuit. */ }
     else if (guard.mode === 'detain') guard.heading = Math.atan2(state.player[1] - guard.position[1], state.player[0] - guard.position[0]);
     else if (guard.target) {
@@ -145,12 +152,13 @@ export function stepGuards(state, map, rules, delta, { canSee, movePlayer }) {
     }
     if (map.floors?.length) guard.elevation = supportHeight(state, map, guard.position, elevation(guard));
     const firingSight=coverClear(state,map,eye(guard),playerEye(state)) && (seen || defense?.canFire && canSee(guard,state.player,rules,[],{state,map,rangeFactor}));
-    if (armed && (guard.target?.kind === 'player' || guard.wounded) && firingSight && (!defense || defense.canFire) && !(guard.injuries?.leftArm && guard.injuries?.rightArm)) {
+    if (armed && (guard.target?.kind === 'player' || guard.wounded) && firingSight && (!defense || defense.canFire) && !guard.fallen && weaponReady(guard) && !(guard.injuries?.leftArm && guard.injuries?.rightArm)) {
       guard.aimTarget = playerEye(state);
       guard.heading = Math.atan2(state.player[1] - guard.position[1], state.player[0] - guard.position[0]);
       if (state.elapsed >= guard.nextShot) {
         guard.nextShot = state.elapsed + (guard.mode==='peek'?Math.max(2.4,guardShotInterval(guard)):guardShotInterval(guard));
         fireGuardShot(state,map,rules,guard);
+        afterShot(state, guard);
       }
     }
   }

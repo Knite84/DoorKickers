@@ -3,6 +3,7 @@ import { elevation, playerEye, doorCenter, doorSize, propHeight } from './world.
 import { navigationFor, findGuardPath } from './navigation.js';
 import { rayBox } from './destruction.js';
 import { guardEye, guardWeaponPose, rayCapsule } from './npc-body.js';
+import { aimSpread } from './guard-wounds.js';
 
 const distance = (a,b) => Math.hypot(a[0]-b[0],a[1]-b[1]);
 // Foliage can hide a guard above its planter, but only solid geometry stops fire.
@@ -54,7 +55,8 @@ export function findWoundedCover(state,map,guard) {
   return null;
 }
 export function stepWoundedCover(state,map,rules,guard,delta,seen,walk) {
-  if (!guard.wounded || !guard.woundThreat) return null;
+  // Wounded guards, and those with an empty or jammed weapon, fall back to cover.
+  if (!(guard.wounded || guard.weaponBusy) || !guard.woundThreat) return null;
   if (seen) guard.woundThreat=playerEye(state);
   let cover=guard.cover;
   const changed=cover && (cover.signature!==navigationFor(state,map).signature || distance([cover.threat[0],cover.threat[2]],[guard.woundThreat[0],guard.woundThreat[2]])>1.5);
@@ -117,8 +119,10 @@ function random(guard) {
 }
 export function fireGuardShot(state,map,rules,guard) {
   const target=playerEye(state);
-  if (guard.wounded) {
-    const severity=(100-guard.health)/100, spread=0.055+severity*0.16+(guard.injuries?.leftArm||guard.injuries?.rightArm?0.06:0);
+  // Wounds always disturb aim; guards with a temperament also have ordinary human dispersion.
+  const severity=(100-guard.health)/100;
+  const spread=(guard.wounded?0.055+severity*0.16+(guard.injuries?.leftArm||guard.injuries?.rightArm?0.06:0):0)+(guard.traits?aimSpread(state,guard,rules):0);
+  if (spread>0) {
     const eye=guardEye(guard), length=Math.hypot(...target.map((v,i)=>v-eye[i]));
     const angle=random(guard)*Math.PI*2, radius=Math.sqrt(random(guard))*length*spread;
     const dx=target[0]-guard.position[0], dz=target[2]-guard.position[1], horizontal=Math.hypot(dx,dz)||1;

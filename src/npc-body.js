@@ -58,6 +58,22 @@ export function guardPose(guard) {
       }
     }
   }
+  if (guard.surrendered) {
+    // Kneeling with open hands raised beside the head.
+    for (const [side, sign] of [['left', -1], ['right', 1]]) { pose[`${side}Elbow`] = [0.06, 1.45, sign * 0.42]; pose[`${side}Hand`] = [0.1, 1.72, sign * 0.3]; }
+  } else if (guard.fallen && !guard.aimTarget) {
+    // Down on a knee, both hands clamped to the wounded leg.
+    const sign = injuries.leftLeg ? -1 : 1;
+    for (const side of ['left', 'right']) { pose[`${side}Elbow`] = [0.16, 1.02, sign * 0.2 + (side === 'left' ? -0.1 : 0.1)]; pose[`${side}Hand`] = [0.2, 0.9, sign * 0.15]; }
+  }
+  if (guard.weapon && guard.weapon.state !== 'ready' && !guard.surrendered && !guard.fallen) {
+    // Both hands work the weapon at the chest; a stoppage is held up to look at.
+    const lift = guard.weapon.state === 'jammed' ? 0.12 : 0;
+    for (const [side, sign] of [['left', -1], ['right', 1]]) {
+      if (injuries[`${side}Arm`]) continue;
+      pose[`${side}Elbow`] = [0.12, 1.1 + bob, sign * 0.22]; pose[`${side}Hand`] = [0.3, 1.2 + lift + bob, sign * 0.05];
+    }
+  }
   if (guard.aimTarget && !guardDisabled(guard)) {
     const horizontal = Math.hypot(guard.aimTarget[0] - guard.position[0], guard.aimTarget[2] - guard.position[1]);
     const pitch = Math.max(-1.2, Math.min(1.2, Math.atan2(guard.aimTarget[1] - ((guard.elevation ?? 0) + 1.35 + bob - (guard.duck ?? 0)*0.65), horizontal)));
@@ -90,7 +106,7 @@ export function guardWeaponPose(guard, pose = guardPose(guard)) {
   const position = pose[hand];
   const offset = guard.aimTarget ? guard.aimTarget.map((v, i) => v - position[i]) : [Math.cos(guard.heading) * 0.5, -0.866, Math.sin(guard.heading) * 0.5];
   const length = Math.hypot(...offset) || 1, direction = offset.map(v => v / length);
-  return { position, direction, muzzle: position.map((v, i) => v + direction[i] * 0.29), visible: !guardDisabled(guard) && !guard.ragdoll && !(guard.injuries?.leftArm && guard.injuries?.rightArm) };
+  return { position, direction, muzzle: position.map((v, i) => v + direction[i] * 0.29), visible: !guardDisabled(guard) && !guard.ragdoll && !guard.surrendered && !(guard.injuries?.leftArm && guard.injuries?.rightArm) };
 }
 
 // Exact ray/capsule intersection, including both spherical caps; direction is normalized.
@@ -128,8 +144,8 @@ export function hitGuard(guard, origin, direction, limit = 80) {
   return hit;
 }
 
-export const guardDisabled = guard => guard.health <= 0 || !!guard.incapacitated;
-export const guardSpeed = guard => guard.injuries?.leftLeg && guard.injuries?.rightLeg ? 0.25 : guard.injuries?.leftLeg || guard.injuries?.rightLeg ? 0.48 : 1;
+export const guardDisabled = guard => guard.health <= 0 || !!guard.incapacitated || !!guard.surrendered;
+export const guardSpeed = guard => guard.fallen ? 0 : guard.injuries?.leftLeg && guard.injuries?.rightLeg ? 0.25 : guard.injuries?.leftLeg || guard.injuries?.rightLeg ? 0.48 : 1;
 export const guardShotInterval = guard => guard.injuries?.leftArm || guard.injuries?.rightArm ? 1.8 : 0.8;
 
 export function reactToHit(guard, hit = {}, dead = false) {
@@ -137,7 +153,7 @@ export function reactToHit(guard, hit = {}, dead = false) {
   guard.injuries ??= {};
   guard.injuries[zone] = (guard.injuries[zone] ?? 0) + 1;
   guard.lastHitZone = zone;
-  if (!dead && (hit.protectedHit || !['chest', 'stomach'].includes(zone)) && !guard.ragdoll) return;
+  if (!dead && (hit.protectedHit || hit.standing || !['chest', 'stomach'].includes(zone)) && !guard.ragdoll) return;
   guard.incapacitated = true; guard.mode = dead ? 'incapacitated' : 'wounded'; guard.suspicion = 0;
   if (!guard.ragdoll) {
     const pose = guardPose(guard);

@@ -20,6 +20,12 @@ export function rollTraits(random) {
   return Object.fromEntries(traitNames.map(name => [name, Math.round((random() + random()) * 50) / 100]));
 }
 
+// Per-guard chance stream, so outcomes replay with the mission seed.
+export function roll(guard) {
+  guard.luck = (Math.imul(guard.luck ?? ((guard.id ?? 0) + 1) * 2654435761, 1664525) + 1013904223) >>> 0;
+  return guard.luck / 4294967296;
+}
+
 export const trait = (guard, name) => guard?.traits?.[name] ?? 0.5;
 
 // Map a trait onto a multiplier that is exactly 1 at the neutral 0.5.

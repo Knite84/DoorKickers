@@ -389,6 +389,7 @@ function frame(now) {
   scene?.draw(state, rules, dt, { moving: !!(input.x || input.z) && state.status === 'active', running: gait === 'run', firing: firing && state.status === 'active' && exposed, aimed:aimed&&exposed, scopeZoom, menuVisible });
   if (scene) $('#map-floor').value = String(scene.getFloor());
   $('#map-kills').textContent = `${state.kills}/${state.guards.length}`;
+  if (state.surrenders) $('#map-kills').textContent += ` · ${state.surrenders} surrendered`;
   $('#scope-overlay').hidden = !scoped; $('#scope-zoom').textContent = `${scopeZoom}×`;
   $('#damage-overlay').style.opacity = state.hurtUntil > state.elapsed ? '0.45' : '0';
   $('#flash-overlay').style.opacity = Math.max(0, (state.flashUntil - state.elapsed) / 1.5) * 0.9;

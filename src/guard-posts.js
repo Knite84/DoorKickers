@@ -36,10 +36,10 @@ export function assignGuards(map, count, seed) {
         return posts[i].weight * (posts[i].elevation === posts[home].elevation ? 1 / (1 + (distance / 5) ** 2) : 0.12 / (1 + (distance / 8) ** 2));
       }));
     }
-    guards.push({ stops, traits: rollTraits(random), routineSeed: Math.floor(random() * 4294967296) });
+    guards.push({ stops, traits: rollTraits(random), routineSeed: Math.floor(random() * 4294967296), luck: Math.floor(random() * 4294967296) });
   }
   return guards.map(guard => ({
-    traits: guard.traits,
+    traits: guard.traits, luck: guard.luck,
     path: guard.stops.map(i => posts[i].position),
     pathElevations: guard.stops.map(i => posts[i].elevation),
     pathDwell: guard.stops.map(i => posts[i].dwell),

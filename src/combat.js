@@ -1,6 +1,9 @@
 import { rayBox } from './destruction.js';
 import { doorCenter, doorSize, windowCenter, windowSize, playerEye } from './world.js';
 import { reactToHit, guardDisabled } from './npc-body.js';
+import { woundResponse, afterHit } from './guard-wounds.js';
+import { sendGuardReport } from './guard-radio.js';
+export { sendGuardReport };
 export function shatterWindow(state, map, index) {
   if (!(state.windowHealth?.[index] > 0)) return false;
   state.windowHealth[index] = 0;
@@ -21,20 +24,11 @@ export function damageGuard(state, guard, damage, hit) {
       guard.mode = 'investigate'; guard.target = { kind: 'site', position: [...guard.position], elevation: guard.elevation ?? 0, time: state.elapsed };
     }
   }
-  if (hit) reactToHit(guard, hit);
+  const impact = hit ?? {};
+  woundResponse(state, guard, impact);
+  if (hit) reactToHit(guard, impact);
+  afterHit(state, guard);
   return false;
-}
-export function sendGuardReport(state, sender, report) {
-  if (guardDisabled(sender) || sender.stunnedUntil > state.elapsed) return;
-  const senderId = sender.id ?? state.guards.indexOf(sender);
-  const message = { ...report, position: [...report.position], senderId, time: state.elapsed };
-  state.guardReports ??= []; state.guardReports.push(message);
-  if (state.guardReports.length > 12) state.guardReports.shift();
-  for (const guard of state.guards) if (guard !== sender && !guardDisabled(guard)) guard.pendingReport = { ...message, position: [...message.position] };
-  sender.lastRadio = state.elapsed;
-  const descriptions = { sighting: report.armed ? 'Armed threat spotted. Pursuing.' : 'Unarmed person spotted. Moving to detain.', detain: 'Detaining an unarmed person. Backup, approach slowly.', injury: 'I am injured. Backup to my position!', body: 'Incapacitated guard found. Backup requested.', damage: `Damage found: ${report.label ?? 'structure'}. Investigate.`, weapon: 'Weapon drawn! Armed threat.' };
-  state.lastGuardReport = `GUARD ${senderId + 1}: ${descriptions[report.kind] ?? 'Backup requested.'}`;
-  state.guardReportUntil = state.elapsed + 8;
 }
 export function damagePlayer(state, rules, damage) {
   if (damage <= 0 || rules.invulnerable || state.status !== 'active') return;
