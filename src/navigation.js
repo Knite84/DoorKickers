@@ -1,4 +1,4 @@
-import { elevation, stairHeight, propHeight } from './world.js';
+import { elevation, stairHeight, propHeight, activeProps } from './world.js';
 import { damageCount } from './spatial.js';
 
 // A small shared walking grid, rebuilt when damage changes passable geometry.
@@ -36,7 +36,7 @@ export function navigationFor(state, map, { radius = 0.28, cell = map.navCell ??
       if (piece.floor && Math.abs(top - base) < 0.15) raster(level, center, size, 0.08, id => { supported[id % plane] = 1; });
       if (bottom < base + 1.8 && top > base + 0.12) raster(level, center, size, radius, id => { blocked[id] = 1; });
     }
-    for (const prop of map.props) if (elevation(prop) < base + 1.8 && elevation(prop) + propHeight(prop) > base + 0.12) raster(level, prop.position, prop.size, radius, id => { blocked[id] = 1; });
+    for (const prop of activeProps(state, map)) if (elevation(prop) < base + 1.8 && elevation(prop) + propHeight(prop) > base + 0.12) raster(level, prop.position, prop.size, radius, id => { blocked[id] = 1; });
     (map.windows ?? []).forEach((window, index) => {
       if (state.windowHealth[index] > 0 && Math.abs(elevation(window) - base) < 0.5) raster(level, window.position, window.size, radius, id => { blocked[id] = 1; });
     });

@@ -66,9 +66,10 @@ export function piecesAlong(pieces, a, b) {
 const damage = new WeakMap();
 export function damageCount(state) {
   const prior = damage.get(state);
-  if (prior && prior.elapsed === state.elapsed && prior.pieces === state.wallPieces) return prior.count;
+  if (prior && prior.elapsed === state.elapsed && prior.pieces === state.wallPieces) return prior.count + (state.propBroken ?? 0);
   let count = 0;
   for (const p of state.wallPieces) if (p.hp <= 0) count++;
   damage.set(state, { elapsed: state.elapsed, pieces: state.wallPieces, count });
-  return count;
+  // Broken furniture changes walking, cover and light just as broken wall pieces do.
+  return count + (state.propBroken ?? 0);
 }

@@ -1,9 +1,39 @@
 import { piecesInArea } from './spatial.js';
-import { furnitureHeight } from './furniture.js';
+import { furnitureHeight, furnitureClass, furnitureBounds, durability } from './furniture.js';
 export const elevation = object => object?.elevation ?? 0;
 // Furniture is waist-high cover unless a prop states its own height (beds are low)
 // or is a kit piece (src/furniture.js), whose variant sets it.
 export const propHeight = prop => prop.height ?? furnitureHeight(prop) ?? 1.1;
+// Furniture damage lives in the mission state (propHealth, decorHealth), never in
+// the map. A broken piece leaves low debris: walkable, hides sight, stops nothing.
+export const propBroken = (state, index) => state?.propHealth?.[index] <= 0;
+export const decorBroken = (state, index) => state?.decorHealth?.[index] <= 0;
+// What a piece does, by use:
+//   solid  - blocks walking, standing, ragdolls and the walking grid
+//   sight  - hides what is behind it (soft pieces and debris included)
+//   bullet - stops shots (soft pieces and debris never do)
+// Returns { center, size } or null.
+export function propBox(state, map, index, use = 'solid') {
+  const prop = map.props[index], base = elevation(prop);
+  if (propBroken(state, index)) {
+    if (use !== 'sight') return null;
+    const height = durability.debrisHeight;
+    return { center: [prop.position[0], base + height / 2, prop.position[1]], size: [prop.size[0], height, prop.size[1]], debris: true };
+  }
+  if (use === 'bullet' && !durability.classes[furnitureClass(prop)].stopsBullets) return null;
+  const height = propHeight(prop);
+  return { center: [prop.position[0], base + height / 2, prop.position[1]], size: [prop.size[0], height, prop.size[1]] };
+}
+// The props that still block movement. Returns map.props itself when nothing has broken.
+export function activeProps(state, map) {
+  if (!state?.propBroken) return map.props;
+  return map.props.filter((_, index) => !propBroken(state, index));
+}
+// Intact decor (TVs, mirrors, rugs) as hit boxes; decor never collides.
+export function decorBox(state, map, index) {
+  if (decorBroken(state, index)) return null;
+  return furnitureBounds(map.decor[index]);
+}
 export const eyeHeight = state => (state.playerY ?? 0) + (state.playerCover ? state.playerCover.peeking ? 1.65 : .85 : state.crouched ? 1 : 1.65);
 export const playerEye = state => [state.player[0]+(state.playerCover?.offset?.[0]??0),eyeHeight(state),state.player[1]+(state.playerCover?.offset?.[1]??0)];
 export const bodyHeight = state => state.playerCover ? state.playerCover.peeking ? 1.8 : 1.08 : state.crouched ? 1.1 : 1.8;

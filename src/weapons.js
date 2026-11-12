@@ -2,7 +2,9 @@ import { damageWall, rayBox } from './destruction.js';
 import { weapons, ammoTypes } from './kit.js';
 import { alertGuards, damageGuard, shatterWindow } from './combat.js';
 import { damageDoor } from './doors.js';
-import { doorCenter, doorSize, elevation, windowCenter, windowSize, propHeight } from './world.js';
+import { doorCenter, doorSize, elevation, windowCenter, windowSize, propBox, decorBox } from './world.js';
+import { damageProp, damageDecor } from './furniture-damage.js';
+import { furnitureClass, durability } from './furniture.js';
 import { hitGuard } from './npc-body.js';
 import { roomLights } from './lighting.js';
 export const MAGAZINE = 30;
@@ -22,6 +24,8 @@ export function finishReload(state) {
 }
 function traceShot(state, map, rules, origin, direction, damage, wallPower, penetration) {
   const doorPower = wallPower;
+  // Shotguns break furniture quicker than rifles and pistols; the multipliers are in furniture.js.
+  const source = state.inventory.equipped === 'shotgun' ? 'shotgun' : 'bullet';
   const hits = [];
   function consider(center, size, kind, object, zone) {
     const d = rayBox(origin, direction, center, size, 80);
@@ -31,7 +35,9 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
   for (const piece of state.wallPieces) if (piece.hp > 0) consider(piece.center, piece.size, 'wall', piece);
   map.doors.forEach((door, i) => { if (!state.doors[i]) consider(doorCenter(door), doorSize(door), 'door', i); });
   (map.windows ?? []).forEach((window, i) => { if (state.windowHealth[i] > 0) consider(windowCenter(window), windowSize(window), 'glass', i); });
-  for (const prop of map.props) consider([prop.position[0], elevation(prop) + propHeight(prop) / 2, prop.position[1]], [prop.size[0], propHeight(prop), prop.size[1]], 'prop', prop);
+  // Every intact piece takes damage from a shot that reaches it; soft pieces then let it through.
+  map.props.forEach((prop, index) => { const box = propBox(state, map, index); if (box) consider(box.center, box.size, 'prop', index); });
+  (map.decor ?? []).forEach((_, index) => { const box = decorBox(state, map, index); if (box) consider(box.center, box.size, 'decor', index); });
   for (const guard of state.guards) if (guard.health > 0) {
     const hit = hitGuard(guard, origin, direction);
     if (hit) hits.push({ ...hit, kind: 'guard', object: guard });
@@ -42,6 +48,15 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
   const hitGuards = new Set(), drywallImpacts = new Set();
   const impacts = [];
   for (const hit of hits) {
+    if (hit.kind === 'decor') {
+      // Drawn-only TVs, mirrors and rugs take damage but never stop a shot.
+      if (rules.destructibleFurniture !== false) damageDecor(state, map, rules, hit.object, source, damage, origin.map((v, i) => v + direction[i] * hit.distance));
+      continue;
+    }
+    if (hit.kind === 'prop' && !durability.classes[furnitureClass(map.props[hit.object])].stopsBullets) {
+      damageProp(state, map, rules, hit.object, source, damage, origin.map((v, i) => v + direction[i] * hit.distance));
+      continue;
+    }
     if (hit.distance > 80 || hit.kind === 'wall' && hit.object.hp <= 0 || hit.kind === 'door' && state.doors[hit.object] || hit.kind === 'guard' && (hit.object.health <= 0 || hitGuards.has(hit.object))) continue;
     if (hit.kind === 'wall' && hit.object.material === 'drywall') {
       const key = `${hit.object.wall}:${Math.round(hit.distance * 1e7)}`;
@@ -52,6 +67,10 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
     const position = origin.map((v, i) => v + direction[i] * hit.distance);
     impacts.push({ position, material: hit.kind === 'door' ? 'timber' : hit.object?.material, kind: hit.kind, zone: hit.zone, wall: hit.kind === 'wall' ? hit.object.wall : null, damage, penetration });
     let resistance = Infinity;
+    if (hit.kind === 'prop') {
+      damageProp(state, map, rules, hit.object, source, damage, position);
+      resistance = durability.classes[furnitureClass(map.props[hit.object])].bulletCost ?? Infinity;
+    }
     if (hit.kind === 'wall' && rules.destructibleWalls) {
       removed.push(...damageWall(state.wallPieces, hit.object, wallPower, ['pistol', 'rifle', 'sniper'].includes(state.inventory.equipped) ? 'precise' : 'impact'));
       resistance = penetrationCosts[hit.object.material] ?? Infinity;

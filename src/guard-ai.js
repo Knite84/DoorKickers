@@ -1,6 +1,6 @@
 import { segmentClear, sendGuardReport } from './combat.js';
 import { isArmed } from './kit.js';
-import { elevation, playerEye, doorCenter, doorSize, windowCenter, windowSize, stairHeight, supportHeight } from './world.js';
+import { elevation, playerEye, doorCenter, doorSize, windowCenter, windowSize, stairHeight, supportHeight, activeProps, propBroken } from './world.js';
 import { rayBox } from './destruction.js';
 import { findGuardPath, navigationFor } from './navigation.js';
 import { guardDisabled, guardSpeed, guardShotInterval, guardEye } from './npc-body.js';
@@ -24,6 +24,10 @@ function evidence(state, map) {
   });
   map.doors.forEach((door, index) => {
     if (state.doorHealth[index] < state.doorMaxHealth[index]) result.push({ id: `door:${index}`, kind: 'damage', center: doorCenter(door), size: doorSize(door), elevation: elevation(door), label: 'door' });
+  });
+  // Smashed furniture is evidence too, like a broken window.
+  map.props.forEach((prop, index) => {
+    if (propBroken(state, index)) result.push({ id: `furniture:${index}`, kind: 'damage', center: [prop.position[0], elevation(prop) + 0.45, prop.position[1]], size: [prop.size[0], 0.9, prop.size[1]], elevation: elevation(prop), label: 'furniture' });
   });
   (map.windows ?? []).forEach((window, index) => {
     if (state.windowHealth[index] <= 0) result.push({ id: `window:${index}`, kind: 'damage', center: windowCenter(window), size: windowSize(window), elevation: elevation(window), label: 'window' });
@@ -64,7 +68,7 @@ function walk(guard, target, speed, state, map, delta, movePlayer) {
     if (!state.doors[index] && Math.abs(elevation(door) - elevation(guard)) < 0.55 && gap(guard.position, door.position) < 1.25) { state.lockedDoors[index] = false; state.doors[index] = true; }
   });
   const before = guard.position;
-  guard.position = movePlayer(guard.position, [dx / (length || 1) * travel, dz / (length || 1) * travel], map, state.doors, false, state.wallPieces, { elevation: elevation(guard), height: 1.8, windows: state.windowHealth });
+  guard.position = movePlayer(guard.position, [dx / (length || 1) * travel, dz / (length || 1) * travel], map, state.doors, false, state.wallPieces, { elevation: elevation(guard), height: 1.8, windows: state.windowHealth, props: activeProps(state, map) });
   guard.stride = (guard.stride ?? 0) + gap(before, guard.position) * 7;
   const stair = stairHeight(map, guard.position);
   guard.elevation = stair !== null && Math.abs(stair - elevation(guard)) < 0.5 ? stair : supportHeight(state, map, guard.position, elevation(guard));

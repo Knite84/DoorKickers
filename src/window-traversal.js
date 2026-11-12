@@ -1,12 +1,12 @@
 import { rayBox } from './destruction.js';
 import { segmentClear } from './combat.js';
-import { elevation, bodyHeight, playerEye, doorCenter, doorSize, windowCenter, windowSize, supportHeight, propHeight } from './world.js';
+import { elevation, bodyHeight, playerEye, doorCenter, doorSize, windowCenter, windowSize, supportHeight, propHeight, activeProps } from './world.js';
 
 const radius=.28;
 function boxes(state,map){
   return [
     ...state.wallPieces.filter(p=>p.hp>0&&!p.stair).map(p=>({center:p.center,size:p.size})),
-    ...map.props.map(p=>({center:[p.position[0],elevation(p)+propHeight(p)/2,p.position[1]],size:[p.size[0],propHeight(p),p.size[1]]})),
+    ...activeProps(state,map).map(p=>({center:[p.position[0],elevation(p)+propHeight(p)/2,p.position[1]],size:[p.size[0],propHeight(p),p.size[1]]})),
     ...map.doors.flatMap((d,i)=>state.doors[i]?[]:[{center:doorCenter(d),size:doorSize(d)}]),
     ...(map.windows??[]).flatMap((w,i)=>state.windowHealth[i]>0?[{center:windowCenter(w),size:windowSize(w)}]:[]),
   ];

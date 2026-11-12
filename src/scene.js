@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { distance, lineOfSight, obstacles } from './simulation.js';
 import { buildWallPieces } from './destruction.js';
 import { weapons, items } from './kit.js';
-import { elevation, eyeHeight, playerEye, doorCenter, doorSize, windowCenter, windowSize } from './world.js';
+import { elevation, eyeHeight, playerEye, doorCenter, doorSize, windowCenter, windowSize, activeProps } from './world.js';
 import { sightHalfAngle, sightRangeFactor } from './guard-traits.js';
 import { segmentClear } from './combat.js';
 import { createGuardVisual } from './npc-visual.js';
@@ -11,7 +11,8 @@ import { coverClear } from './guard-tactics.js';
 import { createSceneLighting } from './scene-lighting.js';
 import { lightingProfile } from './lighting.js';
 import { piecesInArea } from './spatial.js';
-import { isFurniture } from './furniture.js';
+import { isFurniture, furnitureClass } from './furniture.js';
+import { propBroken, decorBroken } from './world.js';
 import { batchFurnitureMeshes, createFurnitureMaterials, furnitureMeshes } from './furniture-mesh.js';
 import { createSurfaceShading } from './surface-materials.js';
 import { exposureRange, graphicsPresets } from './graphics.js';
@@ -256,9 +257,9 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }
   }
   function eventEffect(event) {
-    if (event.type === 'door-break' || event.type === 'glass-break') {
+    if (event.type === 'door-break' || event.type === 'glass-break' || event.type === 'furniture-break') {
       for (let i = 0; i < 18; i++) {
-        const chip = new THREE.Mesh(chipGeometry, material(event.type === 'glass-break' ? 0x9edce7 : 0xa57946)); chip.position.set(...event.position);
+        const chip = new THREE.Mesh(chipGeometry, material(event.type === 'glass-break' ? 0x9edce7 : event.type === 'furniture-break' ? 0x7a5636 : 0xa57946)); chip.position.set(...event.position);
         chip.scale.set(2, 1 + Math.random() * 6, 2); scene.add(chip);
         effects.push({ mesh: chip, life: 1.2 + Math.random(), velocity: new THREE.Vector3((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4) });
       }
@@ -274,14 +275,14 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   }
   const propMeshes = [], glass = lighting.decorate(new THREE.MeshStandardMaterial({ color: 0xbfe3ea, roughness: 0.1, transparent: true, opacity: 0.28, depthWrite: false }));
   // Kit furniture (src/furniture.js); map.decor is drawn only and never collides.
-  const furnished = [...map.props, ...(map.decor ?? [])];
+  const furnished = [...map.props.map((prop, index) => ({ prop, owner: { kind: 'prop', index } })), ...(map.decor ?? []).map((prop, index) => ({ prop, owner: { kind: 'decor', index } }))];
   const furnitureParts = [];
   const fixtureMeshes = new Map();
-  for (const prop of furnished) {
+  for (const { prop, owner } of furnished) {
     if (!isFurniture(prop)) continue;
     const meshes = furnitureMeshes(prop, furnitureMaterial, glass);
     meshes.forEach(mesh => {
-      furnitureParts.push({ prop, mesh });
+      furnitureParts.push({ prop, mesh, owner });
       if (mesh.userData.fixture) fixtureMeshes.set(mesh.position.toArray().join(','), mesh);
     });
   }
@@ -310,6 +311,45 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }
     if (prop.kind === 'table') box([x, base + 0.95, z], [prop.size[0] + 0.15, 0.12, prop.size[1] + 0.15], 0xb6a582);
     propMeshes[index] = scene.children.slice(firstMesh);
+  }
+  // Broken furniture (POLISH_PLAN 6.5): hidden inside its batch, and a low pile drawn in its place.
+  // Damage darkens a piece; decor (TVs, mirrors, rugs) has no pile, it just disappears.
+  const debrisPiles = new Map(), furnitureSeen = { state: null, stamp: -1 };
+  const pileColors = { soft: 0x756f62, wood: 0x6a4a30, heavy: 0x575b5d, fixture: 0xcfd1cf };
+  const zeroMatrix = new THREE.Matrix4().makeScale(0, 0, 0), tintColor = new THREE.Color();
+  function debrisPile(prop, index) {
+    const pile = new THREE.Group(), [w, d] = prop.size, base = elevation(prop), color = pileColors[furnitureClass(prop)] ?? 0x666666;
+    // A scatter of shards, deterministic per piece, peaking near 0.9 m in the middle.
+    for (let i = 0; i < 7; i++) {
+      const u = Math.sin(index * 12.9898 + i * 78.233) * 43758.5453, r = u - Math.floor(u), v = (Math.sin(index * 4.1 + i * 9.7) * 9973) % 1;
+      const px = (r - 0.5) * w * 0.8, pz = (Math.abs(v) - 0.5) * d * 0.8, height = 0.25 + 0.65 * (1 - Math.min(1, Math.hypot(px / (w / 2), pz / (d / 2))));
+      const shard = new THREE.Mesh(unitBox, material(i % 3 === 0 ? color + 0x101010 : color, 1));
+      shard.scale.set(Math.max(0.12, w * (0.22 + 0.12 * Math.abs(v))), height, Math.max(0.12, d * (0.25 + 0.1 * r)));
+      shard.position.set(prop.position[0] + px, base + height / 2, prop.position[1] + pz);
+      shard.rotation.y = r * 3;
+      shard.castShadow = true; shard.receiveShadow = true;
+      pile.add(shard);
+    }
+    pile.visible = false; scene.add(pile); debrisPiles.set(index, pile);
+  }
+  function syncFurniture(state) {
+    if (furnitureSeen.state === state && furnitureSeen.stamp === state.propStamp) return;
+    furnitureSeen.state = state; furnitureSeen.stamp = state.propStamp;
+    const health = owner => owner.kind === 'prop' ? [state.propHealth?.[owner.index], state.propMaxHealth?.[owner.index]] : [state.decorHealth?.[owner.index], state.decorMaxHealth?.[owner.index]];
+    for (const { mesh } of furnitureRender) {
+      if (mesh.isInstancedMesh) {
+        const { owners, matrices, state: shown } = mesh.userData;
+        let moved = false, tinted = false;
+        owners.forEach((owner, instance) => {
+          const [now, max] = health(owner), alive = !(now <= 0), tint = alive && Number.isFinite(max) ? 1 - 0.5 * (1 - now / max) : 1;
+          if (shown[instance].shown !== Number(alive)) { mesh.setMatrixAt(instance, alive ? matrices[instance] : zeroMatrix); shown[instance].shown = Number(alive); moved = true; }
+          if (Math.abs(shown[instance].tint - tint) > 0.04) { mesh.setColorAt(instance, tintColor.setScalar(tint)); shown[instance].tint = tint; tinted = true; }
+        });
+        if (moved) mesh.instanceMatrix.needsUpdate = true;
+        if (tinted && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      } else if (mesh.userData.owner) mesh.userData.broken = health(mesh.userData.owner)[0] <= 0;
+    }
+    map.props.forEach((prop, index) => { if (propBroken(state, index) && !debrisPiles.has(index) && isFurniture(prop)) debrisPile(prop, index); });
   }
   const gridWidth = Math.max(map.bounds.maxX - map.bounds.minX, map.bounds.maxZ - map.bounds.minZ);
   const grid = new THREE.GridHelper(gridWidth, gridWidth, 0x9eb5a2, 0x758b7a);
@@ -504,7 +544,9 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }
     windowMeshes.forEach((mesh, i) => { mesh.visible = state.windowHealth[i] > 0 && onLevel(map.windows[i]); windowFrames[i].forEach(frame => { frame.visible = onLevel(map.windows[i]); }); });
     propMeshes.forEach((meshes, i) => meshes.forEach(mesh => { mesh.visible = onLevel(map.props[i]) && !(overview && mesh.userData.overhead); }));
-    furnitureRender.forEach(({ prop, mesh }) => { mesh.visible = onLevel(prop) && !(overview && mesh.userData.overhead); });
+    syncFurniture(state);
+    furnitureRender.forEach(({ prop, mesh }) => { mesh.visible = onLevel(prop) && !(overview && mesh.userData.overhead) && !mesh.userData.broken; });
+    for (const [index, pile] of debrisPiles) pile.visible = propBroken(state, index) && onLevel(map.props[index]);
     syncDynamic(state);
     const exposed=playerEye(state);
     player.position.set(state.player[0], state.playerY ?? 0, state.player[1]); player.scale.y = state.playerCover&&!state.playerCover.peeking ? 0.51 : state.crouched&&!state.playerCover ? 0.65 : 1;
@@ -546,7 +588,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
       guards[i].userData.update(guard);
       if (!cones[i].visible) continue;
       const reach = rules.sightRange * sightRangeFactor(guard) + 0.5;
-      const boxes = obstacles(map, state.doors, piecesInArea(state.wallPieces, guard.position[0] - reach, guard.position[0] + reach, guard.position[1] - reach, guard.position[1] + reach), false, elevation(guard));
+      const boxes = obstacles(map, state.doors, piecesInArea(state.wallPieces, guard.position[0] - reach, guard.position[0] + reach, guard.position[1] - reach, guard.position[1] + reach), false, elevation(guard), 1.8, [], activeProps(state, map));
       cones[i].material.color.setHex(guard.stunnedUntil > state.elapsed ? 0xc7d8ec : ({ retreat: 0xf2ae63, cover: 0xf2ae63, peek: 0xff8067, detain: 0xffd278, gather: 0x77cced, pursue: 0xff8067, investigate: 0xd6a0e8, search: 0xd6a0e8 })[guard.mode] ?? (guard.suspicion > 0.2 ? 0xff8067 : 0xeac777));
       const range = rules.sightRange * (rules.weather === 'fog' ? 0.6 : rules.weather === 'rain' ? 0.85 : 1) * sightRangeFactor(guard), half = sightHalfAngle(guard);
       const points = [];

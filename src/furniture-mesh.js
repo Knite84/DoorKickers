@@ -116,7 +116,11 @@ export function furnitureMeshes(prop, material, glass) {
 export function batchFurnitureMeshes(entries) {
   const groups = new Map();
   const visible = [];
-  for (const { prop, mesh } of entries) {
+  // Each entry may carry `owner` ({ kind, index }): the map piece it belongs to. A batch
+  // keeps one owner and original matrix per instance, so the scene can hide a broken
+  // piece or darken a damaged one without splitting the batch (Rendering convention 3).
+  for (const { prop, mesh, owner } of entries) {
+    mesh.userData.owner = owner;
     if (mesh.material.transparent || mesh.userData.fixture) {
       visible.push({ prop, mesh });
       continue;
@@ -135,9 +139,14 @@ export function batchFurnitureMeshes(entries) {
     batch.castShadow = mesh.castShadow;
     batch.receiveShadow = true;
     batch.userData.overhead = mesh.userData.overhead;
+    batch.userData.owners = group.map(({ mesh: part }) => part.userData.owner);
+    batch.userData.matrices = [];
+    batch.userData.state = group.map(() => ({ shown: 1, tint: 1 }));
     group.forEach(({ mesh: part }, index) => {
       part.updateMatrix();
       batch.setMatrixAt(index, part.matrix);
+      batch.userData.matrices.push(part.matrix.clone());
+      batch.setColorAt(index, new THREE.Color(1, 1, 1));
     });
     batch.instanceMatrix.needsUpdate = true;
     visible.push({ prop, mesh: batch });

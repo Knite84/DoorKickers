@@ -1,5 +1,5 @@
 import { segmentClear, damagePlayer } from './combat.js';
-import { elevation, playerEye, doorCenter, doorSize, propHeight } from './world.js';
+import { elevation, playerEye, doorCenter, doorSize, propBox } from './world.js';
 import { navigationFor, findGuardPath } from './navigation.js';
 import { rayBox } from './destruction.js';
 import { guardEye, guardWeaponPose, rayCapsule } from './npc-body.js';
@@ -11,9 +11,11 @@ export function coverClear(state,map,a,b,concealment = true) {
   if (!segmentClear(state,map,a,b,-1,{glass:false})) return false;
   const length = Math.hypot(...b.map((v,i)=>v-a[i]));
   const direction = b.map((v,i)=>(v-a[i])/(length||1));
-  return !map.props.some(prop => {
-    const height = concealment && prop.kind === 'planter' ? 2.1 : propHeight(prop);
-    return rayBox(a,direction,[prop.position[0],elevation(prop)+height/2,prop.position[1]],[prop.size[0],height,prop.size[1]],length-0.02)!==null;
+  // Concealment (sight) counts soft pieces and low debris; bullets (concealment off) only what stops a shot.
+  return !map.props.some((prop,index) => {
+    if (concealment && prop.kind === 'planter') return rayBox(a,direction,[prop.position[0],elevation(prop)+1.05,prop.position[1]],[prop.size[0],2.1,prop.size[1]],length-0.02)!==null;
+    const box=propBox(state,map,index,concealment?'sight':'bullet');
+    return box!==null&&rayBox(a,direction,box.center,box.size,length-0.02)!==null;
   });
 }
 // On a fine walking grid, consider every few cells so searches stay cheap.
@@ -137,7 +139,7 @@ export function fireGuardShot(state,map,rules,guard) {
   const block=(center,size)=> { const hit=rayBox(origin,direction,center,size,stop); if(hit!==null) stop=Math.min(stop,hit); };
   for (const piece of state.wallPieces) if(piece.hp>0) block(piece.center,piece.size);
   map.doors.forEach((door,i)=> { if(!state.doors[i]) block(doorCenter(door),doorSize(door)); });
-  for (const prop of map.props) block([prop.position[0],elevation(prop)+propHeight(prop)/2,prop.position[1]],[prop.size[0],propHeight(prop),prop.size[1]]);
+  map.props.forEach((_,index)=> { const box=propBox(state,map,index,'bullet'); if(box) block(box.center,box.size); });
   const exposed=playerEye(state);
   const hit=rayCapsule(origin,direction,[state.player[0],(state.playerY??0)+0.3,state.player[1]],[exposed[0],exposed[1]-0.05,exposed[2]],0.28,stop);
   if(hit!==null) { stop=hit; damagePlayer(state,rules,rules.guardDamage,[origin[0],origin[2]]); }

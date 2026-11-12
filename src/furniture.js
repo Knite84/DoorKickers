@@ -577,3 +577,92 @@ export function furnitureBoxes(prop) {
     return out;
   });
 }
+
+// ---------------------------------------------------------------------------
+// Durability tuning (POLISH_PLAN step 6.5). Every number that decides how
+// furniture breaks lives in this one table, so it can be tuned from here.
+//
+// A piece belongs to a class. Its health is the class health, scaled by the
+// size of its footprint, then by the "Furniture durability" rule. Each damage
+// source is scaled by `sources`, then by the class's own multiplier (1 if
+// absent). To change how fast something breaks, edit those numbers.
+//
+// Slowest-last order the owner asked for: blast, fire, shotgun, rifle and
+// pistol, then axe and crowbar. The per-source figures below give that order
+// for a typical wooden piece (test/furniture-damage.test.js checks it).
+// ---------------------------------------------------------------------------
+export const durability = {
+  // class of each kit kind (a variant may set its own `class`). A kind that is
+  // missing here, such as the legacy table, crate and planter, never breaks.
+  kinds: {
+    bed: 'soft', sofa: 'soft', armchair: 'soft', bench: 'soft', rug: 'soft', yogaMat: 'soft',
+    nightstand: 'wood', dresser: 'wood', desk: 'wood', chair: 'wood', bookcase: 'wood', coffeeTable: 'wood', endTable: 'wood',
+    plantStand: 'wood', mediaConsole: 'wood', diningTable: 'wood', barStool: 'wood', linenCabinet: 'wood', closetRun: 'wood',
+    cubbyTower: 'wood', toyChest: 'wood', storageShelf: 'wood', totes: 'wood', ceilingFan: 'wood',
+    vanity: 'fixture', toilet: 'fixture', tubShower: 'fixture', soakingTub: 'fixture', shower: 'fixture',
+    laundryMachine: 'heavy', furnace: 'heavy', waterHeater: 'heavy', fireplace: 'heavy',
+    wallTV: 'glass', mirror: 'glass',
+    island: 'unbreakable', cabinets: 'unbreakable', barCounter: 'unbreakable', fridge: 'unbreakable', arch: 'unbreakable',
+  },
+  // health at the reference footprint, and whether an intact piece stops
+  // bullets. Soft pieces never do: they hide you but are not cover.
+  // `bulletCost` is the penetration a bullet spends getting through (Infinity
+  // stops it, as every prop did before this step).
+  classes: {
+    soft: { health: 100, stopsBullets: false },
+    wood: { health: 150, stopsBullets: true, bulletCost: Infinity },
+    heavy: { health: 400, stopsBullets: true, bulletCost: Infinity },
+    fixture: { health: 250, stopsBullets: true, bulletCost: Infinity },
+    glass: { health: 30, stopsBullets: false },
+    unbreakable: { health: Infinity, stopsBullets: true, bulletCost: Infinity },
+  },
+  // health grows with footprint area (m²) relative to the reference, within limits
+  size: { reference: 0.8, min: 0.4, max: 4 },
+  // damage into a piece's health = (raw amount from the source) × sources[source] × classMultiplier[class][source]
+  sources: { blast: 1, fire: 3, shotgun: 0.5, bullet: 0.06, melee: 0.03 },
+  classMultiplier: {
+    glass: { blast: 2, fire: 2, shotgun: 4, bullet: 8, melee: 20 },
+    heavy: { blast: 0.8 },
+  },
+  // raw amounts the sources do not already carry: fire is per second; swings are per hit
+  raw: { fire: 35, axe: 70, crowbar: 35, strike: 10 },
+  // height of the low debris left behind, in metres
+  debrisHeight: 0.9,
+};
+
+export function furnitureClass(prop) {
+  if (!isFurniture(prop)) return 'unbreakable';
+  const variant = variantOf(prop)[1];
+  return variant.class ?? durability.kinds[prop.kind] ?? 'unbreakable';
+}
+export const isBreakable = prop => furnitureClass(prop) !== 'unbreakable';
+
+// Starting health of a piece. `scale` is the "Furniture durability" rule as a fraction.
+export function furnitureHealth(prop, scale = 1) {
+  const kind = furnitureClass(prop);
+  if (kind === 'unbreakable') return Infinity;
+  const { reference, min, max } = durability.size;
+  const area = Math.max(0.01, (prop.size?.[0] ?? 1) * (prop.size?.[1] ?? 1));
+  return Math.round(durability.classes[kind].health * Math.min(max, Math.max(min, area / reference)) * scale);
+}
+
+// Health taken by one source. Sources: blast, fire, shotgun, bullet, melee.
+export function furnitureDamage(prop, source, raw) {
+  const kind = furnitureClass(prop);
+  return raw * (durability.sources[source] ?? 1) * (durability.classMultiplier[kind]?.[source] ?? 1);
+}
+
+// Bounding box of everything a kit piece draws, for hit tests on drawn-only decor.
+const boundsCache = new WeakMap();
+export function furnitureBounds(prop) {
+  let bounds = boundsCache.get(prop);
+  if (bounds) return bounds;
+  const low = [Infinity, Infinity, Infinity], high = [-Infinity, -Infinity, -Infinity];
+  for (const part of furnitureBoxes(prop)) for (let axis = 0; axis < 3; axis++) {
+    low[axis] = Math.min(low[axis], part.center[axis] - part.size[axis] / 2);
+    high[axis] = Math.max(high[axis], part.center[axis] + part.size[axis] / 2);
+  }
+  bounds = { center: low.map((v, axis) => (v + high[axis]) / 2), size: low.map((v, axis) => Math.max(0.02, high[axis] - v)) };
+  boundsCache.set(prop, bounds);
+  return bounds;
+}

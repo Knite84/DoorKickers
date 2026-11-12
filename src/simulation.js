@@ -4,7 +4,8 @@ import { finishReload } from './weapons.js';
 import { segmentClear } from './combat.js';
 import { stepEquipment } from './equipment.js';
 import { DEFAULT_DOOR_HEALTH } from './doors.js';
-import { elevation, bodyHeight, eyeHeight, playerEye, stairHeight, supportHeight, propHeight } from './world.js';
+import { elevation, bodyHeight, eyeHeight, playerEye, stairHeight, supportHeight, propHeight, activeProps } from './world.js';
+import { furnitureState } from './furniture-damage.js';
 import { stepPlayerCover, leavePlayerCover } from './player-cover.js';
 import { darknessSightFactor, roomLights } from './lighting.js';
 import { nearbyInteraction, climbWindow } from './window-traversal.js';
@@ -31,10 +32,11 @@ export function intersectsBox(a, b, box, padding = 0) {
   }
   return true;
 }
-export function obstacles(map, doors, pieces, movement = false, baseY = 0, height = 1.8, windowHealth = []) {
+// `props` defaults to every prop; pass activeProps(state, map) so broken furniture stops blocking.
+export function obstacles(map, doors, pieces, movement = false, baseY = 0, height = 1.8, windowHealth = [], props = map.props) {
   const overlaps = (bottom, top) => movement ? bottom < baseY + height && top > baseY + 0.12 : bottom <= baseY + 1.5 && top >= baseY + 1.5;
   const walls = pieces ? pieces.filter(p => p.hp > 0 && !(movement && p.stair) && overlaps(p.center[1] - p.size[1] / 2, p.center[1] + p.size[1] / 2)).map(p => ({ center: [p.center[0], p.center[2]], size: [p.size[0], p.size[2]] })) : map.walls.filter(w => overlaps(elevation(w), elevation(w) + (w.height ?? 2.8)));
-  return [...walls, ...map.props.filter(p => overlaps(elevation(p), elevation(p) + propHeight(p))).map(p => ({ center: p.position, size: p.size, prop: true })), ...map.doors.filter((d, i) => !doors[i] && overlaps(elevation(d), elevation(d) + 2.8)).map(d => ({ center: d.position, size: d.size })), ...(movement ? (map.windows ?? []).filter((w, i) => windowHealth[i] > 0 && overlaps(elevation(w) + (w.sill??.8), elevation(w) + (w.sill??.8) + (w.height??1.5))).map(w => ({ center: w.position, size: w.size })) : [])];
+  return [...walls, ...props.filter(p => overlaps(elevation(p), elevation(p) + propHeight(p))).map(p => ({ center: p.position, size: p.size, prop: true })), ...map.doors.filter((d, i) => !doors[i] && overlaps(elevation(d), elevation(d) + 2.8)).map(d => ({ center: d.position, size: d.size })), ...(movement ? (map.windows ?? []).filter((w, i) => windowHealth[i] > 0 && overlaps(elevation(w) + (w.sill??.8), elevation(w) + (w.sill??.8) + (w.height??1.5))).map(w => ({ center: w.position, size: w.size })) : [])];
 }
 export function lineOfSight(a, b, boxes) {
   return !boxes.some(box => intersectsBox(a, b, box));
@@ -54,7 +56,7 @@ export function movePlayer(position, delta, map, doors, ghost = false, pieces, o
     // The stair ramp owns foot support inside its opening; the rounded player
     // must not catch on the adjacent landing's panel or truss edges.
     const collisionPieces = stair !== null && Math.abs(stair - baseY) < 0.5 ? pieces?.filter(p => !p.floor) : pieces;
-    const boxes = ghost ? [] : obstacles(map, doors, collisionPieces, true, nextY, options.height ?? 1.8, options.windows);
+    const boxes = ghost ? [] : obstacles(map, doors, collisionPieces, true, nextY, options.height ?? 1.8, options.windows, options.props);
     if (!boxes.some(box => {
       if (!intersectsBox(next, candidate, box, 0.28)) return false;
       if (box.prop && intersectsBox(next, next, box, 0.28)) {
@@ -92,7 +94,7 @@ export function createMission(map, rules, loadout) {
     missionSeed,
     timeOfDay: rules.timeOfDay??'day', powerOn: true, destroyedLights: roomLights(map).map(() => false),
     player: [...(entry?.position ?? map.spawn)], playerY: elevation(entry), velocityY: 0, crouched: false, gait: 'walk', spawnYaw: entry?.yaw ?? 0, doors: map.doors.map(() => false), lockedDoors: map.doors.map(d => !!d.locked), windowHealth: (map.windows ?? []).map(() => 1), wallPieces: buildWallPieces(map),
-    doorHealth: [...doorMaxHealth], doorMaxHealth,
+    doorHealth: [...doorMaxHealth], doorMaxHealth, ...furnitureState(map, rules),
     inventory, ammo: inventory.magazines[inventory.equipped], reloadUntil: 0, nextShot: 0, shots: 0, kills: 0,
     health: 100, hurtUntil: 0, flashUntil: 0, nextUse: 0, projectiles: [], devices: [], fires: [], events: [], facing: [0, -1], guardReports: [], lastGuardReport: '', guardReportUntil: 0, detainingGuardId: null,
     guards,
@@ -108,7 +110,7 @@ export function movementGait(state, input) {
 export function toggleCrouch(state, map) {
   if(state.playerCover) leavePlayerCover(state,map);
   if (state.crouched) {
-    const boxes = obstacles(map, state.doors, state.wallPieces, true, (state.playerY ?? 0) + 1.1, 0.7, state.windowHealth);
+    const boxes = obstacles(map, state.doors, state.wallPieces, true, (state.playerY ?? 0) + 1.1, 0.7, state.windowHealth, activeProps(state, map));
     if (boxes.some(box => intersectsBox(state.player, state.player, box, 0.25))) return 'Not enough clearance to stand.';
   }
   state.crouched = !state.crouched;
@@ -124,7 +126,7 @@ export function jump(state, map) {
 }
 function playerSupport(state, map, fromY) {
   let floor = supportHeight(state, map, state.player, fromY);
-  for (const prop of map.props) {
+  for (const prop of activeProps(state, map)) {
     const top = elevation(prop) + propHeight(prop);
     if (top <= fromY + 0.12 && top > floor && intersectsBox(state.player, state.player, { center: prop.position, size: prop.size })) floor = top;
   }
@@ -138,7 +140,7 @@ export function stepMission(state, map, rules, delta, input) {
   const gait = movementGait(state, input), slow = gait === 'creep' || gait === 'crouch'; state.gait = gait;
   const speed = rules.playerSpeed * (slow ? rules.creepMultiplier : gait === 'run' ? rules.runMultiplier : 1);
   const length = Math.hypot(input.x, input.z) || 1;
-  state.player = movePlayer(state.player, [input.x / length * speed * delta, input.z / length * speed * delta], map, state.doors, rules.ghost, state.wallPieces, { elevation: state.playerY, height: bodyHeight(state), windows: state.windowHealth });
+  state.player = movePlayer(state.player, [input.x / length * speed * delta, input.z / length * speed * delta], map, state.doors, rules.ghost, state.wallPieces, { elevation: state.playerY, height: bodyHeight(state), windows: state.windowHealth, props: activeProps(state, map) });
   const stair = stairHeight(map, state.player);
   if (state.velocityY <= 0 && stair !== null && Math.abs(stair - state.playerY) < 0.5) { state.playerY = stair; state.velocityY = 0; }
   else {

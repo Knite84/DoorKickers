@@ -1,15 +1,20 @@
 import { rayBox } from './destruction.js';
 import { damageCount } from './spatial.js';
-import { elevation, doorCenter, doorSize, windowCenter, windowSize, playerEye, supportHeight, propHeight } from './world.js';
+import { elevation, doorCenter, doorSize, windowCenter, windowSize, playerEye, supportHeight, propBox } from './world.js';
+import { furnitureClass, durability } from './furniture.js';
+
+// Concealment hides you but does not stop bullets: planter foliage, soft furniture, and debris.
+const concealing=(map,box)=>box.kind==='prop'&&(box.passable||map.props[box.id].kind==='planter'||!durability.classes[furnitureClass(map.props[box.id])].stopsBullets);
 
 const colliderCache=new WeakMap();
 function solids(state,map) {
-  const signature=damageCount(state)+':'+state.doors.join(',')+':'+state.windowHealth.join(',')+':'+map.props.length;
+  const signature=damageCount(state)+':'+state.doors.join(',')+':'+state.windowHealth.join(',')+':'+map.props.length+':'+(state.propBroken??0);
   let cached=colliderCache.get(state);
   if(!cached||cached.signature!==signature||cached.map!==map){
   const boxes=[
     ...state.wallPieces.filter(p=>p.hp>0&&!p.stair).map(p=>({center:p.center,size:p.size,kind:'wall',id:p.wall,floor:p.floor})),
-    ...map.props.map((p,id)=>({center:[p.position[0],elevation(p)+propHeight(p)/2,p.position[1]],size:[p.size[0],propHeight(p),p.size[1]],kind:'prop',id})),
+    // Broken furniture stays as passable debris: still something to crouch behind, never solid.
+    ...map.props.flatMap((_,id)=>{const box=propBox(state,map,id,'sight');return box?[{center:box.center,size:box.size,kind:'prop',id,passable:!!box.debris}]:[];}),
     ...map.doors.flatMap((d,id)=>state.doors[id]?[]:[{center:doorCenter(d),size:doorSize(d),kind:'door',id}]),
     ...(map.windows??[]).flatMap((w,id)=>state.windowHealth[id]>0?[{center:windowCenter(w),size:windowSize(w),kind:'glass',id}]:[]),
   ];
@@ -24,7 +29,7 @@ const matches=(box,cover)=>box.kind===cover.kind&&box.id===cover.id&&!box.floor;
 function clearHead(a,b,boxes) {
   const length=Math.hypot(...b.map((v,i)=>v-a[i]));
   const direction=b.map((v,i)=>(v-a[i])/(length||1));
-  return !boxes.some(box=>rayBox(a,direction,box.center,box.size.map(v=>v+.4),length+.001)!==null);
+  return !boxes.some(box=>!box.passable&&rayBox(a,direction,box.center,box.size.map(v=>v+.4),length+.001)!==null);
 }
 function withinBounds(position,map) {
   return position[0]>map.bounds.minX+.28&&position[0]<map.bounds.maxX-.28&&position[2]>map.bounds.minZ+.28&&position[2]<map.bounds.maxZ-.28;
@@ -59,7 +64,7 @@ export function togglePlayerCover(state,map) {
   }
   if(!nearest) return 'No nearby cover ahead. Face a wall, crate, table or planter within 1.6 metres, then press Q.';
   if(!clearHead(playerEye(state),origin,boxes)) return 'Not enough room to crouch into cover.';
-  state.playerCover={kind:nearest.kind,id:nearest.id,normal,anchor:[...state.player],elevation:state.playerY??0,peeking:false,offset:[0,0],blocked:false,concealment:nearest.kind==='prop'&&map.props[nearest.id].kind==='planter'};
+  state.playerCover={kind:nearest.kind,id:nearest.id,normal,anchor:[...state.player],elevation:state.playerY??0,peeking:false,offset:[0,0],blocked:false,concealment:concealing(map,nearest)};
   return 'In cover. Hold X to pop out and fire; release X to duck back. Q or WASD leaves cover.';
 }
 export function setPlayerPeek(state,map,held) {
@@ -82,6 +87,8 @@ export function stepPlayerCover(state,map,input) {
   if(!cover) return;
   if(input.x||input.z||Math.abs((state.playerY??0)-cover.elevation)>.25||Math.hypot(...state.player.map((v,i)=>v-cover.anchor[i]))>.2||supportHeight(state,map,state.player,state.playerY)<(state.playerY??0)-.2){leavePlayerCover(state,map);return;}
   const boxes=solids(state,map),eye=[state.player[0],(state.playerY??0)+.85,state.player[1]],direction=[cover.normal[0],0,cover.normal[1]];
-  if(!boxes.some(box=>matches(box,cover)&&rayBox(eye,direction,box.center,box.size,1.6)!==null)){leavePlayerCover(state,map);return;}
+  const held=boxes.find(box=>matches(box,cover)&&rayBox(eye,direction,box.center,box.size,1.6)!==null);
+  if(!held){leavePlayerCover(state,map);return;}
+  cover.concealment=concealing(map,held);
   setPlayerPeek(state,map,!!input.peek);
 }

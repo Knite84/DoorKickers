@@ -105,7 +105,7 @@ These are traps that have already cost time. Follow them on every rendering chan
 | 6.2 | Loose physics: casings, debris, doors, chairs | ☐ |  | Opus |
 | 6.3 | Movement feel | ☐ |  | Sonnet (mantling: Opus) |
 | 6.4 | Sound | ☐ |  | Opus brief, then Sonnet |
-| 6.5 | Destructible furniture | ☐ | Owner answered the design questions on 2026-11-12 (recorded in the step); ready to build. Expect tuning afterwards | Sonnet |
+| 6.5 | Destructible furniture | ◐ | Built 2026-11-12, awaiting owner check and tuning. See the **Built** note in the step. Not seen in play: the real firefight feel, frame time | Sonnet |
 | 7.1 | Interface foundation | ◐ | Not proposed first, by the owner's instruction to build 7.2 to 7.4. Only tokens and a window-relative scale exist (`src/ui.css`); the older `style.css` still carries the map banner and kit menu | Opus to propose |
 | 7.2 | In-mission HUD | ◐ | Owner look at the HUD at several window sizes; damage arrow and window-climb prompt not seen in play; minimal mode and HUD scale not seen | Sonnet |
 | 7.3 | Settings screen | ◐ | Mouse sensitivity, invert and master volume not tried in play; rebound keys not played with (slots 6 to 8 and wheel switching added 2026-11-12, tried in play) | Sonnet |
@@ -594,6 +594,18 @@ The owner asked on 2026-11-12 for furniture that can be destroyed. Today every p
 - The walking grid rebuilds after a break.
 - `map.props` and `map.decor` are unchanged, and a new deployment restores every piece.
 - Furniture must stay identical on the courtyard, long house and lodge unless the owner says otherwise. Their legacy `table`, `crate` and `planter` props are part of other tests.
+
+**Built (2026-11-12), awaiting owner check.**
+- **Tuning:** one table, `durability` at the end of `src/furniture.js`: class of each kind, health per class, damage per source, class multipliers, bullet stopping, debris height. Sandbox rules "Breakable furniture" and "Furniture durability" (25 to 400 %) are in `src/rules.js`.
+- **Logic:** `src/furniture-damage.js` (`damageProp`, `damageDecor`, health in `state.propHealth` / `state.decorHealth`, reset each deployment). Helpers in `src/world.js`: `propBox(state, map, i, use)` with use `solid`, `sight` or `bullet`, and `activeProps(state, map)`. `damageCount` now includes broken props, so the walking grid, cover cache, ragdoll sleep and contact shading refresh by themselves.
+- **Readers switched:** shots and tool strikes, blasts, fire, movement, standing, the walking grid, guard and player cover, guard shots, window landings, ragdolls and contact shading. Guards treat smashed furniture as damage evidence.
+- **Drawing:** a broken piece is hidden inside its instanced batch, damage darkens it, and a low pile stands in its place (`syncFurniture` in `src/scene.js`). Seen on screen in the interior preview: hiding, darkening and piles. Not seen: pieces drawn as single meshes (glass, fixtures, lamps) do not darken, they only vanish.
+- **Choices to confirm:**
+  - Only kit furniture breaks. The legacy `planter`, `table` and `crate` props stay solid on every map, including the Martelli planters outside.
+  - Axe and crowbar now strike furniture in front of them, so a wall behind a table is out of reach until the table breaks.
+  - Current times to break a dresser, from the test: blast instant, fire 1.4 s, shotgun 2.4 s, rifle 5 s, pistol 18 s, axe 46 s, crowbar 64 s. Likely too slow for the axe and crowbar. Tune the `sources` and `raw` numbers.
+  - Soft furniture (sofas, beds, armchairs, benches, rugs, mats) and the player: a guard's shot passes through a sofa you hide behind, and the HUD says CONCEALMENT.
+  - No sound or bullet-hole decals yet (6.1 and 6.4).
 
 **Done when:** almost everything in Martelli breaks in the owner's order of damage sources, debris gives crouch-height concealment, what is drawn always matches what collides, and the tests above pass. Knocking light furniture over (6.2) is separate; this step only breaks it.
 

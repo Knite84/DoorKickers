@@ -18,22 +18,19 @@ Updated 2026-11-12. This is the current state of the project for a fresh session
   - **Door height:** Martelli doors are 2.03 m tall (garage doors 2.13 m) under a breakable wall header, instead of ceiling-high slabs. `doorHeight(door)` in `src/world.js` reads `door.height`; other maps keep 2.8 m doors. As a result, light no longer passes over doors between rooms, and a jump inside a doorway can hit the header.
 - **Controls (2026-11-12):** keys 6, 7 and 8 equip the grenade, flashbang and det cord. The mouse wheel cycles slots 1 to 8 in first person. See the 7.3 note.
 - **Bedroom 3 fix (2026-11-12):** light samples that landed inside walls baked black patches in eleven rooms, and accent paint wrapped round corners. Both are fixed; see `lessons_learned.md`.
-- **New step 6.5, destructible furniture,** is in the plan at the owner's request. The owner has answered its design questions (recorded in the step), so it is ready to build.
-- `npm test`: 264 passing on 2026-11-12, about 6 seconds.
-- Everything above is committed (latest `29e9602`) and pushed by the owner.
+- **Step 6.5, destructible furniture, is built, awaiting owner check** (2026-11-12, not yet committed). All the tuning is in the `durability` table in `src/furniture.js`; see the Built note in the step for the choices to confirm.
+- `npm test`: 274 passing on 2026-11-12, about 3 seconds.
+- Everything up to the 6.5 work is committed (latest `20f64a7`) and pushed by the owner.
 
 ## Good next work for a Sonnet session
 
 Pick one and follow its brief in the plan.
-1. **6.5 Destructible furniture:** build it from the owner's answers in the step.
-   - Start with the tuning table in `src/furniture.js` and the `world.js` helper. Then switch every reader in the step's list over to them.
-   - The owner expects to tune the numbers afterwards, so keep them in one place.
-2. **4.3 leftovers:**
+1. **4.3 leftovers:**
    - an iron fence along the map edge, shrubs, and a driveway edge, all drawn only;
    - open-tread deck stairs, drawn over the existing solid stair blocks, which stay as collision.
    - No owner decision is needed for these; the level strips and the sun direction wait on the owner.
-3. **4.4 Known map gaps:** each item needs owner answers first, so ask before building.
-4. **4.1 passage casings:** propose the small data change that records passages (`gap()` openings), then add casings.
+2. **4.4 Known map gaps:** each item needs owner answers first, so ask before building.
+3. **4.1 passage casings:** propose the small data change that records passages (`gap()` openings), then add casings.
 
 ## Waiting on the owner
 

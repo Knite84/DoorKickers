@@ -2,7 +2,9 @@ import { damageWall, rayBox, removeUnsupportedPieces } from './destruction.js';
 import { items, weapons } from './kit.js';
 import { alertGuards, damageGuard, damagePlayer, segmentClear, shatterWindow } from './combat.js';
 import { damageDoor } from './doors.js';
-import { doorCenter, doorSize, elevation, playerEye, windowCenter, windowSize, propHeight } from './world.js';
+import { doorCenter, doorSize, elevation, playerEye, windowCenter, windowSize, propBox, decorBox } from './world.js';
+import { damageProp, damageDecor } from './furniture-damage.js';
+import { durability } from './furniture.js';
 import { hitGuard, guardPose } from './npc-body.js';
 
 function nearbyHit(state, map, origin, direction, reach, blockProps = false) {
@@ -14,7 +16,10 @@ function nearbyHit(state, map, origin, direction, reach, blockProps = false) {
   for (const piece of state.wallPieces) if (piece.hp > 0) consider(piece.center, piece.size, 'wall', piece);
   map.doors.forEach((door, i) => { if (!state.doors[i]) consider(doorCenter(door), doorSize(door), 'door', i); });
   (map.windows ?? []).forEach((window, i) => { if (state.windowHealth[i] > 0) consider(windowCenter(window), windowSize(window), 'glass', i); });
-  if (blockProps) for (const prop of map.props) consider([prop.position[0], elevation(prop) + propHeight(prop) / 2, prop.position[1]], [prop.size[0], propHeight(prop), prop.size[1]], 'prop', prop);
+  if (blockProps) {
+    map.props.forEach((_, index) => { const box = propBox(state, map, index); if (box) consider(box.center, box.size, 'prop', index); });
+    (map.decor ?? []).forEach((_, index) => { const box = decorBox(state, map, index); if (box) consider(box.center, box.size, 'decor', index); });
+  }
   for (const guard of state.guards) if (guard.health > 0) {
     const bodyHit = hitGuard(guard, origin, direction, closest);
     if (bodyHit && bodyHit.distance < closest) { closest = bodyHit.distance; hit = { ...bodyHit, kind: 'guard', object: guard, position: origin.map((v, i) => v + direction[i] * closest) }; }
@@ -73,6 +78,20 @@ function blast(state, map, rules, position, radius = 3, power = 120, heading, in
     const surface = source.map((v, axis) => v + direction[axis] * Math.max(0, (hitDistance ?? d) - 0.02));
     if (segmentClear(state, map, source, surface, -1, { glass: false })) damageDoor(state, map, index, exposure * power * rules.blastDamage);
   });
+  // Furniture takes the blast unless a wall or door shields it. Pieces do not shield each other.
+  if (rules.destructibleFurniture !== false) {
+    const hurtFurniture = (boxes, hurt) => boxes.forEach((box, index) => {
+      if (!box) return;
+      const d = Math.hypot(...box.center.map((v, axis) => Math.max(0, Math.abs(v - position[axis]) - box.size[axis] / 2)));
+      if (d >= radius) return;
+      const surface = box.center.map((v, axis) => Math.min(v + box.size[axis] / 2, Math.max(v - box.size[axis] / 2, position[axis])));
+      if (!segmentClear(state, map, position, position.map((v, axis) => v + (surface[axis] - v) * 0.98), -1, { glass: false })) return;
+      const exposure = innerRadius > 0 ? Math.max(0, 1 - Math.max(0, d - innerRadius) / (radius - innerRadius)) : Math.max(0.25, 1 - d / radius);
+      hurt(state, map, rules, index, 'blast', exposure * power * rules.blastDamage, surface);
+    });
+    hurtFurniture(map.props.map((_, index) => propBox(state, map, index)), damageProp);
+    hurtFurniture((map.decor ?? []).map((_, index) => decorBox(state, map, index)), damageDecor);
+  }
   (map.windows ?? []).forEach((window, index) => { if (Math.hypot(...windowCenter(window).map((v, axis) => v - position[axis])) < radius) shatterWindow(state, map, index); });
   state.guards.forEach((guard, index) => damageGuard(state, guard, guardExposure[index] * power * rules.blastDamage));
   if (rules.friendlyFire) damagePlayer(state, rules, playerExposure * power * rules.blastDamage);
@@ -107,6 +126,8 @@ export function weaponStrike(state, map, rules, origin, rawDirection) {
   if (hit) {
     if (hit.kind === 'guard') damageGuard(state, hit.object, 25);
     if (hit.kind === 'glass') shatterWindow(state, map, hit.object);
+    if (hit.kind === 'prop') damageProp(state, map, rules, hit.object, 'melee', durability.raw.strike, hit.position);
+    if (hit.kind === 'decor') damageDecor(state, map, rules, hit.object, 'melee', durability.raw.strike, hit.position);
     event(state, 'strike', hit.position);
     alertGuards(state, rules, hit.position, 5);
   }
@@ -143,7 +164,8 @@ export function useEquipment(state, map, rules, origin, rawDirection) {
     return rear ? 'Silent knife takedown. No noise or radio alert; the body can still be discovered.' : guard.health <= 0 ? 'Guard down. The earlier injury call may have alerted backup.' : 'Knife hit. The injured guard can call for backup.';
   }
   if (id === 'axe' || id === 'crowbar' || id === 'detcord') {
-    const hit = nearbyHit(state, map, origin, direction, 2.5);
+    // Axes and crowbars strike furniture; det cord is placed on structure only.
+    const hit = nearbyHit(state, map, origin, direction, 2.5, id !== 'detcord');
     if (!hit) return 'Move closer and aim at a wall, door, window, or guard.';
     if (id === 'detcord') {
       if (hit.kind === 'guard' || hit.kind === 'glass') return 'Place det cord on a wall, floor, or door.';
@@ -160,6 +182,8 @@ export function useEquipment(state, map, rules, origin, rawDirection) {
     if (hit.kind === 'wall' && rules.destructibleWalls) damageWall(state.wallPieces, hit.object, id === 'axe' ? 4 : 1);
     if (hit.kind === 'guard') damageGuard(state, hit.object, id === 'axe' ? 70 : 35);
     if (hit.kind === 'glass') shatterWindow(state, map, hit.object);
+    if (hit.kind === 'prop') damageProp(state, map, rules, hit.object, 'melee', durability.raw[id], hit.position);
+    if (hit.kind === 'decor') damageDecor(state, map, rules, hit.object, 'melee', durability.raw[id], hit.position);
     if (id === 'axe' || hit.kind === 'glass') alertGuards(state, rules, origin, 7);
     event(state, 'strike', hit.position);
     return hit.kind === 'glass' ? `Window shattered with ${item.name.toLowerCase()}.` : hit.kind === 'door' ? 'Door forced open.' : hit.kind === 'wall' && hit.object.blastOnly ? 'Exterior masonry requires explosives.' : `${item.name} strike.`;
@@ -218,6 +242,12 @@ export function stepEquipment(state, map, rules, delta) {
   for (const fire of state.fires) {
     const burning = (target, base = 0) => Math.hypot(target[0] - fire.position[0], target[1] - fire.position[2], base + 0.15 - fire.position[1]) < fire.radius && segmentClear(state, map, [fire.position[0], fire.position[1] + 0.35, fire.position[2]], [target[0], base + 0.5, target[1]]);
     for (const guard of state.guards) if (burning(guard.position, elevation(guard))) damageGuard(state, guard, delta * 35);
+    if (rules.destructibleFurniture !== false) {
+      // Fire burns furniture on its own level, through the room, not only what it can see.
+      const reaches = box => box && Math.abs(box.center[1] - box.size[1] / 2 - fire.position[1]) < 1.6 && Math.hypot(...box.center.map((v, axis) => axis === 1 ? 0 : Math.max(0, Math.abs(v - fire.position[axis]) - box.size[axis] / 2))) < fire.radius;
+      map.props.forEach((_, index) => { if (reaches(propBox(state, map, index))) damageProp(state, map, rules, index, 'fire', delta * durability.raw.fire); });
+      (map.decor ?? []).forEach((_, index) => { if (reaches(decorBox(state, map, index))) damageDecor(state, map, rules, index, 'fire', delta * durability.raw.fire); });
+    }
     if (rules.friendlyFire && burning(state.player, state.playerY ?? 0)) damagePlayer(state, rules, delta * 25);
   }
 }

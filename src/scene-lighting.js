@@ -3,6 +3,7 @@ import { createLightingModel, lightGeometryKey, lightingProfile, sunDirection, u
 import { affectedLightColumns, captureLightState } from './light-rebake.js';
 import { bakeContactField, contactGrid, CONTACT_RANGE } from './contact-shading.js';
 import { damageCount } from './spatial.js';
+import { activeProps } from './world.js';
 
 export function createSceneLighting(map, pieces = []) {
   const model=createLightingModel(map),cell=.65;
@@ -150,7 +151,7 @@ export function createSceneLighting(map, pieces = []) {
     // Rebake contact shading when pieces break, at most a few times a second.
     const damage = state.wallPieces ? damageCount(state) : 0, now = performance.now();
     if (damage !== contactKey && now - contactTime > 250) {
-      bakeContactField(map, state.wallPieces, map.props, contact, contactData);
+      bakeContactField(map, state.wallPieces, activeProps(state, map), contact, contactData);
       contactTexture.needsUpdate = true; contactKey = damage; contactTime = now;
     }
     if (map.fixtures) useBakedLightSamples(state, sampleField);

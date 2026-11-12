@@ -15,6 +15,8 @@ export const schema = {
   wallDamage: { label: 'Wall damage', group: 'Gunplay & destruction', min: 1, max: 4, step: 1, value: 1, unit: '×' },
   destructibleWalls: { label: 'Breakable walls & floors', group: 'Gunplay & destruction', value: true },
   destructibleDoors: { label: 'Breakable doors', group: 'Gunplay & destruction', value: true },
+  destructibleFurniture: { label: 'Breakable furniture', group: 'Gunplay & destruction', value: true },
+  furnitureDurability: { label: 'Furniture durability', group: 'Gunplay & destruction', min: 25, max: 400, step: 25, value: 100, unit: '%', setup: true },
   doorDurability: { label: 'Door durability', group: 'Gunplay & destruction', min: 30, max: 300, step: 30, value: 120, setup: true },
   gunshotAlerts: { label: 'Guards react to gunfire', group: 'Gunplay & destruction', value: true },
   unlimitedAmmo: { label: 'Unlimited magazine', group: 'Gunplay & destruction', value: false },
