@@ -21,7 +21,7 @@ Read [HANDOFF.md](HANDOFF.md) first for the state of the repo and the working ag
   - When you finish building a step, mark it ◐ and list its open checks in the table. Never mark ☑ yourself.
   - A ◐ step does not block the next step. Checks that need the owner's machine, such as frame timing, are collected in the handoff.
 - Steps marked **Propose first** are open-ended. Show the owner a short proposal, with a preview page or screenshot where possible, and wait for a go-ahead before building.
-- Keep `npm test` green (246 passing on 2026-11-12). Add tests for anything that is pure data or geometry. Change layout tests only on purpose, and say why in the step's notes.
+- Keep `npm test` green (248 passing on 2026-11-12). Add tests for anything that is pure data or geometry. Change layout tests only on purpose, and say why in the step's notes.
 - **Verify every visual step in the browser** on the Martelli map. Follow **Verification** below.
 - When a step lands, record it in two places:
   - **This plan:** update its row in the status table and add a short **Built** note under the step: what changed, what was seen, what is open, and before and after screenshot links.
@@ -192,7 +192,7 @@ Small in code, the largest single visual jump, and everything later is judged th
 
 Done when: the readout works in all camera views and switching preset changes resolution scale live.
 
-**Verification.** Open **Sandbox rules → Graphics** to choose a preset or enable the readout. Medium is the default. Resolution and shadow size change live. Crossing between Low and either higher preset changes WebGL anti-aliasing on page reload. The readout averages frame intervals over roughly half a second and reports the latest frame's draw calls, triangles and buffer dimensions.
+**Verification.** Open **Settings → Graphics** (before step 7.3: Sandbox rules → Graphics) to choose a preset or enable the readout. Medium is the default. Resolution and shadow size change live. Crossing between Low and either higher preset changes WebGL anti-aliasing on page reload. The readout averages frame intervals over roughly half a second and reports the latest frame's draw calls, triangles and buffer dimensions.
 
 Chrome on Martelli, with eight guards deployed and the sidebar closed:
 
@@ -212,7 +212,7 @@ Guard movement makes the first-person counters vary slightly. The tactical map a
 
 Done when: before/after screenshots show a clear improvement with no blown-out windows, and night vision, thermal and the tactical map look as intended.
 
-**Built.** Normal first person uses AgX tone mapping and a saved exposure slider under Sandbox rules → Graphics. Clear daylight uses a softer sun and slightly brighter ambient light. Chrome confirmed the slider and camera and vision transitions. [Before](martelli-tone-before.jpg) · [After](martelli-tone-after.jpg). The screenshots show the exterior spawn. Interior window highlights and shadow detail still need a walkthrough.
+**Built.** Normal first person uses AgX tone mapping and a saved exposure slider, now under Settings → Graphics. Clear daylight uses a softer sun and slightly brighter ambient light. Chrome confirmed the slider and camera and vision transitions. [Before](martelli-tone-before.jpg) · [After](martelli-tone-after.jpg). The screenshots show the exterior spawn. Interior window highlights and shadow detail still need a walkthrough.
 
 ### 1.3 Sky and reflections
 
@@ -327,7 +327,7 @@ Done when: every furniture piece on the preview page is textured and the Martell
 
 Done when: no flat untextured surface remains in a walk-through of Martelli.
 
-**Built.** Martelli has white two-panel doors with bronze levers, textured ceilings, procedural grass, and lightly tinted window glass. Glass and furniture mirrors use the sky reflection map. Chrome verified the exterior and camera and vision transitions. An interior walkthrough remains open. [Before](martelli-dusk.jpg) · [After](martelli-architectural-finishes.jpg) **Correction (2026-11-12):** every panelled door actually rendered black, because the door geometry had no vertex colours (see Rendering conventions, item 2). The earlier screenshot check missed it. `src/door-visual.js` now adds the attribute.
+**Built.** Martelli has white two-panel doors with bronze levers, textured ceilings, procedural grass, and lightly tinted window glass. Glass and furniture mirrors use the sky reflection map. Chrome verified the exterior and camera and vision transitions. An interior walkthrough remains open. [Before](martelli-dusk.jpg) · [After](martelli-architectural-finishes.jpg) **Correction (2026-11-12):** every panelled door actually rendered black, because the door geometry had no vertex colours (see Rendering conventions, item 2). The earlier screenshot check missed it. `src/door-visual.js` now adds the attribute. **Later the same day:** the two garage doors lost their levers (`garage: true` on the door), and Martelli doors were lowered to 2.03 m (garage doors 2.13 m) under a breakable wall header. Door panels and the handle height scale with the door. A test in `test/martelli.test.js` checks each door's height and header.
 
 ### 3.4 Baked contact shading and softened edges
 
@@ -386,7 +386,7 @@ Goal: tall white baseboards along interior wall faces, wide white casings around
 **Built (2026-11-12).**
 - `src/trim.js` (pure, tested in `test/trim.test.js`) returns 874 boxes for Martelli: 669 baseboards, 147 casings and 58 door-frame linings. Maps without `map.surfaces` get none.
 - Baseboards sit on the bottom row of drywall skins and, on exterior walls, on the inside face of the masonry pieces. Rails (height 1) and walls above a floor level, such as the strip over a window, are skipped. Runs are clipped where a wall ends inside a door leaf.
-- Door casings are floor-to-ceiling jambs, because doors are full wall height. Windows get jambs, a head and a sill apron. Each door also gets a thin lining over the wall ends beside the opening. Exterior walls are trimmed on the inside face only.
+- Door casings were floor-to-ceiling jambs when this step landed, because doors were full wall height. Since Martelli doors were lowered to 2.03 m under a header (later on 2026-11-12), each door gets jambs that rise to meet a head casing across the top. Martelli now has 923 trim boxes: 669 baseboards, 196 casings and 58 door-frame linings. Windows get jambs, a head and a sill apron. Each door also gets a thin lining over the wall ends beside the opening. Exterior walls are trimmed on the inside face only.
 - `src/scene.js` draws one `InstancedMesh` per kind (3 extra draws) and hides each box with the wall-piece rule, so trim goes with its piece and follows the overhead and tactical floor rules. Trim does not cast shadows. `scene.setTrim(on)` and a **Trim** checkbox on `scripts/interior-preview.html` give the on/off comparison.
 - Seen on the interior preview in Chrome (Medium): the primary bedroom window casing, a baseboard under the lake window, and baseboards disappearing when their pieces are set to `hp = 0`. No console errors. `npm test`: 246 passing.
 - **Not seen or open:** Low and High, night vision, thermal and the overhead and tactical views were not re-checked for trim. Frame time is unmeasured. No before and after screenshot files were saved. Contact shading dims the base of walls, so baseboards read as soft grey rather than bright white at the floor line.

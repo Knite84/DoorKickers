@@ -12,8 +12,11 @@ Updated 2026-11-12. This is the current state of the project for a fresh session
 
 - **Polish steps 0.1 to 3.4 are built.** The [status table](POLISH_PLAN.md#status) gives each step's state and the checks still open. Steps marked ◐ are waiting on the owner. Don't treat them as finished, and don't redo them.
 - **Step 4.1 (baseboards, casings, door frames) is built, awaiting owner check** (`src/trim.js`). Step 4.2 (stairs, railings, fireplaces, arches) is also built, awaiting owner check. The next step in order is 4.3 (Opus to propose terrain). Passage openings still lack casings; see the 4.1 note. Steps 7.1 to 7.4 are built together and await the owner's check: HUD (`src/hud-model.js`, `src/ui.css`), settings dialog (`src/settings.js`, `src/settings-menu.js`), screens (`src/screens.js`, `src/debrief.js`, `src/plan-view.js`). 7.1 was not proposed first. Step 5.2 (firearm models and hands) is also waiting on the owner. Pending owner checks don't block the next step.
-- **Fixed on 2026-11-12, after 2265a28:** every panelled door rendered black from step 3.3 onwards. The furniture materials read vertex colours, and the door geometry had none. `src/door-visual.js` now adds a white colour attribute. Check `git log` to see whether the fix is committed.
-- `npm test`: 246 passing on 2026-11-12, about 4 seconds.
+- **Door changes (2026-11-12, committed in b45fa24 and earlier):**
+  - **Black doors fixed:** every panelled door rendered black from step 3.3 until the fix. The furniture materials read vertex colours and the door geometry had none; `src/door-visual.js` now adds them.
+  - **Garage doors:** the two garage doors carry `garage: true` and are drawn without a lever.
+  - **Door height:** Martelli doors are 2.03 m tall (garage doors 2.13 m) under a breakable wall header, instead of ceiling-high slabs. `doorHeight(door)` in `src/world.js` reads `door.height`; other maps keep 2.8 m doors. As a result, light no longer passes over doors between rooms, and a jump inside a doorway can hit the header.
+- `npm test`: 248 passing on 2026-11-12, about 4 seconds.
 
 ## Waiting on the owner
 
@@ -44,7 +47,7 @@ These need the owner's machine or knowledge, so a session can't finish them. Rem
 - `npm run dev` starts the game; `npm test` runs the suite; `npm run build` must still succeed (its chunk-size warning is known).
 - `.claude/launch.json` defines a `dev` server on port 5173 for the in-app browser preview.
 - **Game:**
-  - To play Martelli: Loadout & planning → Map → Martelli House → Deploy with this kit.
+  - To play Martelli: Start a mission → Loadout & planning → Map → Martelli House → Deploy with this kit. The briefing screen also has a direct **Deploy**.
   - **M** opens the map and **F** switches floors.
   - "Live guard tracking" and "Reveal patrol routes" in Settings → Game show the guards and their rounds.
 - **Preview pages** (`scripts/*.html`, open under `/scripts/...` on the dev server):
