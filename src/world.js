@@ -7,8 +7,11 @@ export const propHeight = prop => prop.height ?? furnitureHeight(prop) ?? 1.1;
 export const eyeHeight = state => (state.playerY ?? 0) + (state.playerCover ? state.playerCover.peeking ? 1.65 : .85 : state.crouched ? 1 : 1.65);
 export const playerEye = state => [state.player[0]+(state.playerCover?.offset?.[0]??0),eyeHeight(state),state.player[1]+(state.playerCover?.offset?.[1]??0)];
 export const bodyHeight = state => state.playerCover ? state.playerCover.peeking ? 1.8 : 1.08 : state.crouched ? 1.1 : 1.8;
-export const doorCenter = door => [door.position[0], elevation(door) + 1.4, door.position[1]];
-export const doorSize = door => [door.size[0], 2.8, door.size[1]];
+// Doors fill their opening to 2.8 m unless the map gives a lower leaf height
+// (Martelli does, with a wall header above).
+export const doorHeight = door => door.height ?? 2.8;
+export const doorCenter = door => [door.position[0], elevation(door) + doorHeight(door) / 2, door.position[1]];
+export const doorSize = door => [door.size[0], doorHeight(door), door.size[1]];
 export const windowCenter = window => [window.position[0], elevation(window) + (window.sill ?? 0.8) + (window.height ?? 1.5) / 2, window.position[1]];
 export const windowSize = window => [window.size[0], window.height ?? 1.5, window.size[1]];
 export function inside(position, center, size, padding = 0) {

@@ -87,12 +87,13 @@ function openings(map, pieces, out) {
         const hang = facePiece(map, pieces, opening, across, side, a, y);
         if (!hang) continue;
         const face = hang.center[across] + side * hang.size[across] / 2;
-        if (door) make('casing', a, bottom + size[1] / 2, face, side, wide, size[1], proud, hang);
+        if (door) make('casing', a, bottom + (size[1] + wide) / 2, face, side, wide, size[1] + wide, proud, hang);
         else make('casing', a, (bottom + top) / 2 + 0.01, face, side, wide, size[1] + 0.12, proud, hang);
       }
-      if (door) continue;
+      // Doors get a head casing once there is a wall header above them.
       const aboveHang = facePiece(map, pieces, opening, across, side, center[along], top + 0.1);
       if (aboveHang) make('casing', center[along], top + wide / 2, aboveHang.center[across] + side * aboveHang.size[across] / 2, side, size[along] + 2 * wide, wide, headProud, aboveHang);
+      if (door) continue;
       const belowHang = facePiece(map, pieces, opening, across, side, center[along], bottom - 0.1);
       if (belowHang) make('casing', center[along], bottom - 0.025, belowHang.center[across] + side * belowHang.size[across] / 2, side, size[along] + 2 * wide, 0.05, headProud, belowHang);
     }

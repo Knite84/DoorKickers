@@ -152,3 +152,17 @@ test('every Martelli prop and decor piece sits on one of the map floors', () => 
   for (const prop of [...martelli.props, ...(martelli.decor ?? [])])
     assert.ok(floors.includes(prop.elevation ?? 0), `${prop.kind}/${prop.variant} at ${prop.position} has elevation ${prop.elevation}`);
 });
+test('only the two garage doors are drawn as overhead doors without a lever', () => {
+  const garage = martelli.doors.filter(door => door.garage);
+  assert.equal(garage.length, 2);
+  // The 4.9 m and 3.0 m openings on the garage's outside walls.
+  assert.deepEqual(garage.map(door => Math.round(Math.max(...door.size) * 10) / 10).sort(), [3, 4.9]);
+});
+test('Martelli doors stop short of the ceiling under a wall header', () => {
+  for (const door of martelli.doors) {
+    assert.equal(door.height, door.garage ? 2.13 : 2.03);
+    const header = martelli.walls.find(wall => Math.abs(wall.elevation - (door.elevation + door.height)) < 1e-9
+      && Math.abs(wall.center[0] - door.position[0]) < 1e-6 && Math.abs(wall.center[1] - door.position[1]) < 1e-6);
+    assert.ok(header, `no header over the door at ${door.position}`);
+  }
+});

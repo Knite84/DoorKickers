@@ -23,7 +23,12 @@ function segment(axis, fixed, lo, hi, openings = [], elevation = main, exterior 
     if (opening.window) {
       panel(a, b, 0, 0.8); panel(a, b, 2.3, 0.5);
       windows.push({ position, size: horizontal ? [half * 2 * scale, 0.08] : [0.08, half * 2 * scale], elevation, sill: 0.8, height: 1.5 });
-    } else if (!opening.passage) doors.push({ position, size: horizontal ? [half * 2 * scale, 0.16] : [0.16, half * 2 * scale], elevation, locked: false });
+    } else if (!opening.passage) {
+      // Standard 2.03 m doors (2.13 m garage doors) under a wall header, not ceiling-high slabs.
+      const leaf = opening.garage ? 2.13 : 2.03;
+      if (tall - leaf > 0.05) panel(a, b, leaf, tall - leaf);
+      doors.push({ position, size: horizontal ? [half * 2 * scale, 0.16] : [0.16, half * 2 * scale], elevation, height: leaf, locked: false, ...(opening.garage ? { garage: true } : {}) });
+    }
     cursor = b;
   }
   panel(cursor, hi);
@@ -31,7 +36,8 @@ function segment(axis, fixed, lo, hi, openings = [], elevation = main, exterior 
 const h = (z, a, b, gaps = [], y = main, exterior = false) => segment('x', z, a, b, gaps, y, exterior);
 const v = (x, a, b, gaps = [], y = main, exterior = false) => segment('z', x, a, b, gaps, y, exterior);
 const win = (at, width = 80) => ({ at, width, window: true });
-const door = (at, width = 48) => ({ at, width });
+// Garage doors are overhead doors: drawn without a lever.
+const door = (at, width = 48, extra = {}) => ({ at, width, ...extra });
 const gap = (at, width) => ({ at, width, passage: true });
 // Waist-high guard rail: blocks movement, not sight or shots above it.
 const rail = (axis, fixed, lo, hi) => segment(axis, fixed, lo, hi, [], main, false, 1.0);
@@ -117,8 +123,8 @@ h(646,1005,1188,[win(1060,70),win(1150,55)],main,true); v(1005,646,780,[],main,t
 h(780,945,1005,[],main,true); v(945,780,792,[],main,true); h(792,806,945,[win(875,100)],main,true);
 v(806,780,792,[],main,true); h(780,740,806,[],main,true); v(740,590,780,[],main,true);
 h(590,620,740,[door(677,58)],main,true); v(620,590,646,[],main,true); h(646,514,620,[win(565,65)],main,true);
-v(514,646,930,[],main,true); h(930,208,514,[door(365,245)],main,true); v(208,900,930,[],main,true);
-h(900,14,208,[door(110,150)],main,true); v(14,476,900,[],main,true); h(476,14,248,[door(149,48)],main,true);
+v(514,646,930,[],main,true); h(930,208,514,[door(365,245,{garage:true})],main,true); v(208,900,930,[],main,true);
+h(900,14,208,[door(110,150,{garage:true})],main,true); v(14,476,900,[],main,true); h(476,14,248,[door(149,48)],main,true);
 // Interior. Kitchen and dining are one open space; only short returns flank
 // the cased opening to the great room (the plan's other lines are soffits).
 v(452,198,510,[gap(352,260)]);

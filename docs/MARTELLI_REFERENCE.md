@@ -6,7 +6,7 @@ How the Martelli map is authored, the owner's layout decisions, and the photo in
 
 File: `src/maps/martelli.js`. Everything is authored in **main-floorplan pixels** and converted by `point(x, z)` at 0.02 m per pixel, origin at pixel (600, 500). Plan-up is the lake side.
 
-- `h(z, x1, x2, openings, elevation, exterior)` and `v(x, z1, z2, …)` draw axis-aligned walls. Openings are `door(at, width)`, `win(at, width)` or `gap(at, width)`.
+- `h(z, x1, x2, openings, elevation, exterior)` and `v(x, z1, z2, …)` draw axis-aligned walls. Openings are `door(at, width)`, `win(at, width)` or `gap(at, width)`. `door(at, width, { garage: true })` marks an overhead garage door, drawn without a lever (the two garage doors use it). Doors are 2.03 m tall (garage doors 2.13 m) under a breakable wall header; `doorHeight(door)` in `src/world.js` reads `door.height`, and other maps keep 2.8 m ceiling-high doors.
 - `rail(axis, fixed, lo, hi)` draws a 1 m guard rail (blocks movement, not sight).
 - Main floor is elevation 3.2; Foundation is 0.
 - The foundation drawing is about 4% smaller than the main one. Use `fx(x)` and `fz(z)` to convert **foundation-plan pixels** into map pixels.

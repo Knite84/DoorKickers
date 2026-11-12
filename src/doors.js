@@ -1,3 +1,4 @@
+import { doorCenter } from './world.js';
 export const DEFAULT_DOOR_HEALTH = 120;
 
 // Open/closed is separate from damage: a destroyed door can never be closed again.
@@ -8,6 +9,6 @@ export function damageDoor(state, map, index, amount, position) {
   state.doors[index] = true;
   const door = map.doors[index];
   if (state.lockedDoors) state.lockedDoors[index] = false;
-  state.events.push({ type: 'door-break', position: position ?? [door.position[0], (door.elevation ?? 0) + 1.4, door.position[1]] });
+  state.events.push({ type: 'door-break', position: position ?? doorCenter(door) });
   return true;
 }
