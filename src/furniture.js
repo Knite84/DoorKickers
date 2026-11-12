@@ -42,7 +42,9 @@ function drawers(w, h, d, rows, cols, body, pull = color.brass, y0 = 0.08) {
   return out;
 }
 function lamp(x, y0, z, scale = 1) {
-  return [cyl(x, y0, z, 0.14 * scale, 0.04, color.brass), cyl(x, y0 + 0.04, z, 0.03, 0.26 * scale, color.brass), cyl(x, y0 + 0.24 * scale, z, 0.3 * scale, 0.24 * scale, color.shade)];
+  return [cyl(x, y0, z, 0.14 * scale, 0.04, color.brass), cyl(x, y0 + 0.04, z, 0.03, 0.26 * scale, color.brass), {
+    ...cyl(x, y0 + 0.24 * scale, z, 0.3 * scale, 0.24 * scale, color.shade), fixture: 'lamp',
+  }];
 }
 function legs(w, d, h, c, inset = 0.04, t = 0.05) {
   return [-1, 1].flatMap(sx => [-1, 1].map(sz => box(sx * (w / 2 - inset - t / 2), 0, sz * (d / 2 - inset - t / 2), t, h, t, c)));
@@ -134,6 +136,7 @@ function vanity(w, d, v, options = {}) {
   const mirrorW = Math.min(w - 0.1, sinks === 2 ? w - 0.2 : 0.8);
   if (v.mirror === 'oval') out.push(disc(0, 1.55, -d / 2 + 0.02, 0.55, 0.8, color.glass));
   else out.push(box(0, 1.15, -d / 2 + 0.02, mirrorW + 0.06, 0.86, 0.025, color.espresso), box(0, 1.18, -d / 2 + 0.036, mirrorW, 0.8, 0.01, color.glass));
+  if (options.light) out.push({ ...box(0, 2.02, -d / 2 + 0.07, mirrorW, 0.08, 0.09, color.shade), fixture: 'vanity' });
   return out;
 }
 

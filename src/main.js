@@ -11,7 +11,7 @@ import { createKitMenu } from './menus.js';
 import { bindCombatMouse } from './combat-input.js';
 import { togglePlayerCover, setPlayerPeek } from './player-cover.js';
 import { cutPower } from './lighting.js';
-import { graphicsPresets, loadGraphics, saveGraphics } from './graphics.js';
+import { exposureRange, graphicsPresets, loadGraphics, saveGraphics } from './graphics.js';
 
 const app = document.querySelector('#app');
 document.body.classList.add('rules-hidden');
@@ -50,6 +50,7 @@ app.innerHTML = `
         <h3 id="graphics-heading">Graphics</h3>
         <div class="setting"><label for="graphics-preset">Quality preset</label><select id="graphics-preset">${Object.keys(graphicsPresets).map(name => `<option>${name}</option>`).join('')}</select></div>
         <div class="setting"><label for="graphics-stats">Show performance</label><input id="graphics-stats" type="checkbox" role="switch"></div>
+        <div class="setting"><label for="graphics-exposure">First-person exposure</label><output id="graphics-exposure-value" for="graphics-exposure" aria-live="off"></output><input id="graphics-exposure" type="range" min="${exposureRange.min}" max="${exposureRange.max}" step="0.05"></div>
         <p id="graphics-notice" class="muted" role="status" hidden>Reload the page to apply the anti-aliasing change.</p>
       </section>
       <div id="settings"></div>
@@ -91,6 +92,15 @@ const showSeed = () => { $('.mission-card .eyebrow').textContent = state.mission
 let state = createMission(map, missionRules(), loadout);
 showSeed();
 const graphics = loadGraphics();
+const exposureControl = $('#graphics-exposure');
+const exposureValue = $('#graphics-exposure-value');
+exposureControl.value = graphics.exposure;
+exposureValue.textContent = graphics.exposure.toFixed(2) + '×';
+exposureControl.addEventListener('input', () => {
+  graphics.exposure = exposureControl.valueAsNumber;
+  exposureValue.textContent = graphics.exposure.toFixed(2) + '×';
+  saveGraphics(graphics);
+});
 const initialAntialias = graphicsPresets[graphics.preset].antialias;
 const scenePreset = () => ({ ...graphicsPresets[graphics.preset], antialias: initialAntialias });
 const renderStats = $('#render-stats');
@@ -424,7 +434,7 @@ function frame(now) {
   if (state.status === 'active') scene?.face(input.x, input.z);
   const exposed=!state.playerCover||state.playerCover.peeking;
   const scoped = exposed && aimed && state.inventory.equipped === 'sniper' && view === 'first' && !mapOpen && !menuVisible;
-  scene?.draw(state, rules, dt, { moving: !!(input.x || input.z) && state.status === 'active', running: gait === 'run', firing: firing && state.status === 'active' && exposed, aimed:aimed&&exposed, scopeZoom, menuVisible });
+  scene?.draw(state, rules, dt, { moving: !!(input.x || input.z) && state.status === 'active', running: gait === 'run', firing: firing && state.status === 'active' && exposed, aimed:aimed&&exposed, scopeZoom, menuVisible, exposure: graphics.exposure });
   if (scene && graphics.showStats) {
     if (statsSince === null) statsSince = now;
     else statsFrames++;

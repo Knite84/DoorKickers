@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Room lighting preview</title>
+<style>
+  body { margin: 0; color: #edf0e8; background: #15211e; font: 16px system-ui; }
+  header { padding: 20px 24px; }
+  h1 { margin: 0 0 12px; font-size: 22px; }
+  button { margin-right: 8px; padding: 8px 12px; font: inherit; cursor: pointer; }
+  canvas { display: block; width: 100%; height: min(68vh, 650px); }
+</style>
+<header>
+  <h1>Room lighting preview</h1>
+  <button id="power" aria-pressed="true">Lamp on</button>
+  <button id="door" aria-pressed="false">Door closed</button>
+</header>
+<canvas aria-label="A furnished room lit by a warm lamp and daylight through a doorway"></canvas>
+<script type="module">
+import * as THREE from 'three';
+
+const canvas = document.querySelector('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setClearColor(0x111a19);
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 40);
+camera.position.set(7, 6, 8);
+camera.lookAt(0, 0.8, 0);
+const surfaces = [];
+const lamp = new THREE.Vector3(-1.9, 1.5, -1.15);
+const opening = new THREE.Vector3(1.35, 1.1, -2.3);
+const sample = new THREE.Vector3();
+const warm = new THREE.Color(0xffbf76);
+const cool = new THREE.Color(0xb9ddff);
+const color = new THREE.Color();
+const light = new THREE.Color();
+
+function surface(size, position, tint) {
+  const geometry = new THREE.BoxGeometry(...size, 16, 12, 16);
+  const vertices = geometry.attributes.position.count;
+  geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(vertices * 3), 3));
+  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ vertexColors: true }));
+  mesh.position.set(...position);
+  scene.add(mesh);
+  surfaces.push({ mesh, tint: new THREE.Color(tint) });
+  return mesh;
+}
+
+surface([6, 0.12, 4.6], [0, -0.06, 0], 0xac8568);
+surface([3.75, 2.8, 0.16], [-1.125, 1.4, -2.3], 0xc5b9a6);
+surface([1.05, 2.8, 0.16], [2.475, 1.4, -2.3], 0xc5b9a6);
+surface([1.2, 0.6, 0.16], [1.35, 2.5, -2.3], 0xc5b9a6);
+surface([0.16, 2.8, 4.6], [-3, 1.4, 0], 0xafa99a);
+surface([0.9, 0.64, 0.65], [-1.9, 0.32, -1.15], 0x755d49);
+surface([2, 0.48, 0.85], [-0.2, 0.24, 1], 0x718881);
+surface([2, 0.55, 0.18], [-0.2, 0.63, 1.35], 0x718881);
+const door = surface([1.2, 2.2, 0.08], [1.35, 1.1, -2.24], 0x766255);
+const shade = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.26, 0.34, 24),
+  new THREE.MeshBasicMaterial());
+shade.position.copy(lamp);
+scene.add(shade);
+surface([0.08, 0.7, 0.08], [-1.9, 0.99, -1.15], 0x765a44);
+
+let powered = true;
+let opened = false;
+function draw() {
+  const { clientWidth, clientHeight } = canvas;
+  renderer.setSize(clientWidth, clientHeight, false);
+  camera.aspect = clientWidth / Math.max(clientHeight, 1);
+  camera.updateProjectionMatrix();
+  renderer.render(scene, camera);
+}
+
+// This preview bakes two simple falloff fields into vertices. It illustrates
+// the lighting direction before the game uses 3D probes and geometry occlusion.
+function update() {
+  door.visible = !opened;
+  shade.material.color.setHex(powered ? 0xffcd82 : 0x56483b);
+  for (const { mesh, tint } of surfaces) {
+    const { position, color: colors } = mesh.geometry.attributes;
+    for (let i = 0; i < position.count; i++) {
+      sample.fromBufferAttribute(position, i).add(mesh.position);
+      const electric = powered ? 1.5 / (1 + 1.2 * lamp.distanceToSquared(sample)) : 0;
+      const daylight = opened ? 1.9 / (1 + opening.distanceToSquared(sample)) : 0;
+      light.setRGB(
+        0.035 + warm.r * electric + cool.r * daylight,
+        0.045 + warm.g * electric + cool.g * daylight,
+        0.06 + warm.b * electric + cool.b * daylight,
+      );
+      color.copy(tint).multiply(light);
+      colors.setXYZ(i, color.r, color.g, color.b);
+    }
+    colors.needsUpdate = true;
+  }
+  draw();
+}
+
+const powerButton = document.querySelector('#power');
+powerButton.onclick = () => {
+  powered = !powered;
+  powerButton.textContent = powered ? 'Lamp on' : 'Lamp off';
+  powerButton.setAttribute('aria-pressed', powered);
+  update();
+};
+const doorButton = document.querySelector('#door');
+doorButton.onclick = () => {
+  opened = !opened;
+  doorButton.textContent = opened ? 'Door open' : 'Door closed';
+  doorButton.setAttribute('aria-pressed', opened);
+  update();
+};
+window.addEventListener('resize', draw);
+update();
+</script>
+</html>

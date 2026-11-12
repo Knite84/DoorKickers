@@ -1,5 +1,6 @@
 import { ceilingsFor, rectangle } from './ceilings.js';
-import { piece, sectional, isDrawnOnly } from '../furniture.js';
+import { piece, sectional, isDrawnOnly, furnitureBoxes } from '../furniture.js';
+import { defaultRoomLights } from '../lighting.js';
 // Traced from the two local floorplans. Plan-up faces the lake (south in the
 // north-up aerial photograph). Door annotations imply roughly 2 cm per pixel.
 // Foundation is engine datum 0; the main floor and front approach are at 3.2 m.
@@ -53,6 +54,7 @@ function prop(kind, x, z, width, depth, elevation = main) {
 // width x depth in metres (default: the variant's); `facing` is where its front
 // points on the plan. Drawn-only pieces go to decor and never collide.
 function furnish(kind, variant, x, z, facing = 'down', size, options, elevation = main) {
+  if (kind === 'vanity') options = { ...options, light: true };
   const entry = piece(kind, variant, point(x, z), { size, facing, elevation, options });
   (isDrawnOnly(entry) ? decor : props).push(entry);
 }
@@ -67,6 +69,7 @@ const contains = (x, z, polygon = outline) => {
   }
   return inside;
 };
+
 // Merge each scan strip into rectangles, excluding the complete return stairwell.
 const xs = [...new Set([-200, 1400, 510, 620, ...outline.map(p => p[0])])].sort((a,b) => a-b);
 const zs = [...new Set([198, 510, 640, 1200, ...outline.map(p => p[1])])].sort((a,b) => a-b);
@@ -414,3 +417,33 @@ export const martelli = {
     ['bedroom 5', 760, 200, 0, 0.7], ['bedroom 4', 980, 180, 0, 0.7],
   ].map(([name, x, z, elevation, weight, dwell = 1]) => ({ name, position: point(x, z), elevation, weight, dwell })),
 };
+
+const fixtureStyles = {
+  flush: { size: [0.42, 0.08, 0.42], color: 0xffe0ad, strength: 0.85 },
+  recessed: { size: [0.19, 0.045, 0.19], color: 0xffeac8, strength: 0.9 },
+  strip: { size: [0.85, 0.07, 0.2], color: 0xf2f3ff, strength: 0.95 },
+  porch: { size: [0.2, 0.28, 0.15], color: 0xffcb85, strength: 0.65 },
+  lamp: { color: 0xffc378, strength: 0.55 },
+  vanity: { color: 0xffe6c8, strength: 0.72 },
+};
+
+const roomFixtures = defaultRoomLights(martelli).map(fixture => {
+  const { name } = fixture.room;
+  const kind = /KITCHEN|GREAT ROOM|FAMILY ROOM|BAR|HALL/.test(name) ? 'recessed'
+    : /GARAGE|UTILITY|LAUNDRY|GYM/.test(name) ? 'strip' : 'flush';
+  return { ...fixture, kind };
+});
+const furnitureFixtures = props
+  .filter(prop => ['nightstand', 'endTable', 'vanity'].includes(prop.kind))
+  .flatMap(prop => furnitureBoxes(prop).filter(part => part.fixture).map(part => ({
+    kind: part.fixture, position: part.center, size: part.size, elevation: prop.elevation ?? 0,
+    mountedOnFurniture: true,
+  })));
+
+martelli.fixtures = [
+  ...roomFixtures,
+  ...furnitureFixtures,
+  { kind: 'porch', position: [point(705, 597)[0], main + 2.1, point(705, 597)[1]], elevation: main },
+  { kind: 'porch', position: [point(488, 191)[0], main + 2.1, point(488, 191)[1]], elevation: main },
+  { kind: 'porch', position: [point(461, 194)[0], 2.1, point(461, 194)[1]], elevation: 0 },
+].map((fixture, index) => ({ ...fixtureStyles[fixture.kind], ...fixture, id: `martelli-light-${index + 1}`, circuit: 'building' }));

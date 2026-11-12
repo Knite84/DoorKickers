@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createLightingModel, lightLevel, cutPower } from '../src/lighting.js';
+import { createLightingModel, defaultRoomLights, lightLevel, cutPower } from '../src/lighting.js';
 import { courtyard } from '../src/maps/courtyard.js';
+import { martelli } from '../src/maps/martelli.js';
 import { createMission, canSee } from '../src/simulation.js';
 import { defaults, validateRules } from '../src/rules.js';
 import { defaultLoadout, validateLoadout, equip, toggleHolster } from '../src/kit.js';
@@ -9,6 +10,33 @@ import { defaultLoadout, validateLoadout, equip, toggleHolster } from '../src/ki
 const map={...courtyard,rooms:[{name:'WINDOW ROOM',center:[0,0],size:[12,8]},{name:'INNER ROOM',center:[0,6],size:[12,4]}],
   walls:[{center:[0,4],size:[12,.3]}],
   windows:[{position:[-6,0],size:[.08,3],elevation:0,sill:.8,height:1.5}],props:[],doors:[]};
+
+test('Martelli room and furniture fixtures share the mission power state', () => {
+  const model = createLightingModel(martelli);
+  const state = createMission(martelli, { ...defaults, timeOfDay: 'night' });
+  state.status = 'active';
+  assert.equal(state.destroyedLights.length, model.fixtures.length);
+  assert.equal(new Set(model.fixtures.map(fixture => fixture.id)).size, model.fixtures.length);
+  for (const { room } of defaultRoomLights(martelli)) {
+    assert.ok(model.fixtures.some(fixture => fixture.room === room), room.name);
+  }
+  const porch = model.sample([2.1, 2.5], 3.2);
+  assert.equal(porch.interior, false);
+  assert.ok(porch.electric > 0);
+  const lit = lightLevel(porch, state);
+  assert.ok(cutPower(state));
+  assert.ok(lightLevel(porch, state) < lit);
+});
+
+test('authored lamps illuminate samples more strongly at fixture height', () => {
+  const layout = {
+    ...map, walls: [], windows: [],
+    fixtures: [{ id: 'lamp', kind: 'lamp', position: [0, 1.5, 0], elevation: 0, strength: 1 }],
+  };
+  const model = createLightingModel(layout);
+  assert.ok(model.sample([0, 0], 0, [], 1.5).electric > model.sample([0, 0], 0, [], 0.2).electric);
+  assert.equal(model.sample([0, 0], 0, [true], 1.5).electric, 0);
+});
 test('time-of-day selection validates, survives saved rules and applies to a new deployment',()=>{
   const rules=validateRules({...defaults,timeOfDay:'night'});
   assert.equal(createMission(map,rules).timeOfDay,'night');assert.equal(validateRules({}).timeOfDay,'day');

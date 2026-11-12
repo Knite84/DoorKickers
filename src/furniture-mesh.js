@@ -20,6 +20,7 @@ export function furnitureMeshes(prop, material, glass) {
     mesh.castShadow = !part.glass && part.size[1] > 0.02;
     mesh.receiveShadow = true;
     mesh.userData.overhead = !!part.overhead;
+    mesh.userData.fixture = part.fixture;
     return mesh;
   });
 }

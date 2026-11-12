@@ -31,7 +31,7 @@ Read `docs/HANDOFF.md` first for the state of the repo and the working agreement
 | 1.3 | Sky and reflections | ☐ |
 | 1.4 | Post-processing stack | ☐ |
 | 1.5 | Shadow quality | ☐ |
-| 2.1 | Lighting design proposal | ☐ |
+| 2.1 | Lighting design proposal | ☑ |
 | 2.2 | Light fittings and lamps | ☐ |
 | 2.3 | Baked indoor light volume | ☐ |
 | 2.4 | Sun patches, time of day, weather | ☐ |
@@ -196,6 +196,16 @@ Read `src/lighting.js`, `src/scene-lighting.js` and `scripts/lighting-preview.ht
 - Whether guard sight (`darknessSightFactor`) reads from the same light data so that what looks dark is dark to guards.
 
 Done when: the owner approves a written proposal and a preview page showing one room lit the new way.
+
+#### Proposed implementation
+
+- Replace the per-floor 2D field with a coarse 3D grid of light samples. Keep separate daylight and electric contributions so a power cut can remove electric light immediately. Give each authored fixture a stable ID, color, intensity and circuit. Keep one generated fixture per room as a fallback for maps without authored fixtures. Visible fixture meshes use the same circuit and damage state as the field.
+- Sample the grid in the existing material patch. Keep direct sunlight on the sun and its shadow map. Feed the combined visible light into the existing night-vision amplification and keep thermal based on body heat. The tactical map keeps its own lighting.
+- Build the field from the live wall, floor, door and window state. During sampling, record which geometry each source-to-probe ray crosses, including its first blocker. When a door changes or a piece breaks, enqueue the affected chunks, including chunks on adjacent floors for a slab change. Re-evaluate against the latest geometry and spread updates over multiple frames. Publish each finished chunk to the CPU and GPU together. A power cut changes the electric weight immediately. Destroying a fixture changes the source list and invalidates the chunks it previously lit.
+- Keep the sun as the only shadow caster in the first implementation. Use the baked field for most fixtures and budget up to two nearby real-time accent lights on High after profiling. Use emissive shades and bloom for fixture glow.
+- Have `darknessSightFactor` read the same CPU grid at player eye height and apply the same daylight and circuit weights. Keep its existing response curve initially. Compare guard detection at a few fixed light levels before retiring the daytime shortcut, since that shortcut currently gives a factor of 1 with power on.
+
+The [room preview](../scripts/lighting-volume-preview.html) shows a warm lamp and daylight through an open doorway. It uses a small vertex bake to demonstrate the intended look and the independent light contributions. The production probe grid and geometry-driven rebake are implementation steps.
 
 ### 2.2 Light fittings and lamps
 

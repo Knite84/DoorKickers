@@ -27,7 +27,7 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
     const d = rayBox(origin, direction, center, size, 80);
     if (d !== null) hits.push({ distance: d, kind, object, zone });
   }
-  roomLights(map).forEach((fixture, i) => { if (!state.destroyedLights?.[i]) consider(fixture.position, [.46, .07, .46], 'light', i); });
+  roomLights(map).forEach((fixture, i) => { if (!state.destroyedLights?.[i]) consider(fixture.position, fixture.size ?? [.46, .07, .46], 'light', i); });
   for (const piece of state.wallPieces) if (piece.hp > 0) consider(piece.center, piece.size, 'wall', piece);
   map.doors.forEach((door, i) => { if (!state.doors[i]) consider(doorCenter(door), doorSize(door), 'door', i); });
   (map.windows ?? []).forEach((window, i) => { if (state.windowHealth[i] > 0) consider(windowCenter(window), windowSize(window), 'glass', i); });
