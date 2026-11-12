@@ -1,12 +1,12 @@
-# Handoff: Martelli furnished and finished; lighting and trim on hold
+# Handoff: Martelli furnished and finished; polish plan next
 
-Updated 2026-11-11 after furnishing the whole house, for a fresh session. Read this first, then `references/README.md` (local only, git-ignored) and `docs/DESIGN.md`.
+Updated 2026-11-11 after furnishing the whole house, for a fresh session; on 2026-11-12 the lighting and trim hold was lifted and `docs/POLISH_PLAN.md` was added. Read this first, then `docs/POLISH_PLAN.md`, `references/README.md` (local only, git-ignored) and `docs/DESIGN.md`.
 
 ## State of the repo
 
 - **The furniture kit is built and every room is furnished.** Check `git status` for anything uncommitted. Kit: `src/furniture.js`, `src/furniture-mesh.js`, `test/furniture.test.js`, `scripts/furniture-preview.html`. Placements: `src/maps/martelli.js`, using `furnish(kind, variant, x, z, facing, size, options, elevation)` in plan pixels, grouped by room with comments.
 - **Materials step done (floors and walls).** `src/surface-plan.js` (pure data rules, tested in `test/surfaces.test.js`), `src/surface-textures.js` (textures drawn on canvases from fixed seeds: bamboo, carpet, grey wood-look tile, grey tile, beige stone tile, pale plank tile, vinyl plank, concrete, deck boards, paint, lap siding), `src/surface-materials.js` (world-space shader patch on the batched wall and floor pieces). Martelli declares `surfaces` (floor finish rectangles per room), `paint` (wall colour per room name) and `paintZones` (the yellow and blue accent walls, cream vanity alcoves). Exterior walls get siding on the outside face only. Maps without `surfaces` are unchanged. The preview page's **Show → Finishes** shows every texture at real scale.
-- **Owner's direction (2026-11-11): hold off on lighting and trim.** Not textured yet: furniture (still flat colours), ceilings and doors. Every exterior wall, including the garage and the walk-out foundation, gets the same grey siding; brick and retaining walls are not modelled.
+- **Owner's direction (2026-11-12): the hold on lighting and trim is lifted.** The next work is `docs/POLISH_PLAN.md`, taken one numbered step per session, starting with Phase 0 (walkability: the family-room sectional and the dining chairs block routes). Not textured yet: furniture (still flat colours), ceilings and doors. Every exterior wall, including the garage and the walk-out foundation, gets the same grey siding; brick and retaining walls are not modelled.
 - Rooms done, in order: upstairs bedroom wing; family room and wet bar; baths and laundry; Bedrooms 4 and 5; gym and utility room; kitchen, dining and great room; entry and deck.
 - Map changes made along the way (beyond furniture):
   - The wet bar's full-height north wall became the kit's brick half wall with the bar top.

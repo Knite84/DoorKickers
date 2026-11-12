@@ -1,0 +1,354 @@
+# Polish plan: closing the gap to the reference game
+
+Drafted 2026-11-12. This is the working plan for bringing Door Kickers up to the visual quality, menu depth and physical feel of the reference game ("Golden Hour", a Three.js hotel shooter the owner admires) while keeping Door Kickers a single-player game about planning and assaulting a compound.
+
+Read `docs/HANDOFF.md` first for the state of the repo and the working agreement, then this file.
+
+## Decisions this plan rests on
+
+- **The hold on lighting and trim is lifted** (owner, 2026-11-12). Lighting is Phase 2 and trim is Phase 4.
+- **No asset pipeline is needed.** The reference game ships no model, texture, font or sound files. Everything is generated in code when the page loads. Door Kickers stays a browser-only game with procedural content; `three` remains the only runtime dependency (its bundled `examples/jsm` add-ons count as part of it).
+- **Play style stays different.** The reference is a bot deathmatch. Nothing here adds respawns, score races or killstreaks.
+- **The simulation is not rewritten.** Destruction, penetration, ragdolls and guard AI are already ahead of the reference. Presentation is layered on top; pure simulation modules keep running in Node tests without a renderer.
+
+## How to work against this plan
+
+- Take **one numbered step per session**, in order unless a step says it is independent. Each step has a "Done when" line; do not start the next step until it is met.
+- Steps marked **Propose first** are open-ended. Per the working agreement, show the owner a short proposal (and a preview page or screenshot where possible) and wait for a go-ahead before building.
+- Keep `npm test` green (197 passing on 2026-11-11). Add tests for anything that is pure data or geometry.
+- Verify every visual step in the browser on the Martelli map, in first person **and** in the tactical/overhead view, with night vision and thermal toggled. Save one before and one after screenshot under `docs/`.
+- Tick the box in the status table and add a line to `docs/HANDOFF.md` when a step lands.
+- Performance budget: 60 frames per second at 1080p on the owner's machine at the default quality preset. Step 1.1 adds the tool to measure this; every later step reports its cost.
+
+## Status
+
+| Step | Summary | Done |
+|---|---|---|
+| 0.1 | Fix the two reported pinch points | ☐ |
+| 0.2 | Walkability audit and test | ☐ |
+| 1.1 | Frame-time readout and quality presets | ☐ |
+| 1.2 | Tone mapping, exposure and colour | ☐ |
+| 1.3 | Sky and reflections | ☐ |
+| 1.4 | Post-processing stack | ☐ |
+| 1.5 | Shadow quality | ☐ |
+| 2.1 | Lighting design proposal | ☐ |
+| 2.2 | Light fittings and lamps | ☐ |
+| 2.3 | Baked indoor light volume | ☐ |
+| 2.4 | Sun patches, time of day, weather | ☐ |
+| 3.1 | Full material sets for existing surfaces | ☐ |
+| 3.2 | Furniture materials | ☐ |
+| 3.3 | Doors, ceilings, glass, exterior | ☐ |
+| 3.4 | Baked contact shading and softened edges | ☐ |
+| 4.1 | Baseboards, casings and door frames | ☐ |
+| 4.2 | Stairs, railings and fireplaces | ☐ |
+| 4.3 | Roof, deck and site | ☐ |
+| 4.4 | Known map gaps | ☐ |
+| 5.1 | Skinned guard bodies | ☐ |
+| 5.2 | First-person weapon and hands | ☐ |
+| 5.3 | Weapon handling feel | ☐ |
+| 6.1 | Impact effects and decals | ☐ |
+| 6.2 | Loose physics: casings, debris, doors, chairs | ☐ |
+| 6.3 | Movement feel | ☐ |
+| 6.4 | Sound | ☐ |
+| 7.1 | Interface foundation | ☐ |
+| 7.2 | In-mission HUD | ☐ |
+| 7.3 | Settings screen | ☐ |
+| 7.4 | Loading, briefing, planning and debrief screens | ☐ |
+| 8 | Compound-assault game loop (design questions) | ☐ |
+
+## What the reference game does
+
+Findings from reading its published code on 2026-11-12 (minified, so details are inferred from names and strings; the game was not played).
+
+| Area | Reference | Door Kickers today |
+|---|---|---|
+| Engine | Three.js, WebGL | Three.js 0.187, WebGL2 |
+| Assets | None; all generated at load in named stages (build geometry, build furniture, paint materials, capture light, assemble weapons) | None; all generated |
+| Materials | Painted in code as full sets: colour, surface bumps, roughness, with reflections | Painted colour textures on walls and floors only; furniture, doors, ceilings flat |
+| Lighting | Indoor light volume baked at load from sun patches and fittings; contact shading baked into geometry; spot, point and area lights | One sun, one sky light, a room light field in `src/lighting.js` |
+| Post-processing | Ambient occlusion, bloom, film tone mapping, motion blur, depth of field | None |
+| Quality control | Low/Medium/High/Ultra preset | None |
+| Characters | Skinned, boned meshes built in code; first-person arms | Capsule segments drawn from simulation joints |
+| Weapons | Modelled in code with attachments, camo finishes, recoil, aim-down-sights, inspect | No first-person weapon model |
+| Effects | Per-material impact particles, decals, debris, casings, ricochets | Tracers, simple flashes and spheres |
+| Sound | Fully synthesized, with reverb, positional sound, occlusion, music | Synthesized gunfire only |
+| Interface | Custom HUD scaled to the window, minimap, settings for graphics, audio, controls, interface | Native dialogs and a side panel |
+| Opponents | Bots; no networking | Guards with perception, radio, wounds, tactics |
+
+Its game code is several times the size of ours. Expect this plan to take many sessions; each step is sized to land something visible on its own.
+
+---
+
+## Phase 0: Walkability
+
+Fix this first. Better lighting will not matter if the house cannot be walked.
+
+Background: the player collides with furniture using a 0.28 m radius allowance (`movePlayer` in `src/simulation.js`), so any gap of 0.56 m or less is impassable. Guards path on a 0.2 m grid (`navCell` in `src/maps/martelli.js`).
+
+### 0.1 Fix the two reported pinch points
+
+**Family room sectional (lower level).** The sectional's back run occupies plan x 465–515, z 250–420 (`sectional('L', point(540,335), …)` at `src/maps/martelli.js:249`). The brick pier at the north end of the wet-bar arch is at plan x 433 (z 373–393) with its face at about x 437. The gap is about 0.56 m, exactly the blocked width. The bar counter ends at x 429 beside it.
+- Recommended fix: move the sectional about 0.4 m east (centre x 540 → 560). That gives roughly 0.96 m at the pier and still leaves about 1.2 m between the return and the media console.
+- The owner described the blocking piece as the part extending toward the stairs. Confirm in the browser which gap they mean before moving anything; if it is a different gap, measure it the same way.
+
+**Dining set (main floor).** The six chairs sit entirely outside the table edge (`src/maps/martelli.js:300-302`), so the set occupies 3.0 m × 2.0 m. The east chair ends at plan x 445, 0.14 m from the kitchen/great-room line at x 452.
+- Fix: tuck each chair about 0.3 m under the table edge. The set becomes about 2.4 m × 1.4 m. Overlapping collision boxes between a chair and the table are fine.
+- Chairs stay fixed for now. Pushable chairs are an optional part of step 6.2.
+
+Done when: the owner can walk both routes in the browser, `npm test` passes (move test routes or guard posts only if the furniture is right), and the furniture preview page still looks correct.
+
+### 0.2 Walkability audit and test
+
+- Add a pure function (suggested: `src/clearance.js`) that, for a map, lists every gap between a prop and a wall or another prop that is wider than "flush" (about 0.1 m) and narrower than a minimum walkway.
+- Minimum walkway: **0.9 m** on main routes (door to door through a room), **0.7 m** elsewhere. Flush-to-wall furniture is exempt.
+- Add a reachability test: every room centre on Martelli is reachable from every entry by an agent 0.35 m in radius, reusing the walking grid in `src/navigation.js`.
+- Run the audit on Martelli, list the pinch points for the owner, and fix the ones they agree are wrong. The owner knows the real house; ask rather than guess where a tight spot is true to life.
+- Add an overlay to `scripts/furniture-preview.html` that draws pinch points in red.
+
+Done when: the audit reports no unapproved pinch points on Martelli and the reachability test is in the suite.
+
+---
+
+## Phase 1: Rendering foundation
+
+Small in code, the largest single visual jump, and everything later is judged through it. All of it lives in or beside `src/scene.js`.
+
+### 1.1 Frame-time readout and quality presets
+
+- Add a toggleable readout of frame time, draw calls and triangle count (`renderer.info`).
+- Add a **Low / Medium / High** quality setting, saved in its own `localStorage` key, controlling resolution scale, shadow resolution, anti-aliasing and each post-processing effect as it arrives.
+- Record baseline numbers on Martelli with eight guards. GPU cost has never been measured (see the sluggishness notes in the handoff).
+
+Done when: the readout works in all camera views and switching preset changes resolution scale live.
+
+### 1.2 Tone mapping, exposure and colour
+
+- Turn on film-style tone mapping (ACES or AgX) with an exposure control.
+- Current light strengths (sky 2.5, sun 3.2 in `src/scene.js`) were tuned without tone mapping. Retune them, and the painted texture colours if needed, so interiors are not washed out or crushed.
+- Check night vision and thermal: `src/scene-lighting.js` patches materials through `onBeforeCompile` and must keep working. Check the tactical and overhead views, which should stay flat and readable.
+
+Done when: before/after screenshots show a clear improvement with no blown-out windows, and night vision, thermal and the tactical map look as intended.
+
+### 1.3 Sky and reflections
+
+- Replace the flat background with a generated sky (Three's `Sky` add-on or a small gradient shader) matched to the sun direction and the weather rule.
+- Generate an environment map from it (`PMREMGenerator`) and set it as the scene environment so every standard material picks up soft ambient light and reflections.
+- Lower the sky light accordingly so the two do not double up.
+
+Done when: glass, tile and metal show believable reflections and outdoor ambient light matches the sky.
+
+### 1.4 Post-processing stack
+
+- Add `EffectComposer` with, in order: scene render, ambient occlusion (`GTAOPass`), bloom (`UnrealBloomPass`, subtle, for lamps and muzzle flash), output/tone mapping, anti-aliasing (multisampled target or SMAA).
+- Bypass or simplify the stack in the tactical/overhead views and in thermal view.
+- Wire each effect into the quality presets. Report frame-time cost per effect.
+- Motion blur and depth of field are not planned; they suit a fast shooter more than a tactical game. Revisit only if the owner asks.
+
+Done when: corners and furniture bases show soft contact shadows, bright sources glow slightly, edges are clean, and High holds 60 fps at 1080p.
+
+### 1.5 Shadow quality
+
+- Switch to soft shadows, fit the sun's shadow area to the house, and tune bias to remove acne and detached shadows.
+- Shadow resolution follows the quality preset.
+
+Done when: sun shadows through windows are sharp-edged at contact, soft further away, with no shimmering while walking.
+
+---
+
+## Phase 2: Lighting (hold lifted)
+
+### 2.1 Lighting design proposal — Propose first
+
+Read `src/lighting.js`, `src/scene-lighting.js` and `scripts/lighting-preview.html` in full, then propose how real light fittings and a baked light volume fit with what exists. The proposal must answer:
+
+- How the existing room light field, power cuts and night-vision amplification carry over.
+- **How baked light stays correct when walls, floors and doors are destroyed or opened.** The reference never has to solve this; we do. Likely answer: rebake only the affected region, spread over a few frames.
+- How many real-time lights are affordable (expected: a handful nearest the camera, shadows from the sun plus at most one or two fittings).
+- Whether guard sight (`darknessSightFactor`) reads from the same light data so that what looks dark is dark to guards.
+
+Done when: the owner approves a written proposal and a preview page showing one room lit the new way.
+
+### 2.2 Light fittings and lamps
+
+- Add fittings to the furniture kit and maps: ceiling fixtures, recessed lights, the lamps already drawn on nightstands and end tables, bathroom vanity lights, exterior porch lights.
+- Each fitting has a position, colour, strength and a circuit, so the existing power-cut rule can switch them.
+- Lit fittings glow (emissive material, picked up by bloom).
+
+Done when: every Martelli room has fittings placed from the reference photos and they respond to a power cut.
+
+### 2.3 Baked indoor light volume
+
+- Build what 2.1 approved: at load, compute a coarse 3D grid of light for the house from windows and fittings, with walls as occluders, and sample it in the material patch that already exists for walls and floors, extended to furniture and characters.
+- Add a "Capturing light" stage to loading and log the bake time.
+- Rebake on destruction, door and power changes as designed in 2.1.
+
+Done when: rooms have visible light falloff from windows and lamps, interiors with the lights off are properly dark, and blowing a hole in an exterior wall lets daylight in.
+
+### 2.4 Sun patches, time of day and weather
+
+- Time-of-day setting (day, dusk, night) driving sun angle, sky, exposure and which fittings are on.
+- Tie the existing fog and rain weather rules into sky colour and ambient light.
+
+Done when: the same mission reads clearly differently at day, dusk and night, and guards' sight follows.
+
+---
+
+## Phase 3: Materials everywhere
+
+### 3.1 Full material sets for existing surfaces
+
+- Extend `src/surface-textures.js` so each finish produces colour, a surface-bump (normal) map and a roughness map from the same generated height pattern and fixed seed.
+- Extend the world-space shader patch in `src/surface-materials.js` to apply them on walls and floors.
+- Update the Finishes view on the preview page to show them under a moving light.
+
+Done when: tile grout, plank joints, carpet pile and siding laps catch light as relief, not as flat print.
+
+### 3.2 Furniture materials
+
+- Give `src/furniture.js` boxes a material name instead of a flat colour (wood grains, fabric, leather, painted cabinet, stone counter, stainless, white ceramic, glass, mirror).
+- Add those finishes to the texture generator and apply them in `src/furniture-mesh.js`. Keep draw calls low by batching per material.
+
+Done when: every furniture piece on the preview page is textured and the Martelli frame time is within budget.
+
+### 3.3 Doors, ceilings, glass and exterior
+
+- White two-panel doors with bronze levers, ceiling texture, window glass with reflection and slight tint, mirrors, grass and ground outside.
+
+Done when: no flat untextured surface remains in a walk-through of Martelli.
+
+### 3.4 Baked contact shading and softened edges
+
+- Bake soft contact shading into static geometry as vertex colours at load, as the reference does, to back up screen-space ambient occlusion on Low.
+- Replace razor-sharp box edges on furniture with slightly bevelled or rounded boxes where it is cheap.
+
+Done when: furniture no longer reads as stacked boxes at arm's length.
+
+---
+
+## Phase 4: Trim and architecture (hold lifted)
+
+Trim is drawn-only unless noted. It must never change collision, sight lines or the walking grid, and a test should assert that.
+
+### 4.1 Baseboards, casings and door frames
+
+- Generate tall white baseboards along every interior wall run, wide white casings around doors and windows, and door frames with stops, from the existing wall and opening data.
+- Trim attached to a wall piece disappears when that piece is destroyed.
+
+Done when: every Martelli room has trim and shooting out a wall section removes its trim.
+
+### 4.2 Stairs, railings and fireplaces
+
+- Entry stair guard with newels, handrail and iron balusters; carpeted treads on the lower flight.
+- Detail the stone and corner fireplaces, the brick arch at the wet bar and the arched alcove.
+
+### 4.3 Roof, deck and site
+
+- Pitched roof (hidden in overhead and tactical views, like ceilings), vaulted great-room ceiling and primary-bedroom tray ceiling if cheap.
+- Deck screens, picket rail, posts and exterior stairs with a landing; covered patio below. **Deck stairs add an outdoor route between floors: confirm with the owner and update guard routes and tests.**
+- Sloped side yards with retaining walls, driveway, simple trees and shrubs. **Propose first** for the terrain part.
+
+### 4.4 Known map gaps
+
+Work through "Known gaps in the Martelli map" in the handoff: the near-continuous great-room window wall, the garage floor level with its side door and two overhead doors, the under-stair cubby. Each changes collision or window counts, so update the affected tests deliberately.
+
+Done when (phase): exterior and interior screenshots from the same angles as the reference photos are recognisably the same house.
+
+---
+
+## Phase 5: Characters and weapons
+
+### 5.1 Skinned guard bodies — Propose first
+
+- Replace the capsule segments in `src/npc-visual.js` with one skinned mesh per guard, generated in code (torso, limbs, head, hands, boots, vest, helmet), bound to bones that follow the joints `src/npc-body.js` already simulates. Poses, wounds and ragdolls then carry over for free.
+- Variation by seed: build, clothing colours, gear. Cloth and skin materials from Phase 3.
+- Propose with a turntable on `scripts/npc-preview.html` before replacing the in-game guards.
+
+Done when: guards read as people at 3 m, hit capsules still line up with the visible body, and eight guards stay within budget.
+
+### 5.2 First-person weapon and hands
+
+- Model each firearm in `src/kit.js` in code from primitives, lathes and extrusions, plus arms and gloves, drawn in a separate view layer so it never clips into walls.
+- Melee and thrown items after firearms.
+
+Done when: every carried item has a visible first-person model.
+
+### 5.3 Weapon handling feel
+
+- Aim-down-sights with a real sight picture, visual recoil and recovery, sway, reload and equip animations driven by the existing timings, shell ejection, improved muzzle flash with a brief light.
+- These are presentation only. Hit rays, cadence, magazines and penetration in `src/weapons.js` do not change.
+
+Done when: firing, reloading and switching feel weighty, and all weapon tests pass untouched.
+
+---
+
+## Phase 6: Effects, physics and sound
+
+### 6.1 Impact effects and decals
+
+- Per-material impact response keyed off what the ray hit (drywall, wood, masonry, glass, metal, fabric, flesh): dust, chips, sparks, splinters.
+- Bullet-hole and scorch decals with a capped pool, removed with the piece they sit on.
+- Better explosions, fire and smoke; glass shards.
+
+### 6.2 Loose physics: casings, debris, doors and chairs
+
+- Short-lived rigid bits (casings, wall chunks) using the same contact queries as the ragdolls, capped and put to sleep quickly.
+- Doors that swing with momentum and can be pushed or kicked, if the owner wants it: this touches `src/doors.js` and guard pathing, so **Propose first**.
+- Optional: light furniture (chairs, stools) that can be shoved or knocked over. Also **Propose first**; it affects cover, sight and the walking grid.
+
+### 6.3 Movement feel
+
+- Acceleration and deceleration, subtle head bob and landing dip, lean, footstep timing tied to speed and surface.
+- Mantling over low cover is a gameplay change: **Propose first**.
+
+### 6.4 Sound
+
+- Grow `src/audio.js` into a synthesized sound set: distinct weapon reports, suppressed variants, reloads, casings on each floor type, footsteps per surface for player and guards, doors, glass, impacts, explosions, guard radio chatter.
+- A mix bus with a compressor, positional sound, room reverb sized from the current room, and muffling through walls using the existing obstruction checks.
+- Sound matters to play here: what the player hears should match what guards are deemed to have heard.
+
+Done when (phase): a firefight in the great room leaves marks, debris and brass, and can be followed by ear.
+
+---
+
+## Phase 7: Interface and menus
+
+### 7.1 Interface foundation — Propose first
+
+- A small design system in `src/style.css`: one type scale, colour tokens, spacing, button and panel styles, all sized relative to the window so the layout holds from 1280×720 to 4K. Icons as inline SVG.
+- Propose with a static mock of the HUD and one menu before converting anything.
+
+### 7.2 In-mission HUD
+
+- Rebuild the HUD on the new system: health and stance, weapon and ammunition, equipment, objective and compass, guard-alert state, interaction prompts, hit and damage-direction feedback, radio intercepts.
+- A minimal mode and a HUD scale setting.
+
+### 7.3 Settings screen
+
+- Tabbed settings: Graphics (preset plus individual toggles from Phase 1), Audio (master, effects, music, radio), Controls (sensitivity, invert, key bindings with conflict detection), Interface (HUD scale, crosshair, hints), Game (the existing sandbox rules, with import and export kept).
+
+### 7.4 Loading, briefing, planning and debrief screens
+
+- A staged loading screen that names what is being built, as the reference does.
+- Main menu, mission briefing with the floor plan, the loadout and planning screen restyled (`src/menus.js`), pause menu, and an after-action debrief with timeline and statistics.
+
+Done when (phase): a new player can go from the main menu through briefing, loadout, mission and debrief without touching the side panel.
+
+---
+
+## Phase 8: Compound-assault game loop (design questions)
+
+Not polish, but the plan's destination. These need the owner's decisions before any work, and can be discussed at any time in parallel with the phases above:
+
+- Is the player one operator or a team that is given orders?
+- Does planning mean drawing routes and timings on the floor plan before deployment, or choosing entry point and kit as now?
+- Objectives beyond retrieval: hostage rescue, arrest, clear, defuse?
+- Scoring and failure: time, noise, casualties, rules of engagement?
+- More compounds, or one deep one (Martelli)?
+
+## Risks to watch
+
+- **Destruction versus baked lighting and trim.** Every baked or decorative layer must react to pieces being removed. Design for it in 2.1 and 4.1 rather than patching later.
+- **Draw calls.** Structure is drawn in a few instanced batches today. Textured furniture, trim and fittings can multiply that; batch by material and measure each step.
+- **Special views.** Night vision, thermal, the scope, and the tactical and overhead cameras each need checking after every rendering change.
+- **Test routes.** Walking-route and window-count tests encode the current layout. Change them on purpose, never to make a failure go away.
+- **Bundle size.** The build already warns about chunk size. Post-processing add-ons grow it; consider splitting preview pages and loading heavy modules after the menu appears.
