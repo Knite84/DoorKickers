@@ -42,6 +42,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   scene.add(firstPerson);
   const mapCamera = new THREE.OrthographicCamera(-17, 17, 14, -14, 0.1, 100);
   mapCamera.position.set(0, 45, 0); mapCamera.up.set(0, 0, -1); mapCamera.lookAt(0, 0, 0);
+  let lookSensitivity = 1, lookInvert = 1;
   let view = 'first', mapOpen = false, yaw = -0.55, pitch = 0, recoil = 0, selectedLevel = 0;
   let currentCamera = firstPerson;
   const pointer = new THREE.Vector2();
@@ -51,7 +52,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     const rect = canvas.getBoundingClientRect();
     pointer.set((event.clientX - rect.left) / rect.width * 2 - 1, -(event.clientY - rect.top) / rect.height * 2 + 1);
     if ((document.pointerLockElement === canvas || (event.buttons & 2) !== 0) && !mapOpen && view === 'first') {
-      yaw -= event.movementX * 0.002; pitch = THREE.MathUtils.clamp(pitch - event.movementY * 0.002, -1.35, 1.35);
+      yaw -= event.movementX * 0.002 * lookSensitivity; pitch = THREE.MathUtils.clamp(pitch - event.movementY * 0.002 * lookSensitivity * lookInvert, -1.35, 1.35);
     }
   };
   canvas.addEventListener('pointermove', pointerMove);
@@ -624,6 +625,8 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     getFloor: () => selectedLevel,
     setFloor: level => { selectedLevel = Math.max(0, Math.min((map.levels?.length ?? 1) - 1, Math.trunc(level) || 0)); },
     cycleFloor: () => { selectedLevel = (selectedLevel + 1) % (map.levels?.length ?? 1); return map.levels?.[selectedLevel]?.name ?? 'Ground floor'; },
+    // Mouse look scale and vertical inversion (src/settings.js).
+    setLook: ({ sensitivity = 1, invertY = false } = {}) => { lookSensitivity = sensitivity; lookInvert = invertY ? -1 : 1; },
     look: (horizontal, vertical) => { if (view === 'first' && !mapOpen) { yaw -= horizontal; pitch = THREE.MathUtils.clamp(pitch + vertical, -1.35, 1.35); } },
     reset: (heading = -0.55) => { yaw = heading; pitch = 0; recoil = 0; selectedLevel = 0; for (const effect of effects) { scene.remove(effect.mesh); if (effect.disposable) { effect.mesh.geometry.dispose(); effect.mesh.material.dispose(); } } effects.length = 0; },
     movement: (x, z) => view === 'first' ? [x * Math.cos(yaw) + z * Math.sin(yaw), -x * Math.sin(yaw) + z * Math.cos(yaw)] : [x, z],

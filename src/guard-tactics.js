@@ -140,6 +140,6 @@ export function fireGuardShot(state,map,rules,guard) {
   for (const prop of map.props) block([prop.position[0],elevation(prop)+propHeight(prop)/2,prop.position[1]],[prop.size[0],propHeight(prop),prop.size[1]]);
   const exposed=playerEye(state);
   const hit=rayCapsule(origin,direction,[state.player[0],(state.playerY??0)+0.3,state.player[1]],[exposed[0],exposed[1]-0.05,exposed[2]],0.28,stop);
-  if(hit!==null) { stop=hit; damagePlayer(state,rules,rules.guardDamage); }
+  if(hit!==null) { stop=hit; damagePlayer(state,rules,rules.guardDamage,[origin[0],origin[2]]); }
   state.events.push({type:'guard-shot',origin,position:origin.map((v,i)=>v+direction[i]*stop),hitPlayer:hit!==null});
 }

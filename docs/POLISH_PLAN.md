@@ -21,7 +21,7 @@ Read [HANDOFF.md](HANDOFF.md) first for the state of the repo and the working ag
   - When you finish building a step, mark it ◐ and list its open checks in the table. Never mark ☑ yourself.
   - A ◐ step does not block the next step. Checks that need the owner's machine, such as frame timing, are collected in the handoff.
 - Steps marked **Propose first** are open-ended. Show the owner a short proposal, with a preview page or screenshot where possible, and wait for a go-ahead before building.
-- Keep `npm test` green (232 passing on 2026-11-12). Add tests for anything that is pure data or geometry. Change layout tests only on purpose, and say why in the step's notes.
+- Keep `npm test` green (246 passing on 2026-11-12). Add tests for anything that is pure data or geometry. Change layout tests only on purpose, and say why in the step's notes.
 - **Verify every visual step in the browser** on the Martelli map. Follow **Verification** below.
 - When a step lands, record it in two places:
   - **This plan:** update its row in the status table and add a short **Built** note under the step: what changed, what was seen, what is open, and before and after screenshot links.
@@ -104,10 +104,10 @@ These are traps that have already cost time. Follow them on every rendering chan
 | 6.2 | Loose physics: casings, debris, doors, chairs | ☐ |  | Opus |
 | 6.3 | Movement feel | ☐ |  | Sonnet (mantling: Opus) |
 | 6.4 | Sound | ☐ |  | Opus brief, then Sonnet |
-| 7.1 | Interface foundation | ☐ |  | Opus to propose |
-| 7.2 | In-mission HUD | ☐ |  | Sonnet |
-| 7.3 | Settings screen | ☐ |  | Sonnet |
-| 7.4 | Loading, briefing, planning and debrief screens | ☐ |  | Sonnet |
+| 7.1 | Interface foundation | ◐ | Not proposed first, by the owner's instruction to build 7.2 to 7.4. Only tokens and a window-relative scale exist (`src/ui.css`); the older `style.css` still carries the map banner and kit menu | Opus to propose |
+| 7.2 | In-mission HUD | ◐ | Owner look at the HUD at several window sizes; damage arrow and window-climb prompt not seen in play; minimal mode and HUD scale not seen | Sonnet |
+| 7.3 | Settings screen | ◐ | Mouse sensitivity, invert and master volume not tried in play; rebound keys not played with | Sonnet |
+| 7.4 | Loading, briefing, planning and debrief screens | ◐ | Debrief seen only with test data, not at the end of a real mission; kit menu not restyled; the planning screen is still the existing dialog | Sonnet |
 | 8 | Compound-assault game loop (design questions) | ☐ | Owner decisions | Opus, with the owner |
 
 ## What the reference game does
@@ -388,7 +388,7 @@ Goal: tall white baseboards along interior wall faces, wide white casings around
 - Baseboards sit on the bottom row of drywall skins and, on exterior walls, on the inside face of the masonry pieces. Rails (height 1) and walls above a floor level, such as the strip over a window, are skipped. Runs are clipped where a wall ends inside a door leaf.
 - Door casings are floor-to-ceiling jambs, because doors are full wall height. Windows get jambs, a head and a sill apron. Each door also gets a thin lining over the wall ends beside the opening. Exterior walls are trimmed on the inside face only.
 - `src/scene.js` draws one `InstancedMesh` per kind (3 extra draws) and hides each box with the wall-piece rule, so trim goes with its piece and follows the overhead and tactical floor rules. Trim does not cast shadows. `scene.setTrim(on)` and a **Trim** checkbox on `scripts/interior-preview.html` give the on/off comparison.
-- Seen on the interior preview in Chrome (Medium): the primary bedroom window casing, a baseboard under the lake window, and baseboards disappearing when their pieces are set to `hp = 0`. No console errors. `npm test`: 232 passing.
+- Seen on the interior preview in Chrome (Medium): the primary bedroom window casing, a baseboard under the lake window, and baseboards disappearing when their pieces are set to `hp = 0`. No console errors. `npm test`: 246 passing.
 - **Not seen or open:** Low and High, night vision, thermal and the overhead and tactical views were not re-checked for trim. Frame time is unmeasured. No before and after screenshot files were saved. Contact shading dims the base of walls, so baseboards read as soft grey rather than bright white at the floor line.
 - **Existing window frames kept.** The grey frames in `windowFrames` stay inside the reveal, behind the new casings. Say if the casings should replace them.
 - **Known gap:** wall openings that are plain passages (`gap()`, such as the hall and kitchen openings) are not in `map.doors`, so they get no casing and show raw timber ends. Giving them casings needs a small data change to record passages; propose it before doing so.
@@ -400,7 +400,7 @@ Goal: tall white baseboards along interior wall faces, wide white casings around
 - **Carpet:** a flat beige slab on each of the 16 lower-flight treads (plain colour, not the carpet texture).
 - **Fireplaces** (`src/furniture.js`): both variants gained a hearth cap, dark surround, logs, lintel and corbelled mantel, all inside the old footprint. Collision height is unchanged at 2.35 m.
 - **Arches:** a new drawn-only kit kind `arch` (stepped brick header) over the wet-bar gap and the alcove gap, placed through `map.decor`.
-- **Preview:** four new views on `scripts/interior-preview.html` (stair head, lower flight, corner fireplace, wet-bar arch). Seen in Chrome at Medium, no console errors. The stone-wall fireplace and the alcove arch were not looked at. `npm test`: 232 passing.
+- **Preview:** four new views on `scripts/interior-preview.html` (stair head, lower flight, corner fireplace, wet-bar arch). Seen in Chrome at Medium, no console errors. The stone-wall fireplace and the alcove arch were not looked at. `npm test`: 246 passing.
 - **Open:** Low and High, night vision, thermal, overhead and tactical views, and frame time were not checked. Upper flight is not carpeted (the photos only show the lower one).
 
 **Data:**
@@ -471,7 +471,7 @@ Done when: every carried item has a visible first-person model.
 **Built (2026-11-12, firearms only).**
 - `src/weapon-models.js` (pure, tested in `test/weapon-models.test.js`) holds the rifle, pistol, shotgun and sniper as box and cylinder parts, each with a suppressor part and gloved hands with sleeves. `src/scene.js` builds one group per weapon and shows the equipped one. The suppressor toggles with the loadout, and the muzzle flash follows the muzzle.
 - `scripts/interior-preview.html` has a Weapon picker and a Suppressor checkbox (the weapon is hidden by default there).
-- Seen in Chrome at Medium: rifle, shotgun, sniper with suppressor and pistol, no console errors. `npm test`: 232 passing.
+- Seen in Chrome at Medium: rifle, shotgun, sniper with suppressor and pistol, no console errors. `npm test`: 246 passing.
 - **Not done:** the separate view layer, so long barrels can still clip into walls (it needs a second render pass that works with the post-processing stack, Opus-sized); hands on melee and thrown items, which keep their old box models; the minigun, unchanged. The old weapon bobbing and recoil are unchanged, so Step 5.3 is untouched. Models are dark and small at the bottom right; tune their position and colours against the owner's taste.
 
 ### 5.3 Weapon handling feel
@@ -531,14 +531,35 @@ Start from: `src/style.css`, the HUD markup built in `src/main.js`, and the dial
 
 ### 7.2 In-mission HUD
 
+**Built (2026-11-12, with 7.3 and 7.4).** The HUD markup is rebuilt in `src/main.js` and styled in the new `src/ui.css`. Pure rules live in `src/hud-model.js` (tested in `test/hud-model.test.js`).
+- Compass strip and heading readout, objective line, guard alert state (undetected, suspicious, searching, hunted), compact health with status and stance, weapon and ammo, vision and funds, door and window prompts from `nearbyInteraction`, a damage arrow, and the existing radio line.
+- The damage arrow needs a hit source. `damagePlayer` in `src/combat.js` takes an optional source and guard shots pass theirs; blasts and fire pass none, so they show no arrow. Nothing else about damage changed.
+- Controls hints are generated from the current key bindings.
+- Clusters scale with the window (`--hud-auto`) and the HUD scale setting. Minimal mode keeps health, ammo and the alert state.
+- Seen in Chrome at 1280×760: the HUD in play, the pause screen. Not seen: the damage arrow, minimal mode, HUD scale at other sizes, narrow windows.
+
 - Rebuild the HUD on the new system: health and stance, weapon and ammunition, equipment, objective and compass, guard-alert state, interaction prompts, hit and damage-direction feedback, radio intercepts.
 - A minimal mode and a HUD scale setting.
 
 ### 7.3 Settings screen
 
+**Built (2026-11-12).** The side panel is gone; **Settings** in the top bar and on the main and pause screens opens a tabbed dialog (`src/settings-menu.js`).
+- **Graphics:** the existing preset, performance and exposure controls. **Game:** the existing rules, preset, import and export. **Audio:** master volume. **Controls:** sensitivity, invert, and a key table. **Interface:** HUD scale, minimal HUD, crosshair style, control hints.
+- `src/settings.js` holds the schema, validation, saving and key bindings, with conflict detection that refuses a taken key and names its owner (`test/settings.test.js`). Tab and Esc are fixed.
+- The key handler in `main.js` now reads the bindings. Movement still also answers to the arrow keys.
+- **Not built:** music and radio volume sliders (those sounds do not exist yet; see 6.4), separate effects volume (gunfire volume stays a Game rule), and per-weapon bindings beyond slots 1 to 5.
+- Seen in Chrome: all five tabs, rebinding with a refused conflict and an accepted key saved to storage (reset afterwards).
+
 - Tabbed settings: Graphics (preset plus individual toggles from Phase 1), Audio (master, effects, music, radio), Controls (sensitivity, invert, key bindings with conflict detection), Interface (HUD scale, crosshair, hints), Game (the existing sandbox rules, with import and export kept).
 
 ### 7.4 Loading, briefing, planning and debrief screens
+
+**Built (2026-11-12).** `src/screens.js` provides the main menu, briefing, pause, debrief and loading screens, wired in `main.js`.
+- **Flow:** menu, briefing (floor plan drawn by `src/plan-view.js`, objective, entry, guards, conditions, kit, floor tabs), optional Loadout & planning (the existing kit dialog, unchanged), then Deploy with a staged loading screen (structure, guards and gear, light capture).
+- **Pause:** P, window blur or releasing the mouse opens the pause screen: Resume, Inventory & kit, Settings, Abort mission.
+- **Debrief:** time, shots, guards down, worst alert, and a timeline built by `src/debrief.js` from state changes (`test/ui-models.test.js`).
+- Seen in Chrome: menu, briefing on the courtyard and Martelli plans, the loading stages, pause, and the debrief with test data. The loading screen is nearly instant outside the throttled automation browser, so it may flash by.
+- Not done: restyling the kit dialog itself, and a real end-of-mission debrief was not reached in the browser.
 
 - A staged loading screen that names what is being built, as the reference does.
 - Main menu, mission briefing with the floor plan, the loadout and planning screen restyled (`src/menus.js`), pause menu, and an after-action debrief with timeline and statistics.

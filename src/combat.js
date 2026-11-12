@@ -31,9 +31,10 @@ export function damageGuard(state, guard, damage, hit) {
   afterHit(state, guard);
   return false;
 }
-export function damagePlayer(state, rules, damage) {
+export function damagePlayer(state, rules, damage, source) {
   if (damage <= 0 || rules.invulnerable || state.status !== 'active') return;
   state.health = Math.max(0, state.health - damage); state.hurtUntil = state.elapsed + 0.25;
+  if (source) state.lastHit = { time: state.elapsed, from: [source[0], source[1]] }; // drives the HUD damage arrow
   if (state.health === 0) state.status = 'captured';
 }
 export function alertGuards(state, rules, origin, radius = 18) {

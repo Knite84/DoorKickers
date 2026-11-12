@@ -1,4 +1,5 @@
 import './style.css';
+import './ui.css';
 import { schema, defaults, presets, restoreSavedRules } from './rules.js';
 import { maps, resolveMap } from './maps/index.js';
 import { createMission, stepMission, interact, distance, movementGait, toggleCrouch, jump } from './simulation.js';
@@ -12,22 +13,28 @@ import { bindCombatMouse } from './combat-input.js';
 import { togglePlayerCover, setPlayerPeek } from './player-cover.js';
 import { cutPower } from './lighting.js';
 import { exposureRange, graphicsPresets, loadGraphics, saveGraphics } from './graphics.js';
+import { alertState, headingDegrees, compassPoint, damageBearing, damageArrowOpacity, interactionPrompt, formatClock } from './hud-model.js';
+import { loadSettings, saveSettings, loadBindings, saveBindings, actionLookup, keyLabel } from './settings.js';
+import { createSettingsMenu } from './settings-menu.js';
+import { createScreens } from './screens.js';
+import { createTimeline, observeMission } from './debrief.js';
+import { nearbyInteraction } from './window-traversal.js';
 
 const app = document.querySelector('#app');
-document.body.classList.add('rules-hidden');
 app.innerHTML = `
   <header class="topbar">
     <a class="brand" href="./" aria-label="Stealth sandbox home"><span class="brand-mark">⌑</span><span>UNTITLED<span class="brand-sub">A STEALTH SANDBOX</span></span></a>
     <span class="build-tag">FIELD LAB <span> / </span> 003</span>
     <div class="view-tools"><button id="inventory-toggle" class="quiet">Tab · Inventory / kit</button><button id="view-toggle" class="quiet">V · First person</button><button id="map-toggle" class="quiet" aria-pressed="false">M · Map</button></div>
-    <button id="toggle-rules" class="quiet" aria-expanded="false">Sandbox rules <span>☷</span></button>
+    <button id="open-settings" class="quiet">Settings <span>⚙</span></button>
   </header>
   <main>
     <section class="viewport" aria-label="Playable mission">
-      <canvas id="world" tabindex="0" aria-label="3D mission. WASD moves, Q toggles nearby cover, hold X to peek and release to hide, Hold Shift to run, Ctrl creeps, C toggles crouch, F switches map floors, Tab opens inventory, E interacts, V changes view, M opens map, left mouse fires including while aiming or scoped, R reloads, H holsters, Z aims, B detonates charges."></canvas>
+      <canvas id="world" tabindex="0" aria-label="3D mission. Movement, view, inventory and the other controls are listed in the control hints and can be changed in Settings."></canvas>
       <div id="cover-status" hidden role="status"></div>
-      <div id="crosshair" aria-hidden="true">+</div><div id="hit-marker" aria-hidden="true">×</div>
+      <div id="crosshair" data-style="plus" aria-hidden="true"></div><div id="hit-marker" aria-hidden="true">×</div>
       <div id="scope-overlay" hidden aria-label="Sniper scope"><div class="scope-reticle"></div><span id="scope-zoom">4×</span></div><div id="damage-overlay" aria-hidden="true"></div><div id="flash-overlay" aria-hidden="true"></div>
+      <div id="damage-arrow" aria-hidden="true"><i></i></div>
       <button id="capture-mouse" class="capture-hint">Click here to aim · Esc releases mouse</button>
       <div id="detainment-banner" hidden role="status"></div>
       <section id="map-banner" hidden aria-label="Tactical map controls">
@@ -38,34 +45,39 @@ app.innerHTML = `
         <p id="scan-status" role="status" aria-live="polite">Reveal guards on every floor for 10 mission seconds.</p>
         <button id="cut-power">Cut building power</button><p id="power-status" role="status">Building electricity on.</p>
       </section>
-      <div class="mission-card"><div class="eyebrow">OPERATION / 01</div><h1>The quiet house</h1><p id="objective">Retrieve the archive and extract.</p><div class="mission-line"><span class="status-dot"></span><span id="phase">PLANNING</span><span id="clock">00:00</span></div><div id="render-stats" hidden aria-label="Rendering performance"></div></div>
+      <div class="mission-card"><div class="eyebrow">OPERATION / 01</div><h1>The quiet house</h1><p id="objective-card">Retrieve the archive and extract.</p><div class="mission-line"><span class="status-dot"></span><span id="phase">PLANNING</span><span id="clock">00:00</span></div><div id="render-stats" hidden aria-label="Rendering performance"></div></div>
       <div class="map-stamp">N ↑<br><span>COURTYARD RESIDENCE<br>1 UNIT = 1 METRE</span></div>
-      <div class="center-card" id="briefing"><div class="eyebrow">YOUR PLAN. YOUR RULES.</div><h2>Choose your kit.<br>Find your way.</h2><p>Retrieve the archive and extract. Plan your entry, choose weapons, ammunition and tools, then deploy. Doors and destructible interior partitions are alternative routes in the same guarded mission.</p><p class="muted">Tab opens inventory. E interacts. Left click fires while aimed or scoped. Headshots are lethal with every weapon and ammo configuration.</p><button id="deploy" class="primary">Loadout & planning <span>↗</span></button></div>
-      <div class="bottom-hud"><div class="telemetry"><div class="health-panel"><span class="eyebrow">PLAYER HEALTH</span><div class="health-value"><strong id="health">100</strong><span>/ 100</span></div><div id="health-meter" role="meter" aria-label="Player health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div id="health-fill"></div></div><span id="health-status">HEALTHY</span></div><div><span class="eyebrow">EXPOSURE</span><div class="meter"><div id="exposure"></div></div></div><div><span class="eyebrow">SUPPORT FUNDS</span><strong id="funds">$1,000</strong></div><div class="weapon-hud"><span class="eyebrow"><span id="equipped-name">ASSAULT RIFLE</span> / <span id="gait">WALK</span></span><strong id="ammo">30 / ∞</strong></div></div><p id="message" role="status" aria-live="polite">Choose your kit and plan your approach.</p><p id="guard-radio" hidden role="status" aria-live="polite"></p><div class="controls"><span><kbd>WASD</kbd> Move</span><span><kbd>Tab</kbd> Inventory</span><span><kbd>E</kbd> Door / climb</span><span><kbd>Shift</kbd> Hold to run</span><span><kbd>Ctrl</kbd> Creep</span><span><kbd>C</kbd> Crouch</span><span><kbd>Space</kbd> Jump</span><span><kbd>Mouse 4</kbd> Weapon strike</span><span><kbd>P</kbd> Pause</span><span><kbd>LMB</kbd> Use/fire</span><span><kbd>1–5</kbd> Weapons</span><span><kbd>H</kbd> Holster</span><span><kbd>R</kbd> Reload</span><span><kbd>Z</kbd> Aim/scope</span><span><kbd>B</kbd> Detonate</span><span><kbd>V/M</kbd> View/map</span></div></div>
+      <div class="hud" id="hud">
+        <div class="hud-top"><div id="compass" aria-hidden="true"></div><div id="compass-heading" aria-hidden="true">N 000°</div><div id="alert-pill" data-level="0" role="status" aria-label="Guard alert state">UNDETECTED</div><div id="objective">Retrieve the archive and extract.</div></div>
+        <div class="hud-radio"><p id="guard-radio" hidden role="status" aria-live="polite"></p></div>
+        <div id="interaction-prompt" hidden role="status"></div>
+        <div class="hud-left">
+          <p id="message" role="status" aria-live="polite">Choose your kit and plan your approach.</p>
+          <div class="hud-panel health-panel"><span class="eyebrow">HEALTH</span><div class="health-value"><strong id="health">100</strong><span>/ 100</span></div><div id="health-meter" role="meter" aria-label="Player health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div id="health-fill"></div></div><span id="health-status">HEALTHY</span><div class="stance-line"><span id="gait">WALK</span></div><div class="exposure-row"><span class="eyebrow">EXPOSURE</span><div class="meter"><div id="exposure"></div></div></div></div>
+        </div>
+        <div class="hud-right"><div class="hud-panel weapon-hud"><span class="name" id="equipped-name">ASSAULT RIFLE</span><strong id="ammo">30 / ∞</strong><div class="vision-line"><strong id="vision-status">DAY · NORMAL</strong></div><div><span class="eyebrow">FUNDS</span> <strong id="funds">$1,000</strong></div></div></div>
+        <div class="hud-hints" id="hints" aria-label="Control hints"></div>
+      </div>
+      <div id="screens"></div>
     </section>
-    <aside id="rules-panel" aria-label="Sandbox rules">
-      <div class="panel-heading"><div class="eyebrow">MAKE IT YOURS</div><h2>Sandbox rules</h2><p>A starting point, never a restriction.</p></div>
+  </main>
+  <div id="panel-sources" hidden>
+    <div id="graphics-panel">
+      <div class="setting"><label for="graphics-preset">Quality preset</label><select id="graphics-preset">${Object.keys(graphicsPresets).map(name => `<option>${name}</option>`).join('')}</select></div>
+      <div class="setting"><label for="graphics-stats">Show performance</label><input id="graphics-stats" type="checkbox" role="switch"></div>
+      <div class="setting"><label for="graphics-exposure">First-person exposure</label><output id="graphics-exposure-value" for="graphics-exposure" aria-live="off"></output><input id="graphics-exposure" type="range" min="${exposureRange.min}" max="${exposureRange.max}" step="0.05"></div>
+      <p id="graphics-notice" class="muted" role="status" hidden>Reload the page to apply the anti-aliasing change.</p>
+    </div>
+    <div id="game-panel">
       <label class="preset-label" for="preset">Starting preset</label><select id="preset">${Object.keys(presets).map(name => `<option>${name}</option>`).join('')}<option disabled>Custom</option></select>
-      <section class="settings-group" aria-labelledby="graphics-heading">
-        <h3 id="graphics-heading">Graphics</h3>
-        <div class="setting"><label for="graphics-preset">Quality preset</label><select id="graphics-preset">${Object.keys(graphicsPresets).map(name => `<option>${name}</option>`).join('')}</select></div>
-        <div class="setting"><label for="graphics-stats">Show performance</label><input id="graphics-stats" type="checkbox" role="switch"></div>
-        <div class="setting"><label for="graphics-exposure">First-person exposure</label><output id="graphics-exposure-value" for="graphics-exposure" aria-live="off"></output><input id="graphics-exposure" type="range" min="${exposureRange.min}" max="${exposureRange.max}" step="0.05"></div>
-        <p id="graphics-notice" class="muted" role="status" hidden>Reload the page to apply the anti-aliasing change.</p>
-      </section>
       <div id="settings"></div>
       <div class="rules-note"><span>↳</span><p>Entry point, guard count, budget, and door durability apply on a new deployment. Other changes apply live. Rain reduces sight to 85%; fog to 60%.</p></div>
-      <button id="restart" class="secondary">New deployment <span>↻</span></button>
       <div class="share-row"><button id="export" class="quiet">Export rules ↓</button><button id="import" class="quiet">Import rules ↑</button><input type="file" id="rules-file" accept=".json,application/json" hidden></div>
       <p id="rules-message" class="muted" role="status" aria-live="polite">Saved automatically on this browser.</p>
-      <div class="panel-footer">PROTOTYPE 0.3 <span>Built to be changed.</span></div>
-    </aside>
-  </main>`;
+    </div>
+  </div>`;
 
 const $ = selector => document.querySelector(selector);
-$('.controls').insertAdjacentHTML('beforeend','<span><kbd>Q</kbd> Cover</span><span><kbd>X</kbd> Hold to peek</span>');
-$('.controls').insertAdjacentHTML('beforeend','<span><kbd>N</kbd> Night vision</span><span><kbd>T</kbd> Thermals</span>');
-$('.telemetry').insertAdjacentHTML('afterbegin','<div class="vision-panel"><span>LIGHT / VISION</span><strong id="vision-status">DAY · NORMAL</strong></div>');
 let rules = { ...defaults };
 try {
   const saved = localStorage.getItem('stealth-rules-v1');
@@ -73,6 +85,10 @@ try {
 } catch { /* Storage is optional; malformed saved rules fall back to defaults. */ }
 let loadout = defaultLoadout();
 try { const saved = localStorage.getItem('stealth-loadout-v1'); if (saved) loadout = validateLoadout(JSON.parse(saved)); } catch { /* Invalid saved kits use defaults. */ }
+let playerSettings = loadSettings(), bindings = loadBindings(), lookup = actionLookup(bindings);
+const timelineHolder = { current: createTimeline() };
+const screenActions = {};
+const screens = createScreens($('#screens'), new Proxy({}, { get: (_, name) => (...args) => screenActions[name]?.(...args) }));
 let plannedMap = 'courtyard';
 try { const saved = localStorage.getItem('stealth-map-v1'); if (Object.hasOwn(maps, saved)) plannedMap = saved; } catch { /* Optional storage. */ }
 let map = resolveMap(plannedMap);
@@ -133,10 +149,10 @@ $('#graphics-stats').addEventListener('change', event => {
   resetStats();
   saveGraphics(graphics);
 });
-let scene;
+let scene, webglFailed = false;
 try { scene = createScene($('#world'), map, scenePreset()); }
 catch (error) {
-  $('#briefing').innerHTML = '<h2>3D rendering unavailable</h2><p>This prototype needs a browser with WebGL2 and hardware acceleration enabled.</p>';
+  webglFailed = true;
   console.error(error);
 }
 const settings = $('#settings');
@@ -183,11 +199,31 @@ $('#preset').addEventListener('change', event => {
 function message(text) { $('#message').textContent = text; }
 const held = new Set();
 const audio = createGunAudio();
+function applySettings() {
+  document.documentElement.style.setProperty('--hud-user', String(playerSettings.hudScale));
+  document.body.classList.toggle('hud-minimal', playerSettings.minimalHud);
+  $('#crosshair').dataset.style = playerSettings.crosshair;
+  $('#hints').hidden = !playerSettings.showHints;
+  scene?.setLook({ sensitivity: playerSettings.sensitivity, invertY: playerSettings.invertY });
+  audio.setMaster(playerSettings.masterVolume);
+}
+function fitHud() {
+  const box = $('.viewport').getBoundingClientRect();
+  document.documentElement.style.setProperty('--hud-auto', Math.max(0.8, Math.min(2, Math.min(box.width / 1280, box.height / 720))).toFixed(3));
+}
+new ResizeObserver(fitHud).observe($('.viewport')); fitHud();
+const hint = (label, ...codes) => `<span>${codes.map(code => `<kbd>${keyLabel(code)}</kbd>`).join('')}${label}</span>`;
+function renderHints() {
+  const b = bindings;
+  $('#hints').innerHTML = [hint('Move', b.forward, b.left, b.back, b.right), hint('Inventory', 'Tab'), hint('Interact', b.interact), hint('Run', b.run), hint('Creep', b.creep), hint('Crouch', b.crouch), hint('Jump', b.jump),
+    hint('Fire', 'LMB'), hint('Aim', b.aim), hint('Reload', b.reload), hint('Holster', b.holster), hint('Cover', b.cover), hint('Peek', b.peek), hint('Map', b.map), hint('View', b.view), hint('Pause', b.pause)].join('');
+}
+renderHints(); applySettings();
 let view = 'first', mapOpen = false, mapWasActive = false, firing = false, captureFailed = false, hitUntil = 0, menuVisible = false, aimed = false, scopeZoom = 4;
 const canvas = $('#world');
 function releaseMouse() {
   firing = false;
-  held.delete('KeyX'); setPlayerPeek(state,map,false);
+  held.delete(bindings.peek); setPlayerPeek(state,map,false);
   if (document.pointerLockElement === canvas) document.exitPointerLock();
 }
 function captureMouse() {
@@ -277,7 +313,7 @@ const kitMenu = createKitMenu({
     if (menuWasActive && menuPaused) state.status = 'paused';
     aimed = false; held.clear(); releaseMouse();
   },
-  onClose: () => { menuVisible = false; if (menuWasActive && menuPaused && state.status === 'paused') state.status = 'active'; canvas.focus(); },
+  onClose: () => { menuVisible = false; if (menuWasActive && menuPaused && state.status === 'paused') state.status = 'active'; if (screens.current() === 'briefing') showBriefing(); else if (!screens.current()) canvas.focus(); },
   equip: id => { equip(state, id); aimed = false; }, detonate,
   restock: () => restockEquipment(state),
 });
@@ -317,27 +353,59 @@ function shoot(now = performance.now()) {
     }
   } else if (state.status === 'active' && state.ammo === 0 && !state.reloadUntil) message('Magazine empty. Press R to reload.');
 }
-function deploy() {
-  if (!scene) return;
-  const nextMap = resolveMap(plannedMap);
-  if (map !== nextMap) {
-    releaseMouse(); scene.dispose(); map = nextMap; scene = createScene(canvas, map, scenePreset()); scene.setView(view);
-    updateMapLabels();
-  }
-  held.clear(); state = createMission(map, missionRules(), loadout); state.status = 'active'; showSeed(); resetStats();
-  mapOpen = false; firing = false; aimed = false; scene.reset(state.spawnYaw); scene.setMap(false);
-  $('#map-banner').hidden = true; $('#map-toggle').setAttribute('aria-pressed', 'false');
-  $('.viewport').classList.remove('map-open');
-  $('#briefing').hidden = true;
-  message(map.description ?? 'Mission live. Click to aim. V changes view; M opens map. Interior partition is breakable.');
-  $('#world').focus();
+let deploying = false;
+const nextFrame = () => new Promise(resolve => requestAnimationFrame(() => resolve()));
+async function deploy() {
+  if (!scene || deploying) return;
+  deploying = true; kitMenu.close();
+  const progress = screens.loading(['Building the structure', 'Placing guards and gear', 'Capturing light']);
+  try {
+    await nextFrame(); await nextFrame();
+    const nextMap = resolveMap(plannedMap);
+    if (map !== nextMap) {
+      releaseMouse(); scene.dispose(); map = nextMap; scene = createScene(canvas, map, scenePreset()); scene.setView(view);
+      scene.setLook({ sensitivity: playerSettings.sensitivity, invertY: playerSettings.invertY });
+      updateMapLabels();
+    }
+    progress.stage(1); await nextFrame();
+    held.clear(); state = createMission(map, missionRules(), loadout); showSeed(); resetStats();
+    timelineHolder.current = createTimeline();
+    mapOpen = false; firing = false; aimed = false; scene.reset(state.spawnYaw); scene.setMap(false);
+    $('#map-banner').hidden = true; $('#map-toggle').setAttribute('aria-pressed', 'false');
+    $('.viewport').classList.remove('map-open');
+    progress.stage(2);
+    for (const start = performance.now(); scene.capturingLight() && performance.now() - start < 4000;) await nextFrame();
+    progress.finish(); await new Promise(resolve => setTimeout(resolve, 250));
+    state.status = 'active'; screens.hide();
+    message(map.description ?? 'Mission live. Click to aim. V changes view; M opens map. Interior partition is breakable.');
+    $('#world').focus();
+  } finally { deploying = false; }
 }
-$('#deploy')?.addEventListener('click', () => kitMenu.open('planning'));
-$('#restart').addEventListener('click', () => kitMenu.open('planning'));
-$('#toggle-rules').addEventListener('click', () => {
-  const collapsed = document.body.classList.toggle('rules-hidden');
-  $('#toggle-rules').setAttribute('aria-expanded', String(!collapsed));
+function showBriefing() { screens.briefing({ map: resolveMap(plannedMap), rules, loadout, weapons }); }
+function showPause() { screens.pause({ map, elapsed: formatClock(state.elapsed) }); }
+function resume() {
+  if (state.status !== 'paused' || mapOpen || menuVisible) return;
+  screens.hide(); state.status = 'active'; message('Mission resumed.'); captureMouse();
+}
+let settingsWasActive = false;
+const settingsMenu = createSettingsMenu({
+  getSettings: () => playerSettings, setSettings: next => { playerSettings = next; saveSettings(playerSettings); applySettings(); },
+  getBindings: () => bindings, setBindings: next => { bindings = next; lookup = actionLookup(bindings); saveBindings(bindings); renderHints(); },
+  graphicsPanel: $('#graphics-panel'), gamePanel: $('#game-panel'),
+  onOpen: () => {
+    if (mapOpen) toggleMap();
+    menuVisible = true; settingsWasActive = state.status === 'active';
+    if (settingsWasActive) state.status = 'paused';
+    aimed = false; held.clear(); releaseMouse();
+  },
+  onClose: () => { menuVisible = false; if (settingsWasActive && state.status === 'paused') state.status = 'active'; if (!screens.current()) canvas.focus(); },
 });
+Object.assign(screenActions, {
+  start: showBriefing, settings: () => settingsMenu.open(), menu: () => screens.menu(), planning: () => kitMenu.open('planning'), deploy, resume,
+  loadout: () => kitMenu.open('inventory'),
+  abort: () => { releaseMouse(); state.status = 'planning'; screens.menu('Mission aborted.'); },
+});
+$('#open-settings').addEventListener('click', () => settingsMenu.open());
 $('#scan').addEventListener('click', () => {
   if (!mapOpen || state.status !== 'paused' || state.scanUntil > state.elapsed) return;
   if (state.budget < 250) return message('Not enough support funds. Change budget and deploy again, or enable free live tracking.');
@@ -371,14 +439,15 @@ $('#rules-file').addEventListener('change', async event => {
 });
 function pause() {
   if (mapOpen || menuVisible) return;
-  if (state.status === 'active') { state.status = 'paused'; held.clear(); releaseMouse(); message('Paused. P resumes, or click the aim button.'); }
-  else if (state.status === 'paused') { state.status = 'active'; message('Mission resumed.'); }
+  if (state.status === 'active') { state.status = 'paused'; held.clear(); releaseMouse(); showPause(); }
+  else if (state.status === 'paused') resume();
 }
 window.addEventListener('keydown', event => {
   if (menuVisible) return;
-  if (mapOpen && ['KeyM', 'KeyF'].includes(event.code)) {
+  const action = lookup.get(event.code);
+  if (mapOpen && (action === 'map' || action === 'floor')) {
     event.preventDefault();
-    if (!event.repeat) { if (event.code === 'KeyM') toggleMap(); else toggleFloor(); }
+    if (!event.repeat) { if (action === 'map') toggleMap(); else toggleFloor(); }
     return;
   }
   if (event.code === 'Tab' && !event.shiftKey) {
@@ -386,48 +455,57 @@ window.addEventListener('keydown', event => {
     if (!event.repeat) openKit();
     return;
   }
-  if (event.target.closest('input, select, button, a')) return;
+  if (action === 'pause' && !event.repeat && !event.target.closest?.('input, select')) { pause(); return; }
+  if (event.target.closest?.('input, select, button, a')) return;
   if (['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ControlLeft', 'ControlRight'].includes(event.code) || event.ctrlKey) event.preventDefault();
   held.add(event.code);
   if (event.repeat) return;
-  if (event.code === 'KeyV') toggleView();
-  if (event.code === 'KeyM') toggleMap();
-  if (event.code === 'KeyF') toggleFloor();
-  if (event.code === 'KeyH') { toggleHolster(state); aimed = false; firing = false; }
-  if(['KeyN','KeyT'].includes(event.code)&&state.status==='active'&&!mapOpen){
-    const id=event.code==='KeyN'?'nightvision':'thermal';
-    message(equip(state,id)?`${state.inventory.vision==='off'?'Normal vision':items[id].name} active.`:`${items[id].name} not carried. Add it in loadout planning.`);
+  if (action === 'view') toggleView();
+  if (action === 'map') toggleMap();
+  if (action === 'floor') toggleFloor();
+  if (action === 'holster') { toggleHolster(state); aimed = false; firing = false; }
+  if (['nightvision', 'thermal'].includes(action) && state.status === 'active' && !mapOpen) {
+    const id = action;
+    message(equip(state, id) ? `${state.inventory.vision === 'off' ? 'Normal vision' : items[id].name} active.` : `${items[id].name} not carried. Add it in loadout planning.`);
   }
-  if (event.code === 'KeyQ' && state.status === 'active' && !mapOpen) {
-    const direction=scene?.aim(state).direction;
-    if(direction) state.facing=[direction[0],direction[2]];
-    message(togglePlayerCover(state,map));
+  if (action === 'cover' && state.status === 'active' && !mapOpen) {
+    const direction = scene?.aim(state).direction;
+    if (direction) state.facing = [direction[0], direction[2]];
+    message(togglePlayerCover(state, map));
   }
-  if (event.code === 'KeyX' && state.status === 'active' && !mapOpen) setPlayerPeek(state,map,true);
-  if (event.code === 'KeyC' && state.status === 'active' && !mapOpen) message(toggleCrouch(state, map));
-  if (event.code === 'KeyR' && reload(state)) message('Reloading…');
-  if (event.code === 'KeyZ') toggleAim();
-  if (event.code === 'KeyB') detonate();
-  if (event.code.startsWith('Digit') && Number(event.code.slice(5)) >= 1 && Number(event.code.slice(5)) <= 5) { equip(state, ['rifle', 'pistol', 'shotgun', 'sniper', 'minigun'][Number(event.code.slice(5)) - 1]); aimed = false; }
-  if (event.code === 'KeyP') pause();
-  if (event.code === 'Space' && !mapOpen) jump(state, map);
-  if (event.code === 'KeyE') { const result = interact(state, map); if (result) message(result); }
+  if (action === 'peek' && state.status === 'active' && !mapOpen) setPlayerPeek(state, map, true);
+  if (action === 'crouch' && state.status === 'active' && !mapOpen) message(toggleCrouch(state, map));
+  if (action === 'reload' && reload(state)) message('Reloading…');
+  if (action === 'aim') toggleAim();
+  if (action === 'detonate') detonate();
+  if (action?.startsWith('weapon')) { equip(state, ['rifle', 'pistol', 'shotgun', 'sniper', 'minigun'][Number(action.slice(6)) - 1]); aimed = false; }
+  if (action === 'jump' && !mapOpen) jump(state, map);
+  if (action === 'interact') { const result = interact(state, map); if (result) message(result); }
 });
-window.addEventListener('keyup', event => { held.delete(event.code); if(event.code==='KeyX') setPlayerPeek(state,map,false); });
+window.addEventListener('keyup', event => { held.delete(event.code); if (lookup.get(event.code) === 'peek') setPlayerPeek(state, map, false); });
 window.addEventListener('blur', () => { held.clear(); firing = false; if (state.status === 'active') pause(); });
 document.addEventListener('visibilitychange', () => {
   resetStats();
   if (document.hidden && state.status === 'active') pause();
 });
+const compassTicks = [];
+for (let degrees = 0; degrees < 360; degrees += 15) {
+  const element = document.createElement('span');
+  element.className = degrees % 90 === 0 ? 'tick cardinal' : 'tick';
+  element.textContent = degrees % 45 === 0 ? compassPoint(degrees) : '·';
+  $('#compass').append(element); compassTicks.push({ degrees, element });
+}
+screens.menu(webglFailed ? '3D rendering is unavailable. This prototype needs a browser with WebGL2 and hardware acceleration enabled.' : '');
 let previous = performance.now(), oldStatus = state.status;
 function frame(now) {
   const frameTime = now - previous;
   const dt = Math.min(frameTime / 1000, 0.05); previous = now;
+  const down = (action, ...extra) => held.has(bindings[action]) || extra.some(code => held.has(code));
   const localInput = {
-    x: Number(held.has('KeyD') || held.has('ArrowRight')) - Number(held.has('KeyA') || held.has('ArrowLeft')),
-    z: Number(held.has('KeyS') || held.has('ArrowDown')) - Number(held.has('KeyW') || held.has('ArrowUp')),
-    creep: held.has('ControlLeft') || held.has('ControlRight'), running: held.has('ShiftLeft') || held.has('ShiftRight'),
-    peek: held.has('KeyX') && !menuVisible && !mapOpen,
+    x: Number(down('right', 'ArrowRight')) - Number(down('left', 'ArrowLeft')),
+    z: Number(down('back', 'ArrowDown')) - Number(down('forward', 'ArrowUp')),
+    creep: down('creep', 'ControlRight'), running: down('run', 'ShiftRight'),
+    peek: down('peek') && !menuVisible && !mapOpen,
   };
   if (!menuVisible) scene?.look((Number(held.has('KeyL')) - Number(held.has('KeyJ'))) * dt * 1.5, (Number(held.has('KeyI')) - Number(held.has('KeyK'))) * dt * 1.2);
   const movement = scene?.movement(localInput.x, localInput.z) ?? [localInput.x, localInput.z];
@@ -468,6 +546,25 @@ function frame(now) {
   $('#health-status').textContent = state.health <= 0 ? 'DOWNED' : state.health <= 25 ? 'CRITICAL · USE A MED KIT' : state.health <= 50 ? 'LOW HEALTH · FIND COVER' : state.health < 100 ? 'INJURED' : 'HEALTHY';
   const equipped = state.inventory.equipped;
   $('#equipped-name').textContent = (weapons[equipped]?.name ?? items[equipped]?.name ?? 'EMPTY HANDS').toUpperCase();
+  document.body.classList.toggle('on-screen', !!screens.current() && screens.current() !== 'pause');
+  const hudAlert = alertState(state);
+  $('#alert-pill').textContent = hudAlert.label; $('#alert-pill').dataset.level = String(hudAlert.level);
+  const heading = headingDegrees(state.facing);
+  $('#compass-heading').textContent = `${compassPoint(heading)} ${String(heading).padStart(3, '0')}°`;
+  if (!playerSettings.minimalHud) for (const tick of compassTicks) {
+    const diff = ((tick.degrees - heading + 540) % 360) - 180;
+    tick.element.hidden = Math.abs(diff) > 70; if (!tick.element.hidden) tick.element.style.left = `${50 + diff / 140 * 100}%`;
+  }
+  const target = state.status === 'active' && !mapOpen && !menuVisible ? nearbyInteraction(state, map) : null;
+  const promptText = interactionPrompt(target && (target.kind === 'door'
+    ? { kind: 'door', open: state.doors[target.index], locked: state.lockedDoors?.[target.index], broken: state.doorHealth[target.index] <= 0 }
+    : { kind: 'window', broken: state.windowHealth[target.index] <= 0, climbable: map.windows[target.index].climbable }));
+  $('#interaction-prompt').hidden = !promptText;
+  if ($('#interaction-prompt').textContent !== promptText) $('#interaction-prompt').textContent = promptText;
+  const arrowOpacity = damageArrowOpacity(state);
+  if (arrowOpacity > 0) $('#damage-arrow').style.setProperty('--bearing', `${damageBearing(state.player, state.facing, state.lastHit.from)}deg`);
+  $('#damage-arrow').style.opacity = String(arrowOpacity);
+  if (state.status === 'active') observeMission(timelineHolder.current, state);
   $('#ammo').textContent = equipped === 'unarmed' ? 'H · DRAW WEAPON' : items[equipped] ? `${items[equipped].action} · ${state.inventory.items[equipped]} left` : state.reloadUntil > state.elapsed ? 'RELOADING' : rules.unlimitedAmmo ? '∞ / ∞' : `${String(state.ammo).padStart(2, '0')} / ∞`;
   const detaining = state.detainingGuardId !== null && state.detainingGuardId !== undefined;
   $('#detainment-banner').hidden = !detaining || mapOpen || menuVisible;
@@ -484,7 +581,7 @@ function frame(now) {
   if($('#cover-status').textContent!==coverText) $('#cover-status').textContent=coverText;
   $('#crosshair').hidden = view !== 'first' || mapOpen || menuVisible || scoped || state.status !== 'active';
   $('#hit-marker').hidden = now > hitUntil;
-  $('#capture-mouse').hidden = view !== 'first' || mapOpen || menuVisible || scoped || !['active', 'paused'].includes(state.status) || document.pointerLockElement === canvas;
+  $('#capture-mouse').hidden = !!screens.current() || view !== 'first' || mapOpen || menuVisible || scoped || !['active', 'paused'].includes(state.status) || document.pointerLockElement === canvas;
   const exposure = Math.max(0, ...state.guards.map(g => g.suspicion));
   $('#exposure').style.width = `${exposure * 100}%`;
   $('#exposure').style.background = exposure > 0.6 ? '#f18c76' : '#b8d4a0';
@@ -497,17 +594,16 @@ function frame(now) {
   $('#scan').disabled = !mapOpen || state.status !== 'paused' || state.budget < 250 || pulseRemaining > 0;
   const scanStatus = pulseRemaining ? `Tracking guards · ${pulseRemaining}s remaining. Timer pauses with the map.` : state.budget < 250 ? 'Not enough support funds ($250 required).' : 'Reveal guards on every floor for 10 mission seconds.';
   if ($('#scan-status').textContent !== scanStatus) $('#scan-status').textContent = scanStatus;
-  $('#clock').textContent = `${String(Math.floor(state.elapsed / 60)).padStart(2, '0')}:${String(Math.floor(state.elapsed % 60)).padStart(2, '0')}`;
+  $('#clock').textContent = formatClock(state.elapsed);
   $('#phase').textContent = state.status.toUpperCase();
-  $('#objective').textContent = state.collected ? 'Archive secured. Return to extraction.' : 'Retrieve the archive and extract.';
+  const objectiveText = state.collected ? 'Archive secured. Return to extraction.' : `${map.objective?.label ?? 'Archive'}: retrieve it, then extract.`;
+  $('#objective').textContent = objectiveText; $('#objective-card').textContent = objectiveText;
   if (state.status !== oldStatus) {
     if (state.status === 'captured' || state.status === 'complete') {
       const success = state.status === 'complete';
       kitMenu.close();
       releaseMouse(); held.clear();
-      $('#briefing').hidden = false;
-      $('#briefing').innerHTML = `<div class="eyebrow">${success ? 'EXTRACTION COMPLETE' : 'MISSION INTERRUPTED'}</div><h2>${success ? 'Your way through.' : 'You were downed.'}</h2><p>${success ? `Archive retrieved. ${state.shots} shots fired; ${state.kills} guards eliminated.` : 'Health depleted. Try cover, different gear, a med kit, or different rules.'}</p><button id="retry" class="primary">Loadout & planning <span>↗</span></button>`;
-      $('#retry').addEventListener('click', () => kitMenu.open('planning'));
+      screens.debrief({ state, timeline: timelineHolder.current, map });
       message(success ? 'Mission complete.' : 'Health depleted. Replan your kit and try again.');
     }
     oldStatus = state.status;
