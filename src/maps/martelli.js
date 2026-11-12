@@ -250,6 +250,20 @@ furnish('barCounter','brick',342,373,'up',[3.48,0.4],undefined,0);
 for (const x of [305,340,375,410]) furnish('barStool','bar',x,349,'down',undefined,undefined,0);
 furnish('fridge','under',271,348,'up',undefined,undefined,0);
 furnish('cabinets','wetBar',342,496,'up',[3.48,0.6],undefined,0);
+// Laundry: dryer, washer and utility sink with uppers and a hanging rod along
+// the wall opposite the closet door.
+furnish('laundryMachine','dryer',856,343.5,'right'); furnish('laundryMachine','washer',856,378.5,'right');
+furnish('cabinets','laundry',851,422.5,'right');
+// Powder room: small vanity with an oval mirror, toilet at the far end.
+furnish('vanity','small',748,336.5,'down'); furnish('toilet','standard',748,433.5,'up');
+// Lower hall bath (Bedroom 5's): tub along the back wall, toilet and vanity on the side wall.
+furnish('tubShower','alcove',847.5,305,'down',undefined,undefined,0);
+furnish('toilet','standard',827.5,342,'right',undefined,undefined,0);
+furnish('vanity','single',823.75,396,'right',undefined,undefined,0);
+// Bedroom 4's bath: vanity then toilet along the side wall, tub across the far end.
+furnish('vanity','single',1059.75,381.5,'right',undefined,undefined,0);
+furnish('toilet','standard',1063.5,425,'right',undefined,undefined,0);
+furnish('tubShower','alcove',1083.5,478,'up',undefined,undefined,0);
 prop('table',340,fz(471),150,30,0); prop('table',340,fz(559),150,26,0); bed(850,180,85,80,0); bed(1030,lowerZ(330),85,80,0);
 prop('crate',1110,lowerZ(660),55,40,0); prop('crate',1040,lowerZ(665),45,40,0);
 prop('planter',740,900,70,30); prop('planter',580,795,35,75);
