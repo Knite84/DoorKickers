@@ -24,6 +24,17 @@ const color = {
   tote: 0x6d8fa8, wicker: 0x4b443c, cushion: 0xc9c2b2, mat: 0x6e8f7c, rugA: 0x8d8070, rugB: 0x6f7c84,
   plastic: 0xd2d3cf, clothes: 0x6f7f8c,
 };
+const furnitureFinishes = new Map([
+  [[color.oak, color.walnut, color.espresso, color.wicker], 'woodGrain'],
+  [[color.linen, color.duvet, color.cushion, color.rugA, color.rugB, color.clothes, color.shade,
+    color.lightGrey, color.blue, color.navy], 'wovenFabric'],
+  [[color.leather], 'leatherGrain'],
+  [[color.granite, color.tile, color.brick], 'counterStone'],
+  [[color.steel, color.brass], 'brushedMetal'],
+  [[color.porcelain], 'ceramic'],
+  [[color.glass], 'mirror'],
+  [[color.tote, color.plastic, color.black, color.screen, color.mat, color.plant], 'moldedPlastic'],
+].flatMap(([colors, finish]) => colors.map(tint => [tint, finish])));
 
 // Box helpers in the piece's own frame: x across the width, y up from the
 // floor, z from the back (-d/2) to the front (+d/2).
@@ -541,7 +552,8 @@ export function furnitureBoxes(prop) {
   const [w, d] = swap(prop.size, q), base = prop.elevation ?? 0;
   return kind.draw(w, d, variant, prop.options ?? {}, name).map(local => {
     const [x, z] = turn([local.center[0], local.center[2]], q), [sx, sz] = swap([local.size[0], local.size[2]], q);
-    const out = { ...local, center: [prop.position[0] + x, base + local.center[1], prop.position[1] + z], size: [sx, local.size[1], sz] };
+    const finish = local.glass ? 'glass' : furnitureFinishes.get(local.color) ?? 'paintedCabinet';
+    const out = { ...local, finish, center: [prop.position[0] + x, base + local.center[1], prop.position[1] + z], size: [sx, local.size[1], sz] };
     if (local.axis === 'z' && q % 2) out.axis = 'x';
     return out;
   });

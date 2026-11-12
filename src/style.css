@@ -27,7 +27,7 @@ h1 { font-family: Georgia, serif; font-size: 26px; font-weight: 400; margin: 9px
 .mission-line { display: flex; gap: 8px; align-items: center; font: 10px monospace; letter-spacing: 1px; color: #c1d5ab; border-top: 1px solid #67745d55; padding-top: 12px; }
 .status-dot { width: 5px; height: 5px; border-radius: 50%; background: #bfd39e; }
 #clock { margin-left: auto; }
-#render-stats { margin-top: 8px; color: #c1d5ab; font: 10px/1.5 monospace; }
+#render-stats, #capture-light-status { margin-top: 8px; color: #c1d5ab; font: 10px/1.5 monospace; }
 .map-stamp { position: absolute; right: 25px; top: 30px; text-align: right; color: #d4dfc3; font: 19px monospace; pointer-events: none; text-shadow: 0 2px 6px #12241d; }
 .map-stamp span { display: block; margin-top: 12px; font: 8px/1.8 monospace; letter-spacing: 1px; }
 .center-card { position: absolute; left: 50%; top: 46%; transform: translate(-50%, -50%); width: 340px; max-width: 90%; padding: 28px; background: #13221ef5; border: 1px solid #85977370; box-shadow: 0 16px 70px #0a171b66; border-radius: 5px; }

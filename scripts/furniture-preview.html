@@ -11,6 +11,7 @@ button,select{padding:8px 11px;margin:0 6px 6px 0;background:#d8e7c9;color:#1725
 <label>Show <select id="mode"><option value="kit">Kit</option><option value="main">Martelli · Main</option><option value="foundation">Martelli · Foundation</option><option value="finishes">Finishes</option></select></label><label>Facing <select id="facing"><option>down</option><option>up</option><option>left</option><option>right</option></select></label><label>Focus <select id="focus"></select></label><br>
 <button id="collision">Hide collision boxes</button><button id="labelsBtn">Hide labels</button><button id="overview">Overhead view</button>
 <button id="clearance" aria-pressed="false" hidden>Show clearance gaps</button>
+<button id="swatch-relief" aria-pressed="true" hidden>Surface relief on</button>
 <p id="clearance-status" role="status" hidden></p>
 <p id="status" role="status"></p></header>
 <div id="labels"></div><canvas></canvas><footer>Drag to orbit, right-drag to pan, wheel to zoom. The grid is 1 m.</footer>
@@ -18,10 +19,10 @@ button,select{padding:8px 11px;margin:0 6px 6px 0;background:#d8e7c9;color:#1725
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { furnitureKinds, piece, sectional, furnitureHeight, isDrawnOnly } from '/src/furniture.js';
-import { furnitureMeshes } from '/src/furniture-mesh.js';
+import { createFurnitureMaterials, furnitureMeshes } from '/src/furniture-mesh.js';
 import { martelli } from '/src/maps/martelli.js';
 import { surfaceKinds, surfaceTile } from '/src/surface-plan.js';
-import { surfaceCanvas } from '/src/surface-textures.js';
+import { surfaceSwatchMaps } from '/src/surface-textures.js';
 import { furnitureClearances } from '/src/clearance.js';
 
 const canvas=document.querySelector('canvas'),renderer=new THREE.WebGLRenderer({canvas,antialias:true});
@@ -31,6 +32,7 @@ scene.add(new THREE.HemisphereLight(0xfff4de,0x4a5a50,2.2));
 const sun=new THREE.DirectionalLight(0xffedcd,2.6);sun.position.set(8,14,10);sun.castShadow=true;sun.shadow.mapSize.set(4096,4096);Object.assign(sun.shadow.camera,{left:-20,right:20,top:20,bottom:-20});scene.add(sun,sun.target);
 const materials={},material=color=>materials[color]??=new THREE.MeshStandardMaterial({color,roughness:.8});
 const glass=new THREE.MeshStandardMaterial({color:0xbfe3ea,roughness:.1,transparent:true,opacity:.28,depthWrite:false});
+const furnitureMaterial = createFurnitureMaterials();
 
 // Every variant, plus L and U sectionals, as entries the map would use.
 const items=[];
@@ -48,7 +50,7 @@ function build(facing){
   for(const item of items){
     const group=new THREE.Group(),entries=item.sectional?sectional(item.sectional,item.at,{size:item.size,facing}):[piece(item.kind,item.variant,item.at,{facing})];
     for(const entry of entries){
-      furnitureMeshes(entry,material,glass).forEach(m=>group.add(m));
+      furnitureMeshes(entry,furnitureMaterial,glass).forEach(m=>group.add(m));
       const h=furnitureHeight(entry);
       if(h>0){const frame=new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(entry.size[0],h,entry.size[1])),new THREE.LineBasicMaterial({color:0xff5a4a}));frame.position.set(entry.position[0],h/2,entry.position[1]);group.add(frame);collisionFrames.push(frame);}
     }
@@ -93,7 +95,7 @@ function buildHouse(level){
   for(const w of martelli.walls){if(Math.round(w.elevation/3.2-.01)!==level&&!(w.elevation>y0&&w.elevation<y0+3.2))continue;const base=w.elevation-y0,h=Math.max(.05,Math.min(w.height??2.8,1.6-base));if(base>=1.6)continue;const m=new THREE.Mesh(new THREE.BoxGeometry(w.size[0],h,w.size[1]),w.exterior?extMat:wallMat);m.position.set(w.center[0],base+h/2,w.center[1]);m.castShadow=m.receiveShadow=true;house.add(m);}
   for(const d of martelli.doors.filter(d=>Math.round(d.elevation/3.2)===level)){const m=new THREE.Mesh(new THREE.BoxGeometry(...[d.size[0],.02,d.size[1]]),material(0x8a6a48));m.position.set(d.position[0],.01,d.position[1]);house.add(m);}
   for(const w of martelli.windows.filter(w=>Math.round(w.elevation/3.2)===level)){const m=new THREE.Mesh(new THREE.BoxGeometry(w.size[0],.03,Math.max(w.size[1],.1)),material(w.climbable===false?0xd06050:0x6fb6d0));m.position.set(w.position[0],.82,w.position[1]);house.add(m);}
-  for(const p of shown){const flat={...p,elevation:(p.elevation??0)-y0};if(p.variant!==undefined||p.kind==='bed')furnitureMeshes(flat,material,glass).forEach(m=>house.add(m));else{const m=new THREE.Mesh(new THREE.BoxGeometry(p.size[0],p.height??1.1,p.size[1]),material(0x8a7a62));m.position.set(p.position[0],(p.height??1.1)/2,p.position[1]);house.add(m);}}
+  for(const p of shown){const flat={...p,elevation:(p.elevation??0)-y0};if(p.variant!==undefined||p.kind==='bed')furnitureMeshes(flat,furnitureMaterial,glass).forEach(m=>house.add(m));else{const m=new THREE.Mesh(new THREE.BoxGeometry(p.size[0],p.height??1.1,p.size[1]),material(0x8a7a62));m.position.set(p.position[0],(p.height??1.1)/2,p.position[1]);house.add(m);}}
   for(const r of martelli.rooms.filter(r=>Math.round((r.elevation??0)/3.2)===level)){const tag=document.createElement('div');tag.className='tag';tag.innerHTML=`<b>${r.name}</b>`;labels.append(tag);roomTags.push({tag,top:new THREE.Vector3(r.center[0],1.8,r.center[1])});}
   for (const marker of clearanceGroup.children) marker.geometry.dispose();
   clearanceGroup.clear();
@@ -110,9 +112,28 @@ function buildHouse(level){
 const roomTags=[];
 // Finishes mode: each generated texture on a 2 m swatch at its real scale.
 const swatches=new THREE.Group();swatches.visible=false;scene.add(swatches);
+const swatchLight = new THREE.DirectionalLight(0xffedcd, 3);
+swatchLight.visible = false;
+scene.add(swatchLight);
+const swatchRelief = document.querySelector('#swatch-relief');
+let showRelief = true;
+swatchRelief.onclick = () => {
+  showRelief = !showRelief;
+  swatchRelief.textContent = showRelief ? 'Surface relief on' : 'Surface relief off';
+  swatchRelief.setAttribute('aria-pressed', String(showRelief));
+  for (const { material } of swatches.children) {
+    material.normalMap = showRelief ? material.userData.normalMap : null;
+    material.roughnessMap = showRelief ? material.userData.roughnessMap : null;
+    material.roughness = showRelief ? 1 : .85;
+    material.needsUpdate = true;
+  }
+};
 surfaceKinds.slice(1).forEach((kind,i)=>{
-  const texture=new THREE.CanvasTexture(surfaceCanvas(kind));texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(2/surfaceTile[kind],2/surfaceTile[kind]);texture.anisotropy=4;
-  const tint=kind==='paint'?0xe4ddcf:0xffffff,swatch=new THREE.Mesh(new THREE.BoxGeometry(2,.04,2),new THREE.MeshStandardMaterial({map:texture,color:tint,roughness:.85}));
+  const maps = surfaceSwatchMaps(kind);
+  for (const texture of Object.values(maps)) texture.repeat.setScalar(2/surfaceTile[kind]);
+  const tint=kind==='paint'?0xe4ddcf:0xffffff,swatch=new THREE.Mesh(new THREE.BoxGeometry(2,.04,2),new THREE.MeshStandardMaterial({...maps,color:tint,roughness:1}));
+  swatch.material.userData.normalMap = maps.normalMap;
+  swatch.material.userData.roughnessMap = maps.roughnessMap;
   const x=(i%4)*2.6-3.9,z=Math.floor(i/4)*2.8-2.8;swatch.position.set(x,.02,z);swatch.receiveShadow=true;swatches.add(swatch);
   const tag=document.createElement('div');tag.className='tag';tag.innerHTML=`<b>${kind}</b><br>${surfaceTile[kind]} m repeat`;tag.style.display='none';labels.append(tag);roomTags.push({tag,top:new THREE.Vector3(x,.3,z+1.25),finish:true});
 });
@@ -120,12 +141,14 @@ surfaceKinds.slice(1).forEach((kind,i)=>{
 window.preview={view:(x,z,h=7)=>{controls.target.set(x,0,z);camera.position.set(x,h,z+h*.55);controls.update();}};
 document.querySelector('#mode').onchange=e=>{const mode=e.target.value,kit=mode==='kit';groups.forEach(g=>g.visible=kit);floor.visible=kit;
   for(const t of roomTags.filter(t=>!t.finish))t.tag.remove();roomTags.splice(0,roomTags.length,...roomTags.filter(t=>t.finish));items.forEach(i=>i.tag.style.visibility=kit?'':'hidden');
-  const finishes=mode==='finishes';swatches.visible=finishes;roomTags.forEach(t=>{t.tag.style.visibility=t.finish&&!finishes?'hidden':'';});
-  house.visible=!kit&&!finishes;clearanceButton.hidden=!house.visible;updateClearance();if(finishes){controls.target.set(0,0,0);camera.position.set(0,7,6);controls.update();}else if(!kit){buildHouse(mode==='main'?1:0);controls.target.set(3,0,-3);camera.position.set(3,22,8);controls.update();}else look(null);};
+  const finishes=mode==='finishes';swatches.visible=finishes;swatchRelief.hidden=!finishes;roomTags.forEach(t=>{t.tag.style.visibility=t.finish&&!finishes?'hidden':'';});
+  house.visible=!kit&&!finishes;clearanceButton.hidden=!house.visible;updateClearance();if(finishes){controls.target.set(0,0,0);camera.position.set(0,9,7);controls.update();}else if(!kit){buildHouse(mode==='main'?1:0);controls.target.set(3,0,-3);camera.position.set(3,22,8);controls.update();}else look(null);};
 document.querySelector('#status').textContent=`${items.length} pieces · ${Object.keys(furnitureKinds).length} components`;
 const v=new THREE.Vector3();
-function frame(){
+function frame(now){
   if(canvas.width!==Math.round(innerWidth*renderer.getPixelRatio())||canvas.height!==Math.round(innerHeight*renderer.getPixelRatio())){renderer.setSize(innerWidth,innerHeight,false);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
+  swatchLight.visible = swatches.visible;
+  if (swatches.visible) swatchLight.position.set(7*Math.cos(now*.0006), 2, 7*Math.sin(now*.0006));
   controls.update();renderer.render(scene,camera);
   if(showLabels)for(const t of roomTags){v.copy(t.top).project(camera);const vis=v.z<1;t.tag.style.display=vis?'':'none';if(vis){t.tag.style.left=`${(v.x+1)/2*innerWidth}px`;t.tag.style.top=`${(1-v.y)/2*innerHeight}px`;}}
   if(showLabels)for(const item of items){v.copy(item.top).project(camera);const vis=v.z<1&&Math.abs(v.x)<1.1&&Math.abs(v.y)<1.1&&camera.position.distanceTo(item.top)<26;item.tag.style.display=vis?'':'none';if(vis){item.tag.style.left=`${(v.x+1)/2*innerWidth}px`;item.tag.style.top=`${(1-v.y)/2*innerHeight}px`;}}

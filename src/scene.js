@@ -9,9 +9,10 @@ import { createGuardVisual } from './npc-visual.js';
 import { guardDisabled, guardEye } from './npc-body.js';
 import { coverClear } from './guard-tactics.js';
 import { createSceneLighting } from './scene-lighting.js';
+import { lightingProfile } from './lighting.js';
 import { piecesInArea } from './spatial.js';
 import { isFurniture } from './furniture.js';
-import { furnitureMeshes } from './furniture-mesh.js';
+import { batchFurnitureMeshes, createFurnitureMaterials, furnitureMeshes } from './furniture-mesh.js';
 import { createSurfaceShading } from './surface-materials.js';
 import { exposureRange, graphicsPresets } from './graphics.js';
 import { createSceneSky } from './scene-sky.js';
@@ -79,6 +80,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   const surfaceShading = map.surfaces ? createSurfaceShading(map) : null;
   const structure = buildWallPieces(map), wallBatches = [], wallDisplay = new Uint8Array(structure.length).fill(2);
   fitSunShadow(sun, structure);
+  let currentSunDirection = lighting.sunDirection;
   const unitBox = new THREE.BoxGeometry(1, 1, 1), instanceTransform = new THREE.Object3D();
   for (const kind of new Set(structure.map(piece => piece.material))) {
     const indices = structure.flatMap((piece, index) => piece.material === kind ? [index] : []);
@@ -220,18 +222,20 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   }
   const propMeshes = [], glass = lighting.decorate(new THREE.MeshStandardMaterial({ color: 0xbfe3ea, roughness: 0.1, transparent: true, opacity: 0.28, depthWrite: false }));
   // Kit furniture (src/furniture.js); map.decor is drawn only and never collides.
-  const furnished = [...map.props.map((prop, index) => ({ prop, index })), ...(map.decor ?? []).map(prop => ({ prop }))];
-  const decorMeshes = [];
+  const furnished = [...map.props, ...(map.decor ?? [])];
+  const furnitureMaterial = createFurnitureMaterials(lighting.decorate);
+  const furnitureParts = [];
   const fixtureMeshes = new Map();
-  for (const { prop, index } of furnished) {
+  for (const prop of furnished) {
     if (!isFurniture(prop)) continue;
-    const meshes = furnitureMeshes(prop, material, glass);
+    const meshes = furnitureMeshes(prop, furnitureMaterial, glass);
     meshes.forEach(mesh => {
-      scene.add(mesh);
+      furnitureParts.push({ prop, mesh });
       if (mesh.userData.fixture) fixtureMeshes.set(mesh.position.toArray().join(','), mesh);
     });
-    if (index === undefined) decorMeshes.push({ prop, meshes }); else propMeshes[index] = meshes;
   }
+  const furnitureRender = batchFurnitureMeshes(furnitureParts);
+  furnitureRender.forEach(({ mesh }) => scene.add(mesh));
   for (const [index, prop] of map.props.entries()) {
     if (isFurniture(prop)) continue;
     const firstMesh = scene.children.length, base = elevation(prop);
@@ -386,7 +390,8 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     electricFixtures.forEach((mesh, i) => {
       const fixture = lighting.fixtures[i];
       mesh.visible = onLevel(fixture);
-      const powered = state.powerOn !== false && !state.destroyedLights?.[i];
+      const powered = state.powerOn !== false && !state.destroyedLights?.[i]
+        && (fixture.kind !== 'porch' || (state.timeOfDay ?? 'day') !== 'day');
       if (fixture.id) mesh.material.emissiveIntensity = powered ? 1.5 + fixture.strength : 0;
       else mesh.material.color.setHex(powered ? 0xffd79a : 0x22252a);
     });
@@ -434,7 +439,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }
     windowMeshes.forEach((mesh, i) => { mesh.visible = state.windowHealth[i] > 0 && onLevel(map.windows[i]); windowFrames[i].forEach(frame => { frame.visible = onLevel(map.windows[i]); }); });
     propMeshes.forEach((meshes, i) => meshes.forEach(mesh => { mesh.visible = onLevel(map.props[i]) && !(overview && mesh.userData.overhead); }));
-    decorMeshes.forEach(({ prop, meshes }) => meshes.forEach(mesh => { mesh.visible = onLevel(prop) && !(overview && mesh.userData.overhead); }));
+    furnitureRender.forEach(({ prop, mesh }) => { mesh.visible = onLevel(prop) && !(overview && mesh.userData.overhead); });
     syncDynamic(state);
     const exposed=playerEye(state);
     player.position.set(state.player[0], state.playerY ?? 0, state.player[1]); player.scale.y = state.playerCover&&!state.playerCover.peeking ? 0.51 : state.crouched&&!state.playerCover ? 0.65 : 1;
@@ -498,17 +503,25 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }
     const foggy = rules.weather === 'fog';
     fog.density = foggy ? 0.018 : 0;
-    const day=(state.timeOfDay??rules.timeOfDay??'day')==='day';
+    const time = state.timeOfDay ?? rules.timeOfDay ?? 'day';
+    const profile = lightingProfile(time);
+    const clearWeather = !rules.weather || rules.weather === 'clear';
+    if (currentSunDirection !== profile.direction) {
+      currentSunDirection = profile.direction;
+      sun.position.set(...currentSunDirection.map(value => value * 35));
+      fitSunShadow(sun, structure);
+      tuneSunShadow(sun.shadow);
+    }
     const vision=mapOpen?'off':state.inventory.vision??'off';
     const filmic = currentCamera === firstPerson && vision === 'off';
     renderer.toneMapping = filmic ? THREE.AgXToneMapping : THREE.NoToneMapping;
-    renderer.toneMappingExposure = controls.exposure ?? exposureRange.initial;
-    sky.update(firstPerson, filmic, day, rules.weather);
-    sun.intensity=mapOpen?3.2:day?(rules.weather==='clear'?(filmic?2.8:3.2):1.3):.04;
-    sun.color.setHex(day?0xffebc4:0x718ebd);
-    ambient.intensity=mapOpen?2.5:day?(filmic?1.65:1.8):.15;
-    renderer.setClearColor(vision==='nightvision'?0x031207:vision==='thermal'?0x040711:day?0x8eaba9:0x020611);
-    fog.color.setHex(vision==='nightvision'?0x123719:vision==='thermal'?0x070b1a:day?0x9baaa0:0x020611);
+    renderer.toneMappingExposure = (controls.exposure ?? exposureRange.initial) * profile.exposure;
+    sky.update(firstPerson, filmic, time, rules.weather, currentSunDirection);
+    sun.intensity = mapOpen ? 3.2 : (time === 'day' && !filmic ? 3.2 : profile.sun) * (clearWeather ? 1 : .46);
+    sun.color.setHex(mapOpen ? 0xffebc4 : profile.color);
+    ambient.intensity = mapOpen ? 2.5 : (time === 'day' && !filmic ? 1.8 : profile.ambient) * (clearWeather ? 1 : .75);
+    renderer.setClearColor(vision==='nightvision'?0x031207:vision==='thermal'?0x040711:time==='day'?0x8eaba9:profile.haze);
+    fog.color.setHex(vision==='nightvision'?0x123719:vision==='thermal'?0x070b1a:profile.haze);
     rain.visible = rules.weather === 'rain';
     if (rain.visible) {
       for (let i = 1; i < rainPositions.length; i += 3) rainPositions[i] = (rainPositions[i] - dt * 12 + 15) % 15;
@@ -523,6 +536,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   }
   return {
     draw, shotEffect, eventEffect, setGraphics,
+    capturingLight: lighting.capturing,
     renderStats: () => ({
       calls: renderer.info.render.calls,
       triangles: renderer.info.render.triangles,
@@ -531,6 +545,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }),
     dispose: () => {
       post?.dispose(); sky.dispose(); lighting.dispose(); surfaceShading?.dispose();
+      for (const { mesh } of furnitureRender) if (mesh.isInstancedMesh) mesh.dispose();
       resizeObserver.disconnect(); canvas.removeEventListener('pointermove', pointerMove); canvas.removeEventListener('wheel', zoomWheel);
       const geometries = new Set([chipGeometry]), sceneMaterials = new Set(Object.values(materials)), textures = new Set();
       scene.traverse(object => {

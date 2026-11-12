@@ -24,8 +24,9 @@ export function createSurfaceShading(map) {
   });
   const field = new THREE.DataTexture(data, width, depth * levels.length, THREE.RedFormat, THREE.UnsignedByteType);
   field.minFilter = field.magFilter = THREE.NearestFilter; field.needsUpdate = true;
+  const atlases = surfaceTextureArray();
   const uniforms = {
-    surfaceAtlas: { value: surfaceTextureArray() }, surfaceField: { value: field },
+    surfaceAtlas: { value: atlases.color }, surfaceRelief: { value: atlases.relief }, surfaceField: { value: field },
     surfaceBounds: { value: new THREE.Vector4(b.minX, b.minZ, width * CELL, depth * CELL) },
     surfaceLevels: { value: levels.length }, surfaceTile: { value: surfaceKinds.map(kind => surfaceTile[kind]) },
   };
@@ -54,29 +55,53 @@ export function createSurfaceShading(map) {
         #endif
         #include <project_vertex>`);
       shader.fragmentShader = `varying vec3 vSurfWorld; varying vec3 vSurfNormal; varying vec3 vSurfOutward;
-        uniform highp sampler2DArray surfaceAtlas; uniform sampler2D surfaceField;
+        uniform highp sampler2DArray surfaceAtlas, surfaceRelief; uniform sampler2D surfaceField;
         uniform vec4 surfaceBounds; uniform float surfaceLevels; uniform float surfaceTile[${surfaceKinds.length}];
         vec3 surfaceSample(int layer, vec2 metres) { return texture(surfaceAtlas, vec3(metres / surfaceTile[layer], float(layer))).rgb; }
         ` + shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
         vec3 surfN = normalize(vSurfNormal);
         vec2 surfWallUV = abs(surfN.x) > abs(surfN.z) ? vSurfWorld.zy : vSurfWorld.xy;
+        vec2 surfMetres = surfWallUV;
+        int surfFinish = 0;
         #if SURFACE_MODE == 1
           if (surfN.y > 0.5) {
             vec2 fieldUV = clamp((vSurfWorld.xz - surfaceBounds.xy) / surfaceBounds.zw, vec2(0.0005), vec2(0.9995));
             float level = clamp(floor((vSurfWorld.y + 0.03) / 3.2), 0.0, surfaceLevels - 1.0);
             fieldUV.y = (fieldUV.y + level) / surfaceLevels;
             int finish = int(floor(texture2D(surfaceField, fieldUV).r * 255.0 + 0.5));
-            if (finish > 0) diffuseColor.rgb = surfaceSample(finish, vSurfWorld.xz);
+            surfFinish = finish;
+            surfMetres = vSurfWorld.xz;
+            if (finish > 0) diffuseColor.rgb = surfaceSample(finish, surfMetres);
           }
         #elif SURFACE_MODE == 2
-          if (abs(surfN.y) < 0.5) diffuseColor.rgb *= surfaceSample(${PAINT}, surfWallUV);
+          if (abs(surfN.y) < 0.5) {
+            surfFinish = ${PAINT};
+            diffuseColor.rgb *= surfaceSample(surfFinish, surfMetres);
+          }
         #elif SURFACE_MODE == 3
           if (abs(surfN.y) < 0.5) {
             bool outside = vSurfOutward.z > 0.5 || dot(surfN.xz, vSurfOutward.xy) > 0.5;
-            if (outside) diffuseColor.rgb = surfaceSample(${SIDING}, surfWallUV);
-            else diffuseColor.rgb *= surfaceSample(${PAINT}, surfWallUV);
+            surfFinish = outside ? ${SIDING} : ${PAINT};
+            if (outside) diffuseColor.rgb = surfaceSample(surfFinish, surfMetres);
+            else diffuseColor.rgb *= surfaceSample(surfFinish, surfMetres);
           }
-        #endif`);
+        #endif
+        vec2 surfUV = surfMetres / surfaceTile[surfFinish];
+        vec3 surfPacked = texture(surfaceRelief, vec3(surfUV, float(surfFinish))).rgb;
+        `).replace('#include <roughnessmap_fragment>', `#include <roughnessmap_fragment>
+          if (surfFinish > 0) roughnessFactor = surfPacked.b;
+        `).replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+          vec3 surfDx = dFdx(-vViewPosition), surfDy = dFdy(-vViewPosition);
+          vec2 surfUVDx = dFdx(surfMetres), surfUVDy = dFdy(surfMetres);
+          float surfDet = surfUVDx.x * surfUVDy.y - surfUVDx.y * surfUVDy.x;
+          if (surfFinish > 0 && abs(surfDet) > 1e-10) {
+            vec3 surfT = normalize((surfDx * surfUVDy.y - surfDy * surfUVDx.y) * sign(surfDet));
+            vec3 surfB = normalize((surfDy * surfUVDx.x - surfDx * surfUVDy.x) * sign(surfDet));
+            vec2 surfSlope = surfPacked.rg * 2.0 - 1.0;
+            normal = normalize(normal * sqrt(max(0.0, 1.0 - dot(surfSlope, surfSlope)))
+              + surfT * surfSlope.x + surfB * surfSlope.y);
+          }
+        `);
     };
     material.customProgramCacheKey = () => `${previousKey?.() ?? ''}-surface-${mode}`;
     return material;

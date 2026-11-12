@@ -53,7 +53,7 @@ export function createKitMenu(callbacks) {
     });
     if (planning) {
       const timeLabel=document.createElement('label');timeLabel.textContent='Time of day';
-      const timeSelect=document.createElement('select');timeSelect.id='plan-time';timeSelect.append(new Option('Day','day'),new Option('Night','night'));timeSelect.value=callbacks.getRules().timeOfDay??'day';
+      const timeSelect=document.createElement('select');timeSelect.id='plan-time';timeSelect.append(new Option('Day','day'),new Option('Dusk','dusk'),new Option('Night','night'));timeSelect.value=callbacks.getRules().timeOfDay??'day';
       timeLabel.append(timeSelect);dialog.querySelector('.plan-strip').insertBefore(timeLabel,dialog.querySelector('.plan-strip > div'));
       timeSelect.addEventListener('change',()=>callbacks.changeRule('timeOfDay',timeSelect.value));
       const enemyLabel = document.createElement('label'); enemyLabel.textContent = 'Enemies (0–8)';

@@ -4,7 +4,12 @@ const palettes = {
   clear: [0x356da8, 0xc9e4ed, 0xffe0a8, 1],
   fog: [0x7e939d, 0xbdccc8, 0xe5d9ba, 0.18],
   rain: [0x465465, 0x9daab3, 0xc7d0d7, 0.08],
+  dusk: [0x354373, 0xffab77, 0xff9d61, 0.8],
+  duskFog: [0x61647b, 0xba9191, 0xf9ab85, 0.12],
+  duskRain: [0x333b53, 0x817a91, 0xe6a289, 0.06],
   night: [0x071225, 0x273b58, 0x7095bf, 0],
+  nightFog: [0x1e2734, 0x46505d, 0x7095bf, 0],
+  nightRain: [0x101826, 0x313947, 0x7095bf, 0],
 };
 
 export function createSceneSky(renderer, scene, sunDirection) {
@@ -56,20 +61,22 @@ export function createSceneSky(renderer, scene, sunDirection) {
   let environment;
   let currentPalette;
   return {
-    update(camera, enabled, day, weather) {
+    update(camera, enabled, time, weather, direction) {
       dome.visible = enabled;
       if (!enabled) {
         scene.environment = null;
         return;
       }
       dome.position.copy(camera.position);
-      const palette = day ? palettes[weather] ?? palettes.clear : palettes.night;
+      const suffix = weather === 'fog' ? 'Fog' : weather === 'rain' ? 'Rain' : '';
+      const palette = time === 'day' ? palettes[weather] ?? palettes.clear : palettes[time+suffix] ?? palettes[time];
       if (palette !== currentPalette) {
         const [zenith, horizon, sunlight, strength] = palette;
         uniforms.zenith.value.setHex(zenith);
         uniforms.horizon.value.setHex(horizon);
         uniforms.sunlight.value.setHex(sunlight);
         uniforms.sunStrength.value = strength;
+        uniforms.sunDirection.value.set(...direction).normalize();
         generator ??= new THREE.PMREMGenerator(renderer);
         const next = generator.fromScene(capture, 0, 0.1, 100, { size: 128 });
         environment?.dispose();

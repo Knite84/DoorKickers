@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { createLightingModel, sunDirection } from './lighting.js';
+import { createLightingModel, lightGeometryKey, lightingProfile, sunDirection, useBakedLightSamples } from './lighting.js';
+import { affectedLightColumns, captureLightState } from './light-rebake.js';
 
 export function createSceneLighting(map) {
   const model=createLightingModel(map),cell=.65;
@@ -8,23 +9,33 @@ export function createSceneLighting(map) {
   const heights = map.fixtures ? [0.2, 1.2, 2.2] : [1.2];
   const layers = levels.length * heights.length;
   const data=new Uint8Array(width*depth*layers*4);
-  function fillField(destroyed=[]) {
-  levels.forEach((level,l)=>heights.forEach((height,h)=>{
-    for(let z=0;z<depth;z++)for(let x=0;x<width;x++){
-      const sample=model.sample([map.bounds.minX+(x+.5)*cell,map.bounds.minZ+(z+.5)*cell],level.elevation,destroyed,height);
-      const at=(((l*heights.length+h)*depth+z)*width+x)*4;
-      data[at]=Math.round(sample.daylight*255);data[at+1]=sample.solar*255;data[at+2]=Math.round(sample.electric*255);data[at+3]=sample.interior?255:0;
+  function* bakeField(target, state, columns) {
+    let at = 0;
+    for (const level of levels) for (const height of heights) {
+      for (let z = 0; z < depth; z++) for (let x = 0; x < width; x++) {
+        if (columns && !columns[z*width+x]) {
+          at += 4;
+          continue;
+        }
+        const sample = model.sample([map.bounds.minX+(x+.5)*cell,map.bounds.minZ+(z+.5)*cell],
+          level.elevation, state?.destroyedLights, height, map.fixtures ? state : { timeOfDay: state?.timeOfDay });
+        target[at++]=Math.round(sample.daylight*255);
+        target[at++]=sample.solar*255;
+        target[at++]=Math.round(sample.electric*255);
+        target[at++]=sample.interior?255:0;
+        yield;
+      }
     }
-  }));
   }
   const bakeStart = performance.now();
-  fillField();
+  for (const _ of bakeField(data)) { /* Initial field before the scene draws. */ }
   if (map.fixtures) console.info(`Captured room light in ${(performance.now() - bakeStart).toFixed(0)} ms`);
   const texture=new THREE.DataTexture(data,width,depth*layers,THREE.RGBAFormat);texture.minFilter=texture.magFilter=THREE.LinearFilter;texture.needsUpdate=true;
   const uniforms={
     lightField:{value:texture},lightBounds:{value:new THREE.Vector4(map.bounds.minX,map.bounds.minZ,width*cell,depth*cell)},
     lightLevels:{value:levels.length},lightDay:{value:1},lightSunny:{value:1},lightPower:{value:1},lightVision:{value:0},lightTactical:{value:0},
     lightSlices:{value:heights.length},lightSliceDepth:{value:depth},
+    lightSolar:{value:1},lightWeather:{value:1},
   };
   const decorated=new WeakSet();
   function decorate(material,heat=0){
@@ -42,7 +53,7 @@ export function createSceneLighting(map) {
         #include <project_vertex>`);
       shader.fragmentShader=`varying vec3 vLightWorld;
         uniform sampler2D lightField;uniform vec4 lightBounds;
-        uniform float lightLevels,lightDay,lightSunny,lightPower,lightVision,lightTactical,bodyHeat,lightSlices,lightSliceDepth;
+        uniform float lightLevels,lightDay,lightSunny,lightPower,lightVision,lightTactical,bodyHeat,lightSlices,lightSliceDepth,lightSolar,lightWeather;
         `+shader.fragmentShader;
       shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`
         if(lightTactical<0.5){
@@ -59,8 +70,8 @@ export function createSceneLighting(map) {
           vec4 upper=texture2D(lightField,vec2(fieldUV.x,(fieldUV.y+upperLayer)/layerCount));
           vec4 field=mix(lower,upper,fract(slice));
           float indoor=field.a;
-          float ambient=mix(1.0,0.012+field.r*(lightDay>0.5?0.65:0.08),indoor);
-          float direct=mix(1.0,field.g*lightSunny*lightDay,indoor);
+          float ambient=mix(1.0,0.012+field.r*0.65*lightDay*lightWeather,indoor);
+          float direct=mix(1.0,field.g*lightSunny*lightSolar,indoor);
           outgoingLight=reflectedLight.directDiffuse*direct+reflectedLight.indirectDiffuse*ambient+totalSpecular*mix(1.0,0.1,indoor)+totalEmissiveRadiance;
           outgoingLight+=diffuseColor.rgb*field.b*lightPower*0.8;
           if(lightVision>0.5&&lightVision<1.5){
@@ -77,15 +88,66 @@ export function createSceneLighting(map) {
     material.customProgramCacheKey=()=>`architectural-light-${heat}`;
     return material;
   }
-  let lightKey='intact';
+  let lightKey='day:intact';
+  const pendingData = new Uint8Array(data.length);
+  let pending;
+  let published;
+  function sampleField([worldX, worldY, worldZ]) {
+    const clamp = THREE.MathUtils.clamp;
+    const x = clamp((worldX-map.bounds.minX)/cell-.5, 0, width-1);
+    const z = clamp((worldZ-map.bounds.minZ)/cell-.5, 0, depth-1);
+    const level = clamp(Math.floor((worldY+.03)/3.2), 0, levels.length-1);
+    const y = clamp(worldY-level*3.2-.2, 0, heights.length-1);
+    const x0 = Math.floor(x), z0 = Math.floor(z), y0 = Math.floor(y);
+    const x1 = Math.min(x0+1,width-1), z1 = Math.min(z0+1,depth-1), y1 = Math.min(y0+1,heights.length-1);
+    const lerp = THREE.MathUtils.lerp;
+    const read = (px,pz,py,channel) => data[(((level*heights.length+py)*depth+pz)*width+px)*4+channel];
+    function channel(index) {
+      const plane = slice => lerp(
+        lerp(read(x0,z0,slice,index),read(x1,z0,slice,index),x-x0),
+        lerp(read(x0,z1,slice,index),read(x1,z1,slice,index),x-x0), z-z0);
+      return lerp(plane(y0),plane(y1),y-y0)/255;
+    }
+    return { daylight: channel(0), solar: channel(1), electric: channel(2), interior: channel(3) >= .5 };
+  }
   function update(state,rules,mapOpen){
-    const nextKey=state.destroyedLights?.some(Boolean) ? state.destroyedLights.map(Number).join('') : 'intact';
-    if(nextKey!==lightKey){fillField(state.destroyedLights);texture.needsUpdate=true;lightKey=nextKey;}
-    uniforms.lightDay.value=(state.timeOfDay??rules.timeOfDay??'day')==='day'?1:0;
+    if (map.fixtures) useBakedLightSamples(state, sampleField);
+    const fixtures = state.destroyedLights?.some(Boolean) ? state.destroyedLights.map(Number).join('') : 'intact';
+    const time = state.timeOfDay ?? rules.timeOfDay ?? 'day';
+    const profile = lightingProfile(time);
+    const nextKey = map.fixtures ? `${time}:${lightGeometryKey(state)}:${fixtures}` : `${time}:${fixtures}`;
+    if (nextKey === lightKey) pending = undefined;
+    else {
+      if (pending?.key !== nextKey || pending.state !== state) {
+        const snapshot = map.fixtures ? captureLightState(state) : undefined;
+        const columns = snapshot && published?.state === state && published.time === time
+          ? affectedLightColumns(map, model.fixtures, state, published.snapshot, snapshot, { width, depth, cell })
+          : undefined;
+        if (columns) pendingData.set(data);
+        pending = { key: nextKey, state, snapshot, bake: bakeField(pendingData, state, columns) };
+      }
+      const deadline = performance.now() + 3;
+      do {
+        if (!pending.bake.next().done) continue;
+        data.set(pendingData);
+        texture.needsUpdate = true;
+        lightKey = nextKey;
+        published = { state, time, snapshot: pending.snapshot };
+        pending = undefined;
+        break;
+      } while (performance.now() < deadline);
+    }
+    uniforms.lightDay.value=profile.daylight;
+    uniforms.lightSolar.value=profile.solar;
+    uniforms.lightWeather.value=rules.weather==='clear'?1:.6;
     uniforms.lightSunny.value=rules.weather==='clear'?1:0;
     uniforms.lightPower.value=state.powerOn===false?0:1;
     uniforms.lightTactical.value=mapOpen?1:0;
     uniforms.lightVision.value=mapOpen?0:state.inventory.vision==='nightvision'?1:state.inventory.vision==='thermal'?2:0;
   }
-  return {decorate,update,fixtures:model.fixtures,sunDirection,dispose:()=>texture.dispose()};
+  return {
+    decorate, update, fixtures: model.fixtures, sunDirection,
+    capturing: () => Boolean(map.fixtures && pending && published?.state !== pending.state),
+    dispose: () => texture.dispose(),
+  };
 }

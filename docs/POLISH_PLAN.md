@@ -35,7 +35,7 @@ Read `docs/HANDOFF.md` first for the state of the repo and the working agreement
 | 2.2 | Light fittings and lamps | ☐ |
 | 2.3 | Baked indoor light volume | ☐ |
 | 2.4 | Sun patches, time of day, weather | ☐ |
-| 3.1 | Full material sets for existing surfaces | ☐ |
+| 3.1 | Full material sets for existing surfaces | ☑ |
 | 3.2 | Furniture materials | ☐ |
 | 3.3 | Doors, ceilings, glass, exterior | ☐ |
 | 3.4 | Baked contact shading and softened edges | ☐ |

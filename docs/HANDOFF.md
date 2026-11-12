@@ -4,7 +4,13 @@ Updated 2026-11-11 after furnishing the whole house, for a fresh session; on 202
 
 ## State of the repo
 
-- **Polish step 2.3 started.** Martelli bakes three light samples per vertical column and interpolates between them in the material shader. The console reports initial bake time. Guard sight samples the same lighting model at eye height when its existing darkness check applies. Live wall, slab and door invalidation and a shared CPU/GPU grid remain pending.
+- **Polish step 3.2 gives the furniture its own finishes.** Wood, woven fabric, leather, stone, painted cabinets, brushed metal, ceramic, glass, and mirrors use different materials. Opaque parts share batches by material, shape and floor. Martelli’s 996 furniture parts produce 112 render objects before culling. Chrome verified the furniture preview and game camera and vision transitions. Foreground frame time is still unverified. [Kitchen cabinet preview](martelli-furniture-materials.jpg)
+
+- **Polish step 3.1 adds relief and roughness to existing finishes.** Plank joints and grout use the same layout as the color texture. Carpet pile, paint and siding use relief derived from their generated patterns. The furniture preview’s Finishes view has a moving light and a relief toggle. Chrome verified the swatches, in-game exterior, and camera and vision transitions. [Color only](martelli-finishes-before.jpg) · [With relief](martelli-finishes-after.jpg)
+
+- **Polish step 2.4 adds dusk.** Day, Dusk and Night are available in mission planning. Dusk lowers and warms the sun, changes the sky and exposure, and turns on porch lights when the building has power. Fog and rain dim the light and have their own sky colors. Guard sight uses the time-of-day light weights when its darkness check applies. Chrome verified dusk and the camera and vision transitions. [Martelli at dusk](martelli-dusk.jpg)
+
+- **Polish step 2.3 updates the live light field.** Martelli checks doors and surviving structure when baking light. After the first capture, geometry and fixture changes rebake the columns that could receive affected light. The bounds are conservative and cover both floors. Updates publish together for rendering and guard sight, and power cuts apply immediately. The mission card shows “Capturing light…” during the initial live bake. An interior comparison and foreground timing remain open. [Browser smoke test](martelli-live-light.jpg)
 
 - **Polish step 2.1 approved.** The [lighting proposal](POLISH_PLAN.md#proposed-implementation) covers the shared light grid, power, geometry updates and guard sight.
 - **Polish step 2.2 adds 40 Martelli fixtures.** Ceiling fittings, table lamps, vanity lights and porch lights share the building circuit. Chrome verified the tactical power cut and camera and vision transitions. [Power on](martelli-fixtures-on.jpg) · [Power cut](martelli-fixtures-off.jpg). Ceiling styles and porch placements are room-based approximations and still need a photo comparison.

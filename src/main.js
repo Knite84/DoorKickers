@@ -104,6 +104,12 @@ exposureControl.addEventListener('input', () => {
 const initialAntialias = graphicsPresets[graphics.preset].antialias;
 const scenePreset = () => ({ ...graphicsPresets[graphics.preset], antialias: initialAntialias });
 const renderStats = $('#render-stats');
+const captureStatus = document.createElement('div');
+captureStatus.id = 'capture-light-status';
+captureStatus.setAttribute('role', 'status');
+captureStatus.textContent = 'Capturing light…';
+captureStatus.hidden = true;
+renderStats.before(captureStatus);
 let statsSince = null, statsFrames = 0;
 const resetStats = () => {
   statsSince = null;
@@ -435,6 +441,7 @@ function frame(now) {
   const exposed=!state.playerCover||state.playerCover.peeking;
   const scoped = exposed && aimed && state.inventory.equipped === 'sniper' && view === 'first' && !mapOpen && !menuVisible;
   scene?.draw(state, rules, dt, { moving: !!(input.x || input.z) && state.status === 'active', running: gait === 'run', firing: firing && state.status === 'active' && exposed, aimed:aimed&&exposed, scopeZoom, menuVisible, exposure: graphics.exposure });
+  captureStatus.hidden = !scene?.capturingLight();
   if (scene && graphics.showStats) {
     if (statsSince === null) statsSince = now;
     else statsFrames++;

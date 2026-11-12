@@ -3,9 +3,19 @@ import assert from 'node:assert/strict';
 import { createLightingModel, defaultRoomLights, lightLevel, cutPower } from '../src/lighting.js';
 import { courtyard } from '../src/maps/courtyard.js';
 import { martelli } from '../src/maps/martelli.js';
+import { affectedLightColumns, captureLightState } from '../src/light-rebake.js';
 import { createMission, canSee } from '../src/simulation.js';
 import { defaults, validateRules } from '../src/rules.js';
 import { defaultLoadout, validateLoadout, equip, toggleHolster } from '../src/kit.js';
+
+test('dusk is a deployment option and reduces available daylight before night', () => {
+  const rules = validateRules({ ...defaults, timeOfDay: 'dusk' });
+  assert.equal(createMission(courtyard, rules).timeOfDay, 'dusk');
+  const sample = { interior: true, daylight: .6, solar: .4, electric: 0 };
+  const level = timeOfDay => lightLevel(sample, { timeOfDay, powerOn: false }, { weather: 'clear' });
+  assert.ok(level('day') > level('dusk'));
+  assert.ok(level('dusk') > level('night'));
+});
 
 const map={...courtyard,rooms:[{name:'WINDOW ROOM',center:[0,0],size:[12,8]},{name:'INNER ROOM',center:[0,6],size:[12,4]}],
   walls:[{center:[0,4],size:[12,.3]}],
@@ -36,6 +46,43 @@ test('authored lamps illuminate samples more strongly at fixture height', () => 
   const model = createLightingModel(layout);
   assert.ok(model.sample([0, 0], 0, [], 1.5).electric > model.sample([0, 0], 0, [], 0.2).electric);
   assert.equal(model.sample([0, 0], 0, [true], 1.5).electric, 0);
+});
+
+test('live light samples respond to a closed door and removed wall pieces', () => {
+  const layout = {
+    ...map, walls: [], windows: [],
+    doors: [{ position: [1, 0], size: [.15, 1.2], elevation: 0 }],
+    fixtures: [{ id: 'lamp', kind: 'lamp', position: [2, 1.2, 0], elevation: 0 }],
+  };
+  const model = createLightingModel(layout);
+  const state = { doors: [false], doorHealth: [100], wallPieces: [] };
+  const sample = () => model.sample([0, 0], 0, [], 1.2, state).electric;
+  assert.equal(sample(), 0);
+  state.doors[0] = true;
+  assert.ok(sample() > 0);
+  const piece = { center: [1, 1.2, 0], size: [.15, 2.4, 1.2], hp: 100 };
+  state.wallPieces = [piece];
+  assert.equal(sample(), 0);
+  piece.hp = 0;
+  assert.ok(sample() > 0);
+});
+
+test('rebaking a door and a fixture preserves distant probes and covers both changes', () => {
+  const layout = {
+    bounds: { minX: 0, minZ: 0 },
+    doors: [{ position: [22, 25], size: [.2, 1], elevation: 0 }],
+  };
+  const fixtures = [{ position: [75, 25, 25] }];
+  const grid = { cell: 1, width: 100, depth: 50 };
+  const state = { doors: [false], destroyedLights: [false] };
+  const published = captureLightState(state);
+  state.doors[0] = true;
+  state.destroyedLights[0] = true;
+  const columns = affectedLightColumns(layout, fixtures, state, published, captureLightState(state), grid);
+  assert.equal(columns[25*100+22], 1);
+  assert.equal(columns[25*100+40], 1, 'sunlight can reach beyond the local light radius');
+  assert.equal(columns[25*100+75], 1);
+  assert.equal(columns[25*100+55], 0);
 });
 test('time-of-day selection validates, survives saved rules and applies to a new deployment',()=>{
   const rules=validateRules({...defaults,timeOfDay:'night'});
