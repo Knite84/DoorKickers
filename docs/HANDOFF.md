@@ -4,6 +4,8 @@ Updated 2026-11-11 after furnishing the whole house, for a fresh session; on 202
 
 ## State of the repo
 
+- **Polish step 3.3 adds architectural finishes.** Martelli has white two-panel doors with bronze levers, textured ceilings, procedural grass, and lightly tinted window glass. Glass and furniture mirrors use the sky reflection map. Chrome verified the exterior and camera and vision transitions. An interior walkthrough remains open. [Before](martelli-dusk.jpg) · [After](martelli-architectural-finishes.jpg)
+
 - **Polish step 3.2 gives the furniture its own finishes.** Wood, woven fabric, leather, stone, painted cabinets, brushed metal, ceramic, glass, and mirrors use different materials. Opaque parts share batches by material, shape and floor. Martelli’s 996 furniture parts produce 112 render objects before culling. Chrome verified the furniture preview and game camera and vision transitions. Foreground frame time is still unverified. [Kitchen cabinet preview](martelli-furniture-materials.jpg)
 
 - **Polish step 3.1 adds relief and roughness to existing finishes.** Plank joints and grout use the same layout as the color texture. Carpet pile, paint and siding use relief derived from their generated patterns. The furniture preview’s Finishes view has a moving light and a relief toggle. Chrome verified the swatches, in-game exterior, and camera and vision transitions. [Color only](martelli-finishes-before.jpg) · [With relief](martelli-finishes-after.jpg)

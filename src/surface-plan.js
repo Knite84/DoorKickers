@@ -10,9 +10,9 @@
 // map.paintZones: [{ color, rect, elevation }] override the room paint (accent walls).
 
 // Layer order is the texture array order; 0 means "no finish".
-export const surfaceKinds = ['none', 'bamboo', 'carpet', 'woodTile', 'greyTile', 'stoneTile', 'plankTile', 'vinyl', 'concrete', 'deckBoards', 'paint', 'siding'];
+export const surfaceKinds = ['none', 'bamboo', 'carpet', 'woodTile', 'greyTile', 'stoneTile', 'plankTile', 'vinyl', 'concrete', 'deckBoards', 'paint', 'siding', 'ceilingPaint', 'grass'];
 // Metres covered by one repeat of each texture.
-export const surfaceTile = { none: 1, bamboo: 1.2, carpet: 0.6, woodTile: 1.2, greyTile: 0.6, stoneTile: 0.9, plankTile: 1.2, vinyl: 1.2, concrete: 2, deckBoards: 1.2, paint: 1, siding: 1.2 };
+export const surfaceTile = { none: 1, bamboo: 1.2, carpet: 0.6, woodTile: 1.2, greyTile: 0.6, stoneTile: 0.9, plankTile: 1.2, vinyl: 1.2, concrete: 2, deckBoards: 1.2, paint: 1, siding: 1.2, ceilingPaint: 1, grass: 2.4 };
 export const surfaceIndex = kind => {
   const index = surfaceKinds.indexOf(kind);
   if (index < 0) throw new Error(`Unknown surface "${kind}"`);

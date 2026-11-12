@@ -31,6 +31,7 @@ export function createSurfaceShading(map) {
     surfaceLevels: { value: levels.length }, surfaceTile: { value: surfaceKinds.map(kind => surfaceTile[kind]) },
   };
   const PAINT = surfaceIndex('paint'), SIDING = surfaceIndex('siding');
+  const CEILING = surfaceIndex('ceilingPaint'), GRASS = surfaceIndex('grass');
 
   function patch(material, mode) {
     material.defines = { ...(material.defines ?? {}), SURFACE_MODE: mode };
@@ -85,6 +86,10 @@ export function createSurfaceShading(map) {
             if (outside) diffuseColor.rgb = surfaceSample(surfFinish, surfMetres);
             else diffuseColor.rgb *= surfaceSample(surfFinish, surfMetres);
           }
+        #elif SURFACE_MODE == 4 || SURFACE_MODE == 5
+          surfFinish = SURFACE_MODE == 4 ? ${CEILING} : ${GRASS};
+          if (abs(surfN.y) > 0.5) surfMetres = vSurfWorld.xz;
+          diffuseColor.rgb *= surfaceSample(surfFinish, surfMetres);
         #endif
         vec2 surfUV = surfMetres / surfaceTile[surfFinish];
         vec3 surfPacked = texture(surfaceRelief, vec3(surfUV, float(surfFinish))).rgb;
@@ -109,7 +114,8 @@ export function createSurfaceShading(map) {
 
   // Re-dress one batch of wall pieces. Returns false for kinds it leaves alone.
   function dress(mesh, kind, pieces, baseColor, decorate) {
-    const mode = FLOOR_KINDS.has(kind) ? 1 : kind === 'drywall' ? 2 : kind === 'masonry' ? 3 : 0;
+    const mode = FLOOR_KINDS.has(kind) ? 1 : kind === 'drywall' ? 2 : kind === 'masonry' ? 3
+      : kind === 'ceiling' ? 4 : kind === 'earth' ? 5 : 0;
     if (!mode) return false;
     mesh.material = patch(decorate(new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.85 })), mode);
     const color = new THREE.Color(), outward = mode === 3 ? new Float32Array(pieces.length * 3) : null;
@@ -129,5 +135,5 @@ export function createSurfaceShading(map) {
     mesh.instanceColor.needsUpdate = true;
     return true;
   }
-  return { dress, dispose: () => field.dispose() };
+  return { dress, grass: material => patch(material, 5), dispose: () => field.dispose() };
 }

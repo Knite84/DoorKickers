@@ -42,7 +42,10 @@ export function createSceneLighting(map) {
     if(decorated.has(material)||!material.isMeshStandardMaterial)return material;
     decorated.add(material);
     material.onBeforeCompile=shader=>{
-      Object.assign(shader.uniforms,uniforms,{bodyHeat:{value:heat}});
+      Object.assign(shader.uniforms, uniforms, {
+        bodyHeat: { value: heat },
+        indoorSpecular: { value: material.metalness >= .7 ? .55 : material.transparent && material.metalness > .2 ? .4 : .1 },
+      });
       shader.vertexShader='varying vec3 vLightWorld;\n'+shader.vertexShader;
       shader.vertexShader=shader.vertexShader.replace('#include <project_vertex>',`
         vec4 lightWorld=vec4(transformed,1.0);
@@ -53,7 +56,7 @@ export function createSceneLighting(map) {
         #include <project_vertex>`);
       shader.fragmentShader=`varying vec3 vLightWorld;
         uniform sampler2D lightField;uniform vec4 lightBounds;
-        uniform float lightLevels,lightDay,lightSunny,lightPower,lightVision,lightTactical,bodyHeat,lightSlices,lightSliceDepth,lightSolar,lightWeather;
+        uniform float lightLevels,lightDay,lightSunny,lightPower,lightVision,lightTactical,bodyHeat,lightSlices,lightSliceDepth,lightSolar,lightWeather,indoorSpecular;
         `+shader.fragmentShader;
       shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`
         if(lightTactical<0.5){
@@ -72,7 +75,7 @@ export function createSceneLighting(map) {
           float indoor=field.a;
           float ambient=mix(1.0,0.012+field.r*0.65*lightDay*lightWeather,indoor);
           float direct=mix(1.0,field.g*lightSunny*lightSolar,indoor);
-          outgoingLight=reflectedLight.directDiffuse*direct+reflectedLight.indirectDiffuse*ambient+totalSpecular*mix(1.0,0.1,indoor)+totalEmissiveRadiance;
+          outgoingLight=reflectedLight.directDiffuse*direct+reflectedLight.indirectDiffuse*ambient+totalSpecular*mix(1.0,indoorSpecular,indoor)+totalEmissiveRadiance;
           outgoingLight+=diffuseColor.rgb*field.b*lightPower*0.8;
           if(lightVision>0.5&&lightVision<1.5){
             float amplified=dot(outgoingLight,vec3(.2126,.7152,.0722))*5.5+dot(diffuseColor.rgb,vec3(.333))*0.055;

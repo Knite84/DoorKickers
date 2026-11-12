@@ -145,6 +145,31 @@ const painters = {
   paintedCabinet: (ctx, rand) => { ctx.fillStyle = '#f7f7f7'; ctx.fillRect(0, 0, SIZE, SIZE); noise(ctx, 9, rand); },
   ceramic: (ctx, rand) => { ctx.fillStyle = '#fafafa'; ctx.fillRect(0, 0, SIZE, SIZE); noise(ctx, 4, rand); },
   moldedPlastic: (ctx, rand) => { ctx.fillStyle = '#eeeeee'; ctx.fillRect(0, 0, SIZE, SIZE); noise(ctx, 14, rand); },
+  ceilingPaint: (ctx, rand) => {
+    ctx.fillStyle = '#f0efe9'; ctx.fillRect(0, 0, SIZE, SIZE);
+    for (let i = 0; i < 1800; i++) {
+      ctx.fillStyle = rand() < .5 ? '#dedcd4' : '#faf9f5';
+      ctx.fillRect(rand()*SIZE, rand()*SIZE, 2, 2);
+    }
+    noise(ctx, 10, rand);
+  },
+  grass: (ctx, rand) => {
+    ctx.fillStyle = '#75805b'; ctx.fillRect(0, 0, SIZE, SIZE);
+    for (let i = 0; i < 22; i++) {
+      const x = rand()*SIZE, y = rand()*SIZE, radius = 9+rand()*28;
+      for (const dx of [-SIZE, 0, SIZE]) for (const dy of [-SIZE, 0, SIZE]) {
+        const patch = ctx.createRadialGradient(x+dx,y+dy,0,x+dx,y+dy,radius);
+        patch.addColorStop(0, i%2 ? '#a5a16f66' : '#4c623b77');
+        patch.addColorStop(1, '#00000000');
+        ctx.fillStyle = patch; ctx.fillRect(x+dx-radius,y+dy-radius,radius*2,radius*2);
+      }
+    }
+    for (let i = 0; i < 3400; i++) {
+      ctx.fillStyle = rand() < .5 ? '#616d4c' : '#879065';
+      ctx.fillRect(rand()*SIZE, rand()*SIZE, 1+rand()*2, 1+rand()*4);
+    }
+    noise(ctx, 20, rand);
+  },
 };
 
 // One canvas per finish, for the preview page and for the texture array.
@@ -164,6 +189,7 @@ const roughnessByFinish = {
   deckBoards: .72, paint: .81, siding: .63,
   woodGrain: .52, wovenFabric: .91, leatherGrain: .58, counterStone: .38,
   brushedMetal: .32, paintedCabinet: .57, ceramic: .23, moldedPlastic: .69,
+  ceilingPaint: .93, grass: .97,
 };
 
 function materialPixels(kind) {
@@ -175,7 +201,7 @@ function materialPixels(kind) {
   const joints = relief.getImageData(0, 0, SIZE, SIZE).data;
   const height = new Float32Array(SIZE * SIZE);
   const packed = new Uint8Array(color.length);
-  const grain = kind === 'carpet' || kind === 'wovenFabric' ? .58 : kind === 'paint' ? .16 : .1;
+  const grain = ['carpet','wovenFabric','grass','ceilingPaint'].includes(kind) ? .58 : kind === 'paint' ? .16 : .1;
   for (let i = 0; i < height.length; i++) {
     const offset = i * 4;
     const value = (color[offset] + color[offset+1] + color[offset+2]) / 765;

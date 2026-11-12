@@ -16,6 +16,7 @@ import { batchFurnitureMeshes, createFurnitureMaterials, furnitureMeshes } from 
 import { createSurfaceShading } from './surface-materials.js';
 import { exposureRange, graphicsPresets } from './graphics.js';
 import { createSceneSky } from './scene-sky.js';
+import { createPaneledDoor } from './door-visual.js';
 import { createScenePost } from './scene-post.js';
 import { fitSunShadow, tuneSunShadow } from './scene-shadows.js';
 
@@ -67,7 +68,9 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     scene.add(mesh);
     return mesh;
   }
-  box([0, -0.4, 0], [map.bounds.maxX - map.bounds.minX + 4, 0.7, map.bounds.maxZ - map.bounds.minZ + 4], 0x46564a);
+  const surfaceShading = map.surfaces ? createSurfaceShading(map) : null;
+  const ground = box([0, -0.4, 0], [map.bounds.maxX - map.bounds.minX + 4, 0.7, map.bounds.maxZ - map.bounds.minZ + 4], 0x46564a);
+  if (surfaceShading) ground.material = surfaceShading.grass(lighting.decorate(new THREE.MeshStandardMaterial()));
   const scenery = (map.scenery ?? []).map(item => box([item.center[0], elevation(item), item.center[1]], [item.size[0], 0.03, item.size[1]], item.color));
   if (!map.scenery) {
     box([0, -0.03, -4], [20, 0.12, 10], 0x898975);
@@ -77,7 +80,6 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }
   }
   // Thousands of damageable pieces share a handful of draw calls.
-  const surfaceShading = map.surfaces ? createSurfaceShading(map) : null;
   const structure = buildWallPieces(map), wallBatches = [], wallDisplay = new Uint8Array(structure.length).fill(2);
   fitSunShadow(sun, structure);
   let currentSunDirection = lighting.sunDirection;
@@ -91,9 +93,12 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     mesh.castShadow = mesh.receiveShadow = true; mesh.frustumCulled = false; scene.add(mesh);
     wallBatches.push({ mesh, indices });
   }
+  const windowGlass = lighting.decorate(new THREE.MeshStandardMaterial(map.surfaces
+    ? { color: 0xb8d8db, transparent: true, opacity: 0.24, roughness: 0.065, metalness: 0.28, side: THREE.DoubleSide, depthWrite: false }
+    : { color: 0x8bdce4, transparent: true, opacity: 0.27, roughness: 0.1, side: THREE.DoubleSide, depthWrite: false }));
   const windowMeshes = (map.windows ?? []).map(window => {
     const mesh = box(windowCenter(window), windowSize(window), 0x8bdce4);
-    mesh.material = lighting.decorate(new THREE.MeshStandardMaterial({ color: 0x8bdce4, transparent: true, opacity: 0.27, roughness: 0.1, side: THREE.DoubleSide, depthWrite: false })); mesh.castShadow = false;
+    mesh.material = windowGlass; mesh.castShadow = false;
     return mesh;
   });
   const windowFrames = (map.windows ?? []).map(window => {
@@ -106,11 +111,19 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }
     return frames;
   });
+  const furnitureMaterial = createFurnitureMaterials(lighting.decorate);
+  const doorColor = new THREE.Color(map.surfaces ? 0xf1eee5 : 0x92784e);
+  const damagedDoorColor = new THREE.Color(0x3f2d20);
   const doors = map.doors.map(d => {
+    if (surfaceShading) {
+      const paint = lighting.decorate(furnitureMaterial(doorColor.getHex(), 'paintedCabinet').clone());
+      const mesh = createPaneledDoor(d, paint, furnitureMaterial(0x694834, 'brushedMetal'));
+      scene.add(mesh);
+      return mesh;
+    }
     const mesh = box(doorCenter(d), doorSize(d), 0x92784e);
     mesh.material = lighting.decorate(mesh.material.clone()); return mesh;
   });
-  const doorColor = new THREE.Color(0x92784e), damagedDoorColor = new THREE.Color(0x3f2d20);
   const doorCracks = map.doors.map(d => {
     const horizontal = d.size[0] > d.size[1], half = (horizontal ? d.size[1] : d.size[0]) / 2 + 0.003;
     const points = [];
@@ -223,7 +236,6 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   const propMeshes = [], glass = lighting.decorate(new THREE.MeshStandardMaterial({ color: 0xbfe3ea, roughness: 0.1, transparent: true, opacity: 0.28, depthWrite: false }));
   // Kit furniture (src/furniture.js); map.decor is drawn only and never collides.
   const furnished = [...map.props, ...(map.decor ?? [])];
-  const furnitureMaterial = createFurnitureMaterials(lighting.decorate);
   const furnitureParts = [];
   const fixtureMeshes = new Map();
   for (const prop of furnished) {
