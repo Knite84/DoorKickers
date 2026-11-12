@@ -64,6 +64,6 @@ test('Martelli preserves reachable room centres and room space on the 35 cm radi
       point => Math.hypot(point[0] - room.center[0], point[1] - room.center[1]) <= centerTolerance));
     assert.deepEqual(displaced.map(room => room.name), start.foundationOnly
       ? ['FAMILY ROOM', 'BEDROOM 5', 'BEDROOM 4', 'BATH', 'CLOSET']
-      : ['DINING', 'KITCHEN', 'PRIMARY BEDROOM', 'LAUNDRY', 'CLOSET', 'BEDROOM 2', 'BEDROOM 3', 'SHARED BATH', 'REAR DECK']);
+      : ['GREAT ROOM', 'DINING', 'KITCHEN', 'PRIMARY BEDROOM', 'LAUNDRY', 'CLOSET', 'BEDROOM 2', 'BEDROOM 3', 'SHARED BATH', 'REAR DECK']);
   }
 });

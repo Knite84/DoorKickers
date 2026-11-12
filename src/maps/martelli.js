@@ -292,23 +292,27 @@ furnish('closetRun','double',984.75,401.5,'right',[1.46,0.35],undefined,0);
 furnish('closetRun','double',1016.5,429.25,'up',[0.86,0.35],undefined,0);
 // Kitchen: range and hood centred on the outside wall run, pantry in the corner,
 // counter with uppers and the fridge along the mudroom side, island with three
-// stools facing it from the great-room side.
+// stools facing it from the great-room side. The island sits 0.2 m toward the
+// dining table so a player can squeeze between it and the fridge (owner).
 furnish('cabinets','range',270,405,'right',[3.0,0.6]);
 furnish('linenCabinet','pantry',277.5,499,'up');
 furnish('cabinets','kitchen',337.5,499,'up',[1.5,0.6]);
 furnish('fridge','full',397.5,494,'up');
-furnish('island','seating',372.5,385,'right');
-for (const z of [345,385,425]) furnish('barStool','counter',413,z,'left');
+furnish('island','seating',372.5,375,'right');
+for (const z of [335,375,415]) furnish('barStool','counter',413,z,'left');
 // Dining: chairs tuck 0.3 m under the table to keep the great-room passage clear.
 furnish('diningTable','six',370,240,'down');
 for (const x of [345,395]) { furnish('chair','dining',x,217.5,'down'); furnish('chair','dining',x,262.5,'up'); }
 furnish('chair','dining',322.5,240,'right'); furnish('chair','dining',417.5,240,'left');
 // Great room: light grey L sectional facing the stone fireplace and built-in TV,
-// its return along the lake windows; blue armchair, end table with lamp, rug.
-props.push(...sectional('L',point(560,340),{size:[3.4,2.8],facing:'right',variant:'fabric',mirror:true,elevation:main}));
+// its return backed against the lake windows and running, with the end table,
+// right up to the media console (owner: no walkway on the window side); blue
+// armchair, rug. The back run starts east of most of the west window so that
+// window stays climbable; the return covers the east window.
+props.push(...sectional('L',point(605,290),{size:[3.4,2.56],facing:'right',variant:'fabric',mirror:true,elevation:main}));
 furnish('armchair','blue',660,436,'up',[1.0,0.9]);
-furnish('endTable','lamp',652,270,'down');
-furnish('rug','cool',585,340,'right');
+furnish('endTable','lamp',681.5,217.5,'down');
+furnish('rug','cool',615,300,'right');
 furnish('mediaConsole','tv',704.75,280,'left');
 furnish('fireplace','wall',701,377.5,'left');
 // Entry: shoe bench against the stair guard, rug inside the front door.
@@ -361,6 +365,9 @@ stairWindow.climbable=false;stairWindow.climbReason='The stairwell window has no
 // The primary bath window sits over the tub deck, which leaves no floor to land on.
 const bathWindow=windows.find(w=>w.elevation===main&&Math.abs(w.position[0]-point(1015,140)[0])<.01&&Math.abs(w.position[1]-point(1015,140)[1])<.01);
 bathWindow.climbable=false;bathWindow.climbReason='The tub deck fills the floor under the bath window. Use another opening.';
+// The great-room sectional is backed against the east lake window.
+const sofaWindow=windows.find(w=>w.elevation===main&&Math.abs(w.position[0]-point(610,198)[0])<.01&&Math.abs(w.position[1]-point(610,198)[1])<.01);
+sofaWindow.climbable=false;sofaWindow.climbReason='The sectional is pushed against this window. Use the other great-room window or the deck door.';
 
 export const martelli = {
   version: 2, id: 'martelli-01', name: 'Martelli House', stamp: 'MARTELLI HOUSE · MAIN + FOUNDATION · LAKE ↑',
@@ -408,7 +415,7 @@ export const martelli = {
   // are usually covered, never always.
   posts: [
     ['entry', 670, 545, main, 2.5, 1.3], ['stair head', 592, 488, main, 2], ['great room', 470, 460, main, 1.5],
-    ['deck windows', 560, 235, main, 1], ['kitchen', 312, 450, main, 1], ['dining', 290, 190, main, 0.6],
+    ['deck windows', 495, 235, main, 1], ['kitchen', 312, 450, main, 1], ['dining', 290, 190, main, 0.6],
     ['bedroom hall', 890, 483, main, 2], ['primary bedroom', 770, 280, main, 1], ['primary bath', 1050, 230, main, 0.4],
     ['bedroom 3', 1100, 620, main, 0.8], ['bedroom 2', 880, 700, main, 0.8], ['garage', 300, 720, main, 1],
     ['mudroom', 480, 555, main, 0.8], ['rear deck', 478, 145, main, 1, 1.5],

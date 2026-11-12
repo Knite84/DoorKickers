@@ -29,7 +29,7 @@ test('short facade pieces keep their authored direction instead of protruding ac
   assert.ok(pieces.every(p=>Math.abs(p.center[0]-1)<1e-9));
   assert.ok(pieces.every(p=>Math.abs(p.center[2]-2)+p.size[2]/2<=.040001));
 });
-test('all 14 climbable Martelli windows work both ways, crouched and standing, without landing in walls',()=>{
+test('all 13 climbable Martelli windows work both ways, crouched and standing, without landing in walls',()=>{
   let count=0;
   for(const [index,window] of martelli.windows.entries()){
     if(window.climbable===false)continue;
@@ -48,7 +48,7 @@ test('all 14 climbable Martelli windows work both ways, crouched and standing, w
       assert.ok(clear(state,martelli));
     }
   }
-  assert.equal(count,14);
+  assert.equal(count,13);
 });
 test('windows with supported ground on both sides remain usable after physics ticks',()=>{
   for(const [index,window] of martelli.windows.entries()){

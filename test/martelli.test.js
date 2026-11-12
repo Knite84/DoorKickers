@@ -86,11 +86,16 @@ test('patrol waypoints start clear of walls, furniture and closed doors on both 
     path.forEach(position => assert.equal(boxes.some(box=>intersectsBox(position,position,box,0.28)),false,`patrol ${index} obstructed at ${position}`));
   });
 });
-test('the player can pass the dining chairs and the family-room sectional in both directions', () => {
+test('the player can pass the dining chairs, the fridge and the family-room sectional in both directions', () => {
   const state = ready();
   state.player = point(451,280);
   walk(state,451,242);
   walk(state,451,280);
+
+  // Squeeze between the island and the fridge into the great room (owner).
+  state.player = point(330,457);
+  walk(state,470,457);
+  walk(state,330,457);
 
   state.player = point(460,445);
   state.playerY = 0;

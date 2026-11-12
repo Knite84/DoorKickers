@@ -4,6 +4,15 @@ Updated 2026-11-11 after furnishing the whole house, for a fresh session; on 202
 
 ## State of the repo
 
+- **Polish step 3.4 is implemented and awaiting owner review.** Floors darken softly at walls and furniture, and wall tops darken at the ceiling. A per-floor field drives this and rebakes after damage. Furniture edges are rounded or bevelled at true radii. The new `scripts/interior-preview.html` renders the game from fixed interior viewpoints. Use it for interior walkthroughs and foreground frame timing. See [the plan](POLISH_PLAN.md#34-baked-contact-shading-and-softened-edges). [Off](martelli-contact-before.jpg) · [On](martelli-contact-after.jpg)
+- **Walkability changes from the owner (2026-11-12):**
+  - **Kitchen:** the island and stools moved 0.2 m toward the dining table, so the player can squeeze past the fridge. A walking test covers the route.
+  - **Great room:**
+    - The sectional backs onto the lake windows, and its return and the end table run up to the media console.
+    - The east lake window is therefore not climbable (13 climbable windows).
+    - The "deck windows" guard post moved to plan (495, 235).
+  - **Still open:** the other 0.2 audit rows are deferred and step 0.2 stays open.
+
 - **Polish step 3.3 adds architectural finishes.** Martelli has white two-panel doors with bronze levers, textured ceilings, procedural grass, and lightly tinted window glass. Glass and furniture mirrors use the sky reflection map. Chrome verified the exterior and camera and vision transitions. An interior walkthrough remains open. [Before](martelli-dusk.jpg) · [After](martelli-architectural-finishes.jpg)
 
 - **Polish step 3.2 gives the furniture its own finishes.** Wood, woven fabric, leather, stone, painted cabinets, brushed metal, ceramic, glass, and mirrors use different materials. Opaque parts share batches by material, shape and floor. Martelli’s 996 furniture parts produce 112 render objects before culling. Chrome verified the furniture preview and game camera and vision transitions. Foreground frame time is still unverified. [Kitchen cabinet preview](martelli-furniture-materials.jpg)
@@ -89,7 +98,7 @@ The owner added photos after the inventory below was made. View these before pla
 - For open-ended work, report findings and a short proposal first and wait for a go-ahead. Clearly scoped fixes can be done directly. The furniture kit plan in this document already has that go-ahead.
 - The owner knows the real house and can answer anything the plans or photos leave unclear. Ask rather than guess on layout.
 - The owner is new to game development and wants the game to stay a simple browser game with no asset pipeline.
-- Keep `npm test` green. It was 197 passing on 2026-11-11 and takes about 2 seconds.
+- Keep `npm test` green. It was 217 passing on 2026-11-12 and takes about 4 seconds.
 - Commit before any history-rewriting git command. A previous rewrite reset the working tree and lost uncommitted work.
 
 ## Privacy
@@ -125,7 +134,7 @@ Things to respect when placing furniture:
 
 - Guard posts and the eight legacy `patrols` points must stay clear of props. `test/guard-variation.test.js` and `test/martelli.test.js` check this.
 - Test walking routes in `test/martelli.test.js` pass through specific points; a prop on a route fails the test. Move the route in the test if the furniture is right.
-- Doors need a clear landing on both sides, and the 15 climbable windows need clear ground inside (`test/ceilings-windows.test.js` requires exactly 15).
+- Doors need a clear landing on both sides, and the 13 climbable windows need clear ground inside (`test/ceilings-windows.test.js` requires exactly 13).
 - Beds currently float mid-room with headboards on the lake side; reposition them from the photos.
 
 ## Furniture inventory from the photos

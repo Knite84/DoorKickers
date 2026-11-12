@@ -15,7 +15,7 @@ Read `docs/HANDOFF.md` first for the state of the repo and the working agreement
 
 - Take **one numbered step per session**, in order unless a step says it is independent. Each step has a "Done when" line; do not start the next step until it is met.
 - Steps marked **Propose first** are open-ended. Per the working agreement, show the owner a short proposal (and a preview page or screenshot where possible) and wait for a go-ahead before building.
-- Keep `npm test` green (197 passing on 2026-11-11). Add tests for anything that is pure data or geometry.
+- Keep `npm test` green (217 passing on 2026-11-12). Add tests for anything that is pure data or geometry.
 - Verify every visual step in the browser on the Martelli map, in first person **and** in the tactical/overhead view, with night vision and thermal toggled. Save one before and one after screenshot under `docs/`.
 - Tick the box in the status table and add a line to `docs/HANDOFF.md` when a step lands.
 - Performance budget: 60 frames per second at 1080p on the owner's machine at the default quality preset. Step 1.1 adds the tool to measure this; every later step reports its cost.
@@ -113,10 +113,10 @@ In the furniture preview, select either Martelli floor, then **Show clearance ga
 
 | Floor | Gap | Width | Review |
 |---|---|---:|---|
-| Main | South end of the kitchen island to the mudroom-side cabinet run and fridge | 0.68 m, then 0.48 m | Should players be able to pass around this end of the island? |
-| Main | Fridge to nearest island stool | 0.75 m | Check whether this is the intended kitchen exit toward the great room. |
+| Main | South end of the kitchen island to the mudroom-side cabinet run and fridge | 0.68 m, then 0.48 m | **Owner, 2026-11-12: players should squeeze past the fridge.** The island and stools moved 0.2 m toward the dining table: now 0.88 m to the cabinets and 0.68 m to the fridge (player-passable, not guard-width). The island is 0.70 m from the dining chairs. A walking test covers the squeeze. |
+| Main | Fridge to nearest island stool | 0.75 m | Now 0.95 m after the island move. |
 | Main | Great-room armchair to wall | 0.62 m | Confirm whether the aisle behind the chair should be walkable. |
-| Main | Great-room end table to media console | 0.58 m | Confirm whether the window-side gap is a route. |
+| Main | Great-room end table to media console | 0.58 m | **Owner, 2026-11-12: no window-side route; the couch is against the windows.** The sectional's return now backs onto the lake wall, 2.56 m deep, and the end table closes the run to the console. The east lake window is no longer climbable (13 climbable windows); the west one still is. The great-room centre now falls in the seating, so the reachability test lists it as displaced. The "deck windows" guard post moved to plan (495, 235). |
 | Main | Laundry machines to wall | 0.80 m | Adequate for a local aisle. Review if treated as part of the closet through-route. |
 | Foundation | Armchair to wall in the stair nook | 0.63 m | Confirm whether the chair should leave a path along the wall. |
 | Foundation | Bedroom 5 bed to wall | 0.66 m | Confirm whether the wall-side gap is intentionally tight. |
@@ -261,6 +261,12 @@ Done when: no flat untextured surface remains in a walk-through of Martelli.
 - Replace razor-sharp box edges on furniture with slightly bevelled or rounded boxes where it is cheap.
 
 Done when: furniture no longer reads as stacked boxes at arm's length.
+
+**Implementation (2026-11-12, awaiting owner review).**
+- **Contact shading** (`src/contact-shading.js`, tested in `test/contact-shading.test.js`). The structure is thousands of shared instanced boxes, so vertex colours cannot carry per-place shading. Each floor instead gets a 10 cm plan field with two distances: to anything standing on the floor (walls and furniture 0.3 m or taller), and to full-height walls. The lighting patch in `src/scene-lighting.js` turns these into darkening where floors meet walls and furniture, and indoors where walls meet the ceiling (2.4 m Foundation, 2.8 m Main). It dims ambient and electric light only, never direct sun, and the tactical map skips it. Strength is 0.75 on Low and Medium and 0.45 on High, where GTAO also applies. Martelli bakes in about 30 ms. Breaking pieces rebakes the field at most every 0.25 s.
+- **Softened edges** (`src/furniture-mesh.js`). Upholstery has rounded edges: fabric 4.5 cm and leather 4 cm. Hard finishes have narrow bevels: ceramic 2.5 cm, plastic 1.2 cm, wood 8 mm, painted cabinets and stone 6 mm, metal 4 mm. A vertex patch rebuilds every corner at its true radius after scaling, so corners no longer stretch with a part's size. Parts thinner than 5 cm, glass and mirrors keep plain boxes. Shadows use the unpatched shape, which has 2 % unit rounding.
+- **New preview page `scripts/interior-preview.html`.** It runs the game's renderer from fixed interior viewpoints, with quality, time of day, contact shading and a frame-time readout. Use it for the open interior walkthroughs and foreground timing.
+- In Chrome, the great room on Medium uses 582 draws and 318k triangles. High uses 805 draws and 474k triangles in the family room. Night vision and thermal render correctly. Frame time was throttled in the automation tab and is still unmeasured. [Contact off](martelli-contact-before.jpg) · [Contact on](martelli-contact-after.jpg) · [Rounded edges](martelli-rounded-edges.jpg)
 
 ---
 

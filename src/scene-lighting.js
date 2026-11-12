@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { createLightingModel, lightGeometryKey, lightingProfile, sunDirection, useBakedLightSamples } from './lighting.js';
 import { affectedLightColumns, captureLightState } from './light-rebake.js';
+import { bakeContactField, contactGrid, CONTACT_RANGE } from './contact-shading.js';
+import { damageCount } from './spatial.js';
 
-export function createSceneLighting(map) {
+export function createSceneLighting(map, pieces = []) {
   const model=createLightingModel(map),cell=.65;
   const width=Math.ceil((map.bounds.maxX-map.bounds.minX)/cell),depth=Math.ceil((map.bounds.maxZ-map.bounds.minZ)/cell);
   const levels=map.levels??[{elevation:0}];
@@ -37,6 +39,20 @@ export function createSceneLighting(map) {
     lightSlices:{value:heights.length},lightSliceDepth:{value:depth},
     lightSolar:{value:1},lightWeather:{value:1},
   };
+  // Baked contact shading (src/contact-shading.js): soft darkening where floors
+  // meet walls and furniture and where walls meet the ceiling. It dims ambient
+  // and electric light only, never direct sun, and rebakes after damage.
+  const contact = contactGrid(map), contactData = bakeContactField(map, pieces, map.props, contact);
+  const contactTexture = new THREE.DataTexture(contactData, contact.width, contact.depth * contact.levels.length, THREE.RGFormat);
+  contactTexture.minFilter = contactTexture.magFilter = THREE.LinearFilter; contactTexture.needsUpdate = true;
+  const ceilings = [0, 1, 2, 3].map(i => contact.ceilings[i] ?? 2.8);
+  Object.assign(uniforms, {
+    contactField: { value: contactTexture }, contactLevels: { value: contact.levels.length },
+    contactBounds: { value: new THREE.Vector4(contact.minX, contact.minZ, contact.width * contact.cell, contact.depth * contact.cell) },
+    contactDepth: { value: contact.depth }, contactRange: { value: CONTACT_RANGE },
+    contactCeilings: { value: new THREE.Vector4(...ceilings) }, contactStrength: { value: 0.75 },
+  });
+  let contactKey = 0, contactTime = -Infinity;
   const decorated=new WeakSet();
   function decorate(material,heat=0){
     if(decorated.has(material)||!material.isMeshStandardMaterial)return material;
@@ -57,6 +73,20 @@ export function createSceneLighting(map) {
       shader.fragmentShader=`varying vec3 vLightWorld;
         uniform sampler2D lightField;uniform vec4 lightBounds;
         uniform float lightLevels,lightDay,lightSunny,lightPower,lightVision,lightTactical,bodyHeat,lightSlices,lightSliceDepth,lightSolar,lightWeather,indoorSpecular;
+        uniform sampler2D contactField;uniform vec4 contactBounds,contactCeilings;uniform float contactLevels,contactDepth,contactRange,contactStrength;
+        float contactShade(vec3 world,vec3 worldNormal,float indoor){
+          vec3 p=world+worldNormal*0.08;
+          float level=clamp(floor((p.y+0.03)/3.2),0.0,contactLevels-1.0);
+          float height=p.y-level*3.2;
+          float ceiling=level<0.5?contactCeilings.x:level<1.5?contactCeilings.y:level<2.5?contactCeilings.z:contactCeilings.w;
+          vec2 uv=clamp((p.xz-contactBounds.xy)/contactBounds.zw,vec2(0.0005),vec2(0.9995));
+          float edge=0.5/contactDepth;
+          uv.y=(clamp(uv.y,edge,1.0-edge)+level)/contactLevels;
+          vec2 distance=texture2D(contactField,uv).rg*contactRange;
+          float nearFloor=(1.0-smoothstep(0.0,0.65,distance.r))*(1.0-smoothstep(0.05,0.7,height));
+          float nearCeiling=(1.0-smoothstep(0.0,0.45,distance.g))*(1.0-smoothstep(0.05,0.5,ceiling-height))*indoor;
+          return 1.0-contactStrength*clamp(nearFloor+nearCeiling*0.8,0.0,1.0);
+        }
         `+shader.fragmentShader;
       shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`
         if(lightTactical<0.5){
@@ -73,10 +103,11 @@ export function createSceneLighting(map) {
           vec4 upper=texture2D(lightField,vec2(fieldUV.x,(fieldUV.y+upperLayer)/layerCount));
           vec4 field=mix(lower,upper,fract(slice));
           float indoor=field.a;
-          float ambient=mix(1.0,0.012+field.r*0.65*lightDay*lightWeather,indoor);
+          float contact=contactShade(vLightWorld,inverseTransformDirection(normal,viewMatrix),indoor);
+          float ambient=mix(1.0,0.012+field.r*0.65*lightDay*lightWeather,indoor)*contact;
           float direct=mix(1.0,field.g*lightSunny*lightSolar,indoor);
           outgoingLight=reflectedLight.directDiffuse*direct+reflectedLight.indirectDiffuse*ambient+totalSpecular*mix(1.0,indoorSpecular,indoor)+totalEmissiveRadiance;
-          outgoingLight+=diffuseColor.rgb*field.b*lightPower*0.8;
+          outgoingLight+=diffuseColor.rgb*field.b*lightPower*0.8*contact;
           if(lightVision>0.5&&lightVision<1.5){
             float amplified=dot(outgoingLight,vec3(.2126,.7152,.0722))*5.5+dot(diffuseColor.rgb,vec3(.333))*0.055;
             outgoingLight=vec3(.12,.95,.25)*amplified;
@@ -114,6 +145,12 @@ export function createSceneLighting(map) {
     return { daylight: channel(0), solar: channel(1), electric: channel(2), interior: channel(3) >= .5 };
   }
   function update(state,rules,mapOpen){
+    // Rebake contact shading when pieces break, at most a few times a second.
+    const damage = state.wallPieces ? damageCount(state) : 0, now = performance.now();
+    if (damage !== contactKey && now - contactTime > 250) {
+      bakeContactField(map, state.wallPieces, map.props, contact, contactData);
+      contactTexture.needsUpdate = true; contactKey = damage; contactTime = now;
+    }
     if (map.fixtures) useBakedLightSamples(state, sampleField);
     const fixtures = state.destroyedLights?.some(Boolean) ? state.destroyedLights.map(Number).join('') : 'intact';
     const time = state.timeOfDay ?? rules.timeOfDay ?? 'day';
@@ -151,6 +188,7 @@ export function createSceneLighting(map) {
   return {
     decorate, update, fixtures: model.fixtures, sunDirection,
     capturing: () => Boolean(map.fixtures && pending && published?.state !== pending.state),
-    dispose: () => texture.dispose(),
+    setContactStrength: strength => { uniforms.contactStrength.value = strength; },
+    dispose: () => { texture.dispose(); contactTexture.dispose(); },
   };
 }

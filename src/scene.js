@@ -52,7 +52,8 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }
   };
   canvas.addEventListener('pointermove', pointerMove);
-  const lighting=createSceneLighting(map);
+  const structure = buildWallPieces(map);
+  const lighting = createSceneLighting(map, structure);
   const sky = createSceneSky(renderer, scene, lighting.sunDirection);
   const ambient=new THREE.HemisphereLight(0xd9ecdf,0x344438,2.5);scene.add(ambient);
   const sun = new THREE.DirectionalLight(0xffebc4, 3.2);
@@ -80,7 +81,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }
   }
   // Thousands of damageable pieces share a handful of draw calls.
-  const structure = buildWallPieces(map), wallBatches = [], wallDisplay = new Uint8Array(structure.length).fill(2);
+  const wallBatches = [], wallDisplay = new Uint8Array(structure.length).fill(2);
   fitSunShadow(sun, structure);
   let currentSunDirection = lighting.sunDirection;
   const unitBox = new THREE.BoxGeometry(1, 1, 1), instanceTransform = new THREE.Object3D();
@@ -381,6 +382,8 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
       sun.shadow.needsUpdate = true;
     }
     tuneSunShadow(sun.shadow);
+    // Screen-space occlusion on High covers part of what the baked contact shading does.
+    lighting.setContactStrength(preset.occlusion ? 0.45 : 0.75);
     resize();
   }
   setGraphics(preset);
@@ -548,6 +551,8 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   }
   return {
     draw, shotEffect, eventEffect, setGraphics,
+    // For preview pages: 0 turns the baked contact shading off.
+    setContactShading: strength => lighting.setContactStrength(strength),
     capturingLight: lighting.capturing,
     renderStats: () => ({
       calls: renderer.info.render.calls,

@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Martelli interior views</title>
+<style>
+  body { margin: 0; color: #edf0e8; background: #15211e; font: 15px system-ui; }
+  header { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; padding: 14px 20px; }
+  h1 { margin: 0; font-size: 20px; }
+  label { display: flex; gap: 6px; align-items: center; }
+  select, button { font: inherit; padding: 4px 8px; }
+  #stats { font: 13px ui-monospace, monospace; color: #b9c8b8; }
+  canvas { display: block; width: 100%; height: calc(100vh - 64px); }
+  p { margin: 0; flex-basis: 100%; color: #b9c8b8; font-size: 13px; }
+</style>
+<header>
+  <h1>Martelli interior views</h1>
+  <label>View <select id="view"></select></label>
+  <label>Quality <select id="preset"><option>Low</option><option selected>Medium</option><option>High</option></select></label>
+  <label><input id="contact" type="checkbox" checked> Contact shading</label>
+  <label>Time <select id="time"><option>day</option><option>dusk</option><option>night</option></select></label>
+  <span id="stats"></span>
+  <p>The game's own renderer, standing at fixed points inside the house. Drag to look around. Keep this tab in the foreground to read frame times.</p>
+</header>
+<canvas id="world" aria-label="First-person view inside the Martelli house"></canvas>
+<script type="module">
+import { createScene } from '/src/scene.js';
+import { createMission } from '/src/simulation.js';
+import { defaults } from '/src/rules.js';
+import { defaultLoadout } from '/src/kit.js';
+import { graphicsPresets } from '/src/graphics.js';
+import { martelli } from '/src/maps/martelli.js';
+
+// Plan pixels as in src/maps/martelli.js; heading 0 faces the lake (plan up).
+const views = [
+  { name: 'Great room: sectional against the windows', at: [470, 470], level: 1, look: [620, 230], pitch: -0.18 },
+  { name: 'Kitchen: island and fridge squeeze', at: [440, 300], level: 1, look: [390, 470], pitch: -0.3 },
+  { name: 'Dining table and chairs', at: [440, 330], level: 1, look: [360, 230], pitch: -0.3 },
+  { name: 'Primary bedroom', at: [790, 290], level: 1, look: [906, 182], pitch: -0.2 },
+  { name: 'Bedroom 2', at: [860, 640], level: 1, look: [799, 732], pitch: -0.25 },
+  { name: 'Family room (lower)', at: [440, 460], level: 0, look: [560, 300], pitch: -0.2 },
+  { name: 'Wet bar (lower)', at: [380, 300], level: 0, look: [342, 460], pitch: -0.25 },
+];
+const metres = ([x, z]) => [(x - 600) * 0.02, (z - 500) * 0.02];
+const select = document.getElementById('view');
+views.forEach((view, i) => select.add(new Option(view.name, i)));
+
+const canvas = document.getElementById('world');
+let preset = graphicsPresets.Medium;
+const scene = createScene(canvas, martelli, preset);
+const rules = { ...defaults, guardCount: 0 };
+let state;
+function place() {
+  const view = views[select.value];
+  state = createMission(martelli, { ...rules, timeOfDay: document.getElementById('time').value }, defaultLoadout());
+  state.status = 'active';
+  state.player = metres(view.at); state.playerY = view.level * 3.2;
+  const [x, z] = metres(view.look);
+  scene.reset(Math.atan2(-(x - state.player[0]), -(z - state.player[1])));
+  scene.look(0, view.pitch);
+}
+function applyGraphics() {
+  preset = graphicsPresets[document.getElementById('preset').value];
+  scene.setGraphics(preset);
+  if (!document.getElementById('contact').checked) scene.setContactShading(0);
+}
+select.onchange = place;
+document.getElementById('time').onchange = place;
+document.getElementById('preset').onchange = applyGraphics;
+document.getElementById('contact').onchange = applyGraphics;
+let dragging = false;
+canvas.addEventListener('pointerdown', () => { dragging = true; });
+addEventListener('pointerup', () => { dragging = false; });
+canvas.addEventListener('pointermove', event => { if (dragging) scene.look(event.movementX * 0.003, -event.movementY * 0.003); });
+place(); applyGraphics();
+
+const stats = document.getElementById('stats');
+let last = performance.now(), frames = 0, total = 0;
+function frame(now) {
+  const dt = Math.min(0.05, (now - last) / 1000); total += now - last; frames++; last = now;
+  state.elapsed = (state.elapsed ?? 0) + dt;
+  scene.draw(state, { ...rules, timeOfDay: state.timeOfDay }, dt, { exposure: 1.2, menuVisible: true });
+  if (total > 500) {
+    const info = scene.renderStats();
+    stats.textContent = `${(total / frames).toFixed(1)} ms/frame · ${info.calls} draws · ${(info.triangles / 1000).toFixed(0)}k triangles · ${info.width}×${info.height}`;
+    total = 0; frames = 0;
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+window.preview = { views, place, scene, get state() { return state; } };
+</script>
