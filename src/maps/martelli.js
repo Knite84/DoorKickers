@@ -5,7 +5,7 @@ import { piece, sectional, isDrawnOnly } from '../furniture.js';
 // Foundation is engine datum 0; the main floor and front approach are at 3.2 m.
 const scale = 0.02, main = 3.2;
 const point = (x, z) => [(x - 600) * scale, (z - 500) * scale];
-const walls = [], doors = [], windows = [], rooms = [], floors = [], props = [], decor = [];
+const walls = [], doors = [], windows = [], rooms = [], floors = [], props = [], decor = [], surfaces = [];
 function segment(axis, fixed, lo, hi, openings = [], elevation = main, exterior = false, tall = 2.8) {
   const horizontal = axis === 'x', thickness = exterior ? 0.28 : 0.16;
   function panel(a, b, base = 0, height = tall) {
@@ -36,6 +36,11 @@ const gap = (at, width) => ({ at, width, passage: true });
 const rail = (axis, fixed, lo, hi) => segment(axis, fixed, lo, hi, [], main, false, 1.0);
 function room(name, x1, z1, x2, z2, elevation = main) {
   rooms.push({ name, center: point((x1 + x2) / 2, (z1 + z2) / 2), size: [(x2 - x1) * scale, (z2 - z1) * scale], elevation });
+}
+// Floor finish for a plan-pixel rectangle (see src/surface-plan.js). Later ones win.
+function surface(kind, x1, z1, x2, z2, elevation = main, extra = {}) {
+  const [a, b] = point(x1, z1), [c, d] = point(x2, z2);
+  surfaces.push({ kind, rect: [a, b, c, d], elevation, ...extra });
 }
 function floor(x1, z1, x2, z2, elevation = main, extra = {}) {
   floors.push({ center: point((x1 + x2) / 2, (z1 + z2) / 2), size: [(x2 - x1) * scale, (z2 - z1) * scale], elevation, ...extra });
@@ -325,6 +330,29 @@ furnish('waterHeater','tank',1157,512,'down',undefined,undefined,0);
 furnish('storageShelf','totes',1042.5,627.75,'up',undefined,undefined,0);
 furnish('totes','stack',1090,629,'up',undefined,undefined,0); furnish('totes','stack',1120,629,'up',undefined,undefined,0);
 prop('planter',740,900,70,30); prop('planter',580,795,35,75);
+// Floor finishes from the photos. Main floor: amber bamboo in the living areas,
+// beige carpet in bedrooms and closets, tile in the wet rooms; the screened deck
+// is composite boards and counts as outdoors for siding.
+surface('concrete',14,476,514,930);
+surface('bamboo',248,140,452,530); surface('bamboo',452,198,720,510); surface('bamboo',420,518,510,590);
+surface('carpet',510,510,620,646); surface('bamboo',620,510,720,590);
+surface('bamboo',720,455,1005,510); surface('bamboo',860,510,915,590); surface('bamboo',720,320,775,455);
+surface('carpet',720,90,965,320); surface('carpet',760,76,920,90);
+surface('woodTile',965,140,1133,320); surface('woodTile',1045,320,1133,370);
+surface('greyTile',832,320,920,455); surface('carpet',920,320,1045,455); surface('carpet',1045,370,1133,455);
+surface('carpet',720,510,860,590); surface('carpet',740,590,915,780); surface('carpet',806,780,945,792);
+surface('carpet',915,510,1005,590); surface('stoneTile',915,590,1005,718); surface('carpet',915,718,1005,780);
+surface('carpet',1005,455,1188,646);
+surface('deckBoards',452,10,720,198,main,{outdoor:true});
+// Foundation: carpet with pale plank tile at the bar and alcove, stone tile in
+// the baths, vinyl plank in the gym, bare concrete in the utility room.
+surface('carpet',248,198,720,518,0); surface('plankTile',248,373,433,518,0); surface('plankTile',425,518,510,590,0);
+surface('carpet',510,510,720,646,0);
+surface('carpet',720,90,972,281,0); surface('carpet',720,281,806,423,0); surface('stoneTile',806,281,889,423,0);
+surface('carpet',889,281,972,423,0); surface('carpet',720,423,972,507,0);
+surface('carpet',972,140,1133,355,0); surface('carpet',972,355,1042,442,0); surface('stoneTile',1042,355,1133,502,0);
+surface('vinyl',720,507,1005,780,0); surface('vinyl',806,780,945,792,0);
+surface('concrete',972,442,1188,646,0); surface('concrete',972,507,1005,565,0);
 const stairWindow=windows.find(w=>w.elevation===main&&Math.abs(w.position[0]-point(565,646)[0])<.01&&Math.abs(w.position[1]-point(565,646)[1])<.01);
 stairWindow.climbable=false;stairWindow.climbReason='The stairwell window has no level landing. Use the nearby front door.';
 // The primary bath window sits over the tub deck, which leaves no floor to land on.
@@ -345,7 +373,17 @@ export const martelli = {
   },
   extraction: { position: point(677,1010), elevation: main, radius: 1.2 },
   objective: { position: point(1150,590), elevation: 0, radius: 1.2, label: 'Utility room archive' },
-  walls, doors, windows, rooms, floors, props, decor,
+  walls, doors, windows, rooms, floors, props, decor, surfaces,
+  // Wall paint by room (src/surface-plan.js); accent walls and the cream vanity
+  // alcoves of the navy shared bath are zones.
+  paint: { default: 0xe4ddcf, 'PRIMARY BEDROOM': 0x3d4b4e, 'PRIMARY BATH': 0xc2a37c, 'BEDROOM 2': 0xa7a8a3, 'BEDROOM 3': 0xa7a8a3,
+    'SHARED BATH': 0x2b3c5e, 'BEDROOM 5': 0x2b3b54, UTILITY: 0xb89466, GARAGE: 0xd9d6cc },
+  paintZones: [
+    { color: 0xe2c94f, rect: [...point(740,590), ...point(770,780)], elevation: main },
+    { color: 0x2e8ed0, rect: [...point(1158,455), ...point(1188,646)], elevation: main },
+    { color: 0xe4ddcf, rect: [...point(915,510), ...point(1005,590)], elevation: main },
+    { color: 0xe4ddcf, rect: [...point(915,718), ...point(1005,780)], elevation: main },
+  ],
   ceilings: ceilingsFor([
     {outline:foundationOutline.map(([x,z])=>point(x,z)),height:2.4,holes:[rectangle(...point(510,510),...point(620,646))]},
     {outline:outline.map(([x,z])=>point(x,z)),elevation:main},

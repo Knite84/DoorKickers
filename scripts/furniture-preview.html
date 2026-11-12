@@ -8,7 +8,7 @@ button,select{padding:8px 11px;margin:0 6px 6px 0;background:#d8e7c9;color:#1725
 #labels{position:absolute;inset:0;pointer-events:none}.tag{position:absolute;transform:translate(-50%,-100%);font-size:11px;line-height:1.25;text-align:center;background:#0d1a17cc;padding:2px 5px;white-space:nowrap;border-radius:3px}.tag b{font-weight:600;color:#fff}.tag i{color:#9fd0ff;font-style:normal}
 </style>
 <header><h1>Furniture kit</h1><p>Every component and variant from <code>src/furniture.js</code>, drawn by the same code the game uses. Red frames are the single collision box each piece gets; blue labels are drawn only and never block.</p>
-<label>Show <select id="mode"><option value="kit">Kit</option><option value="main">Martelli · Main</option><option value="foundation">Martelli · Foundation</option></select></label><label>Facing <select id="facing"><option>down</option><option>up</option><option>left</option><option>right</option></select></label><label>Focus <select id="focus"></select></label><br>
+<label>Show <select id="mode"><option value="kit">Kit</option><option value="main">Martelli · Main</option><option value="foundation">Martelli · Foundation</option><option value="finishes">Finishes</option></select></label><label>Facing <select id="facing"><option>down</option><option>up</option><option>left</option><option>right</option></select></label><label>Focus <select id="focus"></select></label><br>
 <button id="collision">Hide collision boxes</button><button id="labelsBtn">Hide labels</button><button id="overview">Overhead view</button>
 <p id="status" role="status"></p></header>
 <div id="labels"></div><canvas></canvas><footer>Drag to orbit, right-drag to pan, wheel to zoom. The grid is 1 m.</footer>
@@ -18,6 +18,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { furnitureKinds, piece, sectional, furnitureHeight, isDrawnOnly } from '/src/furniture.js';
 import { furnitureMeshes } from '/src/furniture-mesh.js';
 import { martelli } from '/src/maps/martelli.js';
+import { surfaceKinds, surfaceTile } from '/src/surface-plan.js';
+import { surfaceCanvas } from '/src/surface-textures.js';
 
 const canvas=document.querySelector('canvas'),renderer=new THREE.WebGLRenderer({canvas,antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0x1b2a26);renderer.shadowMap.enabled=true;renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -79,11 +81,20 @@ function buildHouse(level){
   for(const r of martelli.rooms.filter(r=>Math.round((r.elevation??0)/3.2)===level)){const tag=document.createElement('div');tag.className='tag';tag.innerHTML=`<b>${r.name}</b>`;labels.append(tag);roomTags.push({tag,top:new THREE.Vector3(r.center[0],1.8,r.center[1])});}
 }
 const roomTags=[];
+// Finishes mode: each generated texture on a 2 m swatch at its real scale.
+const swatches=new THREE.Group();swatches.visible=false;scene.add(swatches);
+surfaceKinds.slice(1).forEach((kind,i)=>{
+  const texture=new THREE.CanvasTexture(surfaceCanvas(kind));texture.colorSpace=THREE.SRGBColorSpace;texture.wrapS=texture.wrapT=THREE.RepeatWrapping;texture.repeat.set(2/surfaceTile[kind],2/surfaceTile[kind]);texture.anisotropy=4;
+  const tint=kind==='paint'?0xe4ddcf:0xffffff,swatch=new THREE.Mesh(new THREE.BoxGeometry(2,.04,2),new THREE.MeshStandardMaterial({map:texture,color:tint,roughness:.85}));
+  const x=(i%4)*2.6-3.9,z=Math.floor(i/4)*2.8-2.8;swatch.position.set(x,.02,z);swatch.receiveShadow=true;swatches.add(swatch);
+  const tag=document.createElement('div');tag.className='tag';tag.innerHTML=`<b>${kind}</b><br>${surfaceTile[kind]} m repeat`;tag.style.display='none';labels.append(tag);roomTags.push({tag,top:new THREE.Vector3(x,.3,z+1.25),finish:true});
+});
 // Console helper: preview.view(x, z, height) frames a map point (metres).
 window.preview={view:(x,z,h=7)=>{controls.target.set(x,0,z);camera.position.set(x,h,z+h*.55);controls.update();}};
 document.querySelector('#mode').onchange=e=>{const mode=e.target.value,kit=mode==='kit';groups.forEach(g=>g.visible=kit);floor.visible=kit;
-  for(const t of roomTags)t.tag.remove();roomTags.length=0;items.forEach(i=>i.tag.style.visibility=kit?'':'hidden');
-  house.visible=!kit;if(!kit){buildHouse(mode==='main'?1:0);controls.target.set(3,0,-3);camera.position.set(3,22,8);controls.update();}else look(null);};
+  for(const t of roomTags.filter(t=>!t.finish))t.tag.remove();roomTags.splice(0,roomTags.length,...roomTags.filter(t=>t.finish));items.forEach(i=>i.tag.style.visibility=kit?'':'hidden');
+  const finishes=mode==='finishes';swatches.visible=finishes;roomTags.forEach(t=>{t.tag.style.visibility=t.finish&&!finishes?'hidden':'';});
+  house.visible=!kit&&!finishes;if(finishes){controls.target.set(0,0,0);camera.position.set(0,7,6);controls.update();}else if(!kit){buildHouse(mode==='main'?1:0);controls.target.set(3,0,-3);camera.position.set(3,22,8);controls.update();}else look(null);};
 document.querySelector('#status').textContent=`${items.length} pieces · ${Object.keys(furnitureKinds).length} components`;
 const v=new THREE.Vector3();
 function frame(){

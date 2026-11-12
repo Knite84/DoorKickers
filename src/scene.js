@@ -12,6 +12,7 @@ import { createSceneLighting } from './scene-lighting.js';
 import { piecesInArea } from './spatial.js';
 import { isFurniture } from './furniture.js';
 import { furnitureMeshes } from './furniture-mesh.js';
+import { createSurfaceShading } from './surface-materials.js';
 
 // Asset boundary: replace these factories with GLB-backed factories later.
 // The simulation only knows positions and collision boxes, never meshes.
@@ -74,11 +75,15 @@ export function createScene(canvas, map) {
     }
   }
   // Thousands of damageable pieces share a handful of draw calls.
+  const surfaceShading = map.surfaces ? createSurfaceShading(map) : null;
   const structure = buildWallPieces(map), wallBatches = [], wallDisplay = new Uint8Array(structure.length).fill(2);
   const unitBox = new THREE.BoxGeometry(1, 1, 1), instanceTransform = new THREE.Object3D();
   for (const kind of new Set(structure.map(piece => piece.material))) {
     const indices = structure.flatMap((piece, index) => piece.material === kind ? [index] : []);
-    const mesh = new THREE.InstancedMesh(unitBox, material(({ ceiling: 0xd8d7cd, timber: 0xa16d3f, drywall: 0xd5ceb5, particleboard: 0xa68552, truss: 0x79512e, earth: 0x59734c, concrete: 0xaaa99d, deck: 0x8c7253 })[kind] ?? 0xb7b198), indices.length);
+    const baseColor = ({ ceiling: 0xd8d7cd, timber: 0xa16d3f, drywall: 0xd5ceb5, particleboard: 0xa68552, truss: 0x79512e, earth: 0x59734c, concrete: 0xaaa99d, deck: 0x8c7253 })[kind] ?? 0xb7b198;
+    const mesh = new THREE.InstancedMesh(unitBox, material(baseColor), indices.length);
+    // Maps that declare room finishes (map.surfaces) get textured floors, paint and siding.
+    surfaceShading?.dress(mesh, kind, indices.map(index => structure[index]), baseColor, lighting.decorate);
     mesh.castShadow = mesh.receiveShadow = true; mesh.frustumCulled = false; scene.add(mesh);
     wallBatches.push({ mesh, indices });
   }
@@ -472,7 +477,7 @@ export function createScene(canvas, map) {
   return {
     draw, shotEffect, eventEffect,
     dispose: () => {
-      lighting.dispose();
+      lighting.dispose(); surfaceShading?.dispose();
       resizeObserver.disconnect(); canvas.removeEventListener('pointermove', pointerMove); canvas.removeEventListener('wheel', zoomWheel);
       const geometries = new Set([chipGeometry]), sceneMaterials = new Set(Object.values(materials)), textures = new Set();
       scene.traverse(object => {
