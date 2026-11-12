@@ -303,6 +303,17 @@ furnish('endTable','lamp',652,270,'down');
 furnish('rug','cool',585,340,'right');
 furnish('mediaConsole','tv',704.75,280,'left');
 furnish('fireplace','wall',701,377.5,'left');
+// Entry: shoe bench against the stair guard, rug inside the front door.
+furnish('bench','shoe',634,550,'right');
+furnish('rug','entry',677,565,'down');
+// Screened deck: outdoor sofa, two armchairs and coffee table as one group
+// facing the house (the photos have the sofa against the house, but there it
+// blocks both great-room windows), plant stand in the corner, ceiling fan.
+furnish('sofa','outdoor',585,65,'down');
+furnish('coffeeTable','outdoor',585,112,'down');
+furnish('armchair','outdoor',520,112,'right'); furnish('armchair','outdoor',650,112,'left');
+furnish('plantStand','plain',470,25,'down');
+furnish('ceilingFan','standard',585,104,'down');
 // Gym (owner's decision): a wall TV and a yoga mat only.
 furnish('wallTV','small',773,771.5,'up',undefined,undefined,0);
 furnish('yogaMat','mat',870,660,'down',undefined,undefined,0);
@@ -359,7 +370,7 @@ export const martelli = {
     ['deck windows', 560, 235, main, 1], ['kitchen', 312, 450, main, 1], ['dining', 290, 190, main, 0.6],
     ['bedroom hall', 890, 483, main, 2], ['primary bedroom', 770, 280, main, 1], ['primary bath', 1050, 230, main, 0.4],
     ['bedroom 3', 1100, 620, main, 0.8], ['bedroom 2', 880, 700, main, 0.8], ['garage', 300, 720, main, 1],
-    ['mudroom', 480, 555, main, 0.8], ['rear deck', 585, 120, main, 1, 1.5],
+    ['mudroom', 480, 555, main, 0.8], ['rear deck', 478, 145, main, 1, 1.5],
     ['family room', 440, 300, 0, 1.5], ['stair foot', 537, 470, 0, 2], ['bar', 340, 440, 0, 1, 1.5],
     ['lower hall', 830, 465, 0, 2], ['archive', 1150, 590, 0, 3, 1.6], ['storage east', 1100, 550, 0, 1.5],
     ['bedroom 5', 760, 200, 0, 0.7], ['bedroom 4', 980, 180, 0, 0.7],
