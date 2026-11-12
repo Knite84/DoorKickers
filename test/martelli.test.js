@@ -4,7 +4,7 @@ import { martelli } from '../src/maps/martelli.js';
 import { resolveMap } from '../src/maps/index.js';
 import { createMission, stepMission, interact, obstacles, intersectsBox } from '../src/simulation.js';
 import { defaults } from '../src/rules.js';
-import { supportHeight } from '../src/world.js';
+import { supportHeight, propHeight } from '../src/world.js';
 import { removeUnsupportedPieces } from '../src/destruction.js';
 import { segmentClear } from '../src/combat.js';
 
@@ -60,12 +60,12 @@ test('main bedrooms, service rooms, shared bath and garage have walking access',
   // Each branch returns to the open bedroom hall before taking the next door.
   const branches = [
     // Primary bedroom, then out its corner door onto the rear deck.
-    [[805,485],[805,350],[805,280],[760,280],[760,122],[690,122]],
+    [[805,485],[805,350],[805,280],[775,280],[775,122],[690,122]],
     // Laundry -> primary closet -> cased opening -> primary bath -> toilet room.
-    [[895,485],[895,395],[895,350],[985,350],[985,280],[1068,280],[1068,345]],
+    [[895,485],[895,395],[895,350],[985,350],[985,295],[1068,295],[1068,345]],
     // Bedroom 3 and its own closet.
-    [[1030,485],[1030,620],[1120,620]],
-    [[1030,485],[1070,485],[1070,410]],
+    [[1030,485],[1045,620],[1120,620]],
+    [[1030,485],[1070,485],[1070,420]],
     // Bedroom 2 -> vanity -> toilet/tub -> vanity -> pocket door into Bedroom 3.
     [[886,485],[886,560],[886,650],[886,750],[942,750],[942,650],[942,555],[960,568],[1040,568]],
     // Bedroom 2's closet is entered from the bedroom.
@@ -129,5 +129,5 @@ test('Bedroom 4 bath is sealed from storage and beds are low furniture',()=>{
   assert.equal(segmentClear(state,martelli,at(point(1100,480),1.2),at(point(1165,480),1.2),-1,{glass:false}),false);
   assert.equal(segmentClear(state,martelli,at(point(1100,480),1.2),at(point(1100,540),1.2),-1,{glass:false}),false);
   const beds=martelli.props.filter(p=>p.kind==='bed');
-  assert.equal(beds.length,5); assert.ok(beds.every(b=>b.height<=0.6));
+  assert.equal(beds.length,5); assert.ok(beds.every(b=>propHeight(b)<=(b.variant==='bunk'?1.7:0.6)));
 });

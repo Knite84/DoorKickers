@@ -4,8 +4,14 @@ Updated 2026-11-11 at the end of the performance session, for a fresh session. R
 
 ## State of the repo
 
-- The sluggishness work (see the section near the end) is finished and tested but **was not committed** when this was written. Check `git status`; if `src/spatial.js` is untracked, commit that work before starting the kit.
-- No furniture code exists yet. The owner has **approved the plan below**, so build it without asking again. Ask only where this document says something is still unknown.
+- The sluggishness work (see the section near the end) is committed.
+- **Steps 1–4 of the kit are built** (2026-11-11): `src/furniture.js`, `src/furniture-mesh.js`, `test/furniture.test.js` and `scripts/furniture-preview.html`. The owner approved the preview.
+- **Step 5, room 1 done: the upstairs bedroom wing is furnished** (primary bedroom, bath and closet; bedrooms 2 and 3 with closets; the Jack-and-Jill bath). Placements are in `src/maps/martelli.js` under "Bedroom wing furniture", using `furnish(kind, variant, x, z, facing, size, options)` in plan pixels. **Next: family room and wet bar** (view the family-room photos first).
+- Trade-offs made while placing, for the owner to overrule:
+  - The primary-bath window sits over the tub deck, so it is now **not climbable** (like the stairwell window). Climbable windows: **14**; `test/ceilings-windows.test.js` updated.
+  - Left out for space or door/window clearance: the inventory's second primary-bedroom dresser (the photos show one dresser with a TV, plus the tall chest), Bedroom 2's nightstand and dresser, and Bedroom 3's nightstand. Bedroom 2's desk is 1.0 m and sits just south of the closet door's landing; Bedroom 3's bunk is 2.0 m and its desk 0.75 m and a little north of the corner, so the corner window stays climbable.
+  - The Bedroom 3 patrol starts at plan x 1045 instead of 1030, clear of the cube bookcase. Walking routes in `test/martelli.test.js` moved slightly off the new furniture (primary bedroom x 775, bath x 295, Bedroom 3 x 1045, its closet z 420).
+- The preview page's **Show** menu now has "Martelli · Main" and "Martelli · Foundation": the real walls cut at 1.6 m with every placed piece (red windows are not climbable). In the console, `preview.view(x, z, height)` frames a map point in metres.
 
 ## The next task: the furniture kit (approved)
 
@@ -14,6 +20,21 @@ Updated 2026-11-11 at the end of the performance session, for a fresh session. R
 3. **Collision stays one box per piece.** An L- or U-shaped sectional is two or three pieces. Rugs, wall TVs, mirrors, ceiling fans and the yoga mat are drawn only and must not block movement, shots or guard paths.
 4. **Preview page `scripts/furniture-preview.html`**, in the style of the other `scripts/*.html` pages, showing every component side by side. Show it to the owner before filling the house.
 5. **Place room by room, in this order:** bedroom wing (best photo coverage), family room and wet bar, baths and laundry, utility and gym, then kitchen, dining and great room.
+
+**Owner's answers on placement order (2026-11-11):**
+- "Bedroom wing" means the **upstairs**: master suite (bedroom, bath, closet), bedrooms 2 and 3, and their shared bath. Bedrooms 4 and 5 go with the lower level.
+- Powder room and lower-level bath go with "baths and laundry"; entry bench, entry rug and the main-hall linen cabinet go with the kitchen/great-room step; deck furniture comes last.
+- The under-stair cubby stays closed.
+- Furniture blocking sight and shots by its one collision box (a sofa is crouch cover; tall pieces block fully) is fine for now; the owner may tune it later.
+
+### Using the kit
+
+- A kit map entry is `{ kind, variant, position, size, facing, elevation, options }`. `size` is the **world-axis footprint**, like every prop, so collision code is unchanged. `facing` is where the front points on the floorplan: `down` (default, +z), `up` (-z, lake side), `left`, `right`; the back goes against the wall.
+- Author entries with `piece(kind, variant, position, { size: [width, depth], facing, elevation, options })`, which takes the piece's own width x depth (default: the variant's size) and turns it into the world footprint. `sectional('L' | 'U', position, { size, facing, variant })` returns 2 or 3 ordinary sofa pieces.
+- Collision height comes from the variant through `propHeight` in `src/world.js` (an explicit `prop.height` still wins). `table`, `crate` and `planter` are not kit kinds and are unchanged. The legacy `bed` entries are now drawn by the kit's queen bed but keep their 0.6 m collision.
+- Drawn-only kinds (`rug`, `yogaMat`, `wallTV`, `mirror`, `ceilingFan`) go in a new `map.decor` list, never `map.props`; a test fails if one lands in props. The scene draws `map.decor` per floor and hides ceiling fans in the overhead view. Martelli has no `decor` list yet; add it to the export when placing.
+- Kit drawing choices to know about: the tub/shower alcove collides as the tub only (0.55 m); the walk-in shower is a 2 m box, so its glass blocks sight; upper cabinets, mirrors and lamps are drawn above the collision box and do not block.
+- Preview: `npm run dev`, then open `/scripts/furniture-preview.html`. It has a facing switch, a focus list for each piece, collision frames, and a yellow line marking the wall behind each piece.
 
 After the kit, the agreed order continues: **materials** (wood floor, carpet, tile, siding, brick as textures generated in code; photos are colour and pattern references only and are never shipped), then **lighting** (softer ambient, warm lamps, sky), then **trim** (baseboards, door frames, window casings, pitched roof). Imported models (glTF) are deferred; static props stay procedural.
 
@@ -36,7 +57,7 @@ The owner added photos after the inventory below was made. View these before pla
 - For open-ended work, report findings and a short proposal first and wait for a go-ahead. Clearly scoped fixes can be done directly. The furniture kit plan in this document already has that go-ahead.
 - The owner knows the real house and can answer anything the plans or photos leave unclear. Ask rather than guess on layout.
 - The owner is new to game development and wants the game to stay a simple browser game with no asset pipeline.
-- Keep `npm test` green. It was 191 passing on 2026-11-11 and takes about 2 seconds.
+- Keep `npm test` green. It was 197 passing on 2026-11-11 and takes about 2 seconds.
 - Commit before any history-rewriting git command. A previous rewrite reset the working tree and lost uncommitted work.
 
 ## Privacy
@@ -227,4 +248,4 @@ Still unmeasured: GPU cost of rendering (lights, shadows). If it still feels slo
 - `npm run dev` starts the game; `npm test` runs the suite.
 - `.claude/launch.json` defines a `dev` server for the in-app browser preview.
 - To see the map: Loadout & planning → Map → Martelli House → Deploy, then **M** for the map and **F** to switch floors. "Live guard tracking" and "Reveal patrol routes" in the rules show guards and their rounds.
-- `scripts/*.html` are small standalone preview pages for poses, cover, lighting and windows; a furniture preview page in the same style would help review pieces quickly.
+- `scripts/*.html` are small standalone preview pages for poses, cover, lighting, windows and the furniture kit.

@@ -10,6 +10,8 @@ import { guardDisabled, guardEye } from './npc-body.js';
 import { coverClear } from './guard-tactics.js';
 import { createSceneLighting } from './scene-lighting.js';
 import { piecesInArea } from './spatial.js';
+import { isFurniture } from './furniture.js';
+import { furnitureMeshes } from './furniture-mesh.js';
 
 // Asset boundary: replace these factories with GLB-backed factories later.
 // The simulation only knows positions and collision boxes, never meshes.
@@ -209,8 +211,18 @@ export function createScene(canvas, map) {
     mesh.position.set(...event.position); mesh.scale.setScalar(event.radius ?? 0.3); scene.add(mesh);
     effects.push({ mesh, life: event.type === 'blast' ? 0.25 : 0.15, disposable: true });
   }
-  const propMeshes = [];
-  for (const prop of map.props) {
+  const propMeshes = [], glass = lighting.decorate(new THREE.MeshStandardMaterial({ color: 0xbfe3ea, roughness: 0.1, transparent: true, opacity: 0.28, depthWrite: false }));
+  // Kit furniture (src/furniture.js); map.decor is drawn only and never collides.
+  const furnished = [...map.props.map((prop, index) => ({ prop, index })), ...(map.decor ?? []).map(prop => ({ prop }))];
+  const decorMeshes = [];
+  for (const { prop, index } of furnished) {
+    if (!isFurniture(prop)) continue;
+    const meshes = furnitureMeshes(prop, material, glass);
+    meshes.forEach(mesh => scene.add(mesh));
+    if (index === undefined) decorMeshes.push({ prop, meshes }); else propMeshes[index] = meshes;
+  }
+  for (const [index, prop] of map.props.entries()) {
+    if (isFurniture(prop)) continue;
     const firstMesh = scene.children.length, base = elevation(prop);
     const [x, z] = prop.position;
     if (prop.kind === 'bed') {
@@ -231,7 +243,7 @@ export function createScene(canvas, map) {
       }
     }
     if (prop.kind === 'table') box([x, base + 0.95, z], [prop.size[0] + 0.15, 0.12, prop.size[1] + 0.15], 0xb6a582);
-    propMeshes.push(scene.children.slice(firstMesh));
+    propMeshes[index] = scene.children.slice(firstMesh);
   }
   const gridWidth = Math.max(map.bounds.maxX - map.bounds.minX, map.bounds.maxZ - map.bounds.minZ);
   const grid = new THREE.GridHelper(gridWidth, gridWidth, 0x9eb5a2, 0x758b7a);
@@ -378,7 +390,8 @@ export function createScene(canvas, map) {
       if (changed) mesh.instanceMatrix.needsUpdate = true;
     }
     windowMeshes.forEach((mesh, i) => { mesh.visible = state.windowHealth[i] > 0 && onLevel(map.windows[i]); windowFrames[i].forEach(frame => { frame.visible = onLevel(map.windows[i]); }); });
-    propMeshes.forEach((meshes, i) => meshes.forEach(mesh => { mesh.visible = onLevel(map.props[i]); }));
+    propMeshes.forEach((meshes, i) => meshes.forEach(mesh => { mesh.visible = onLevel(map.props[i]) && !(overview && mesh.userData.overhead); }));
+    decorMeshes.forEach(({ prop, meshes }) => meshes.forEach(mesh => { mesh.visible = onLevel(prop) && !(overview && mesh.userData.overhead); }));
     syncDynamic(state);
     const exposed=playerEye(state);
     player.position.set(state.player[0], state.playerY ?? 0, state.player[1]); player.scale.y = state.playerCover&&!state.playerCover.peeking ? 0.51 : state.crouched&&!state.playerCover ? 0.65 : 1;

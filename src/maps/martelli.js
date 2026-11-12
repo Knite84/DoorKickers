@@ -1,10 +1,11 @@
 import { ceilingsFor, rectangle } from './ceilings.js';
+import { piece, isDrawnOnly } from '../furniture.js';
 // Traced from the two local floorplans. Plan-up faces the lake (south in the
 // north-up aerial photograph). Door annotations imply roughly 2 cm per pixel.
 // Foundation is engine datum 0; the main floor and front approach are at 3.2 m.
 const scale = 0.02, main = 3.2;
 const point = (x, z) => [(x - 600) * scale, (z - 500) * scale];
-const walls = [], doors = [], windows = [], rooms = [], floors = [], props = [];
+const walls = [], doors = [], windows = [], rooms = [], floors = [], props = [], decor = [];
 function segment(axis, fixed, lo, hi, openings = [], elevation = main, exterior = false, tall = 2.8) {
   const horizontal = axis === 'x', thickness = exterior ? 0.28 : 0.16;
   function panel(a, b, base = 0, height = tall) {
@@ -42,6 +43,13 @@ function floor(x1, z1, x2, z2, elevation = main, extra = {}) {
 const bed = (x, z, width, depth, elevation = main) => props.push({ kind: 'bed', height: 0.6, position: point(x, z), size: [width * scale, depth * scale], elevation });
 function prop(kind, x, z, width, depth, elevation = main) {
   props.push({ kind, position: point(x, z), size: [width * scale, depth * scale], elevation });
+}
+// Kit furniture (src/furniture.js) at plan pixel (x, z). `size` is the piece's own
+// width x depth in metres (default: the variant's); `facing` is where its front
+// points on the plan. Drawn-only pieces go to decor and never collide.
+function furnish(kind, variant, x, z, facing = 'down', size, options, elevation = main) {
+  const entry = piece(kind, variant, point(x, z), { size, facing, elevation, options });
+  (isDrawnOnly(entry) ? decor : props).push(entry);
 }
 
 // Orthogonal outline retains the garage wing, recessed entry and bedroom bays.
@@ -187,13 +195,55 @@ room('CLOSET',fx(932),fz(422),fx(1027),fz(513),0); room('LOWER BATH',fx(1027),fz
 room('UTILITY / STORAGE',740,fz(570),1005,780,0);
 room('UNEXCAVATED / BELOW GARAGE',14,590,510,900,0);
 prop('table',370,265,110,48); prop('table',350,365,75,38); prop('crate',265,420,20,95);
-prop('table',704,358,24,90); bed(850,200,95,85);
-bed(810,690,80,90); bed(1100,550,90,85);
+prop('table',704,358,24,90);
+// Bedroom wing furniture, placed from the photos. Positions are plan pixels;
+// door landings, window landings and guard posts are kept clear.
+// Primary bedroom: king bed on the bath-door wall, dresser and chest opposite.
+furnish('bed','king',906,182,'left');
+furnish('nightstand','wide',946.75,114.5,'left'); furnish('nightstand','wide',949.75,250.5,'left');
+furnish('bench','upholstered',839,182,'left');
+furnish('dresser','low',739.5,215,'right',[1.5,0.5],{tv:0.8}); furnish('dresser','tallChest',739.5,280.5,'right');
+furnish('ceilingFan','standard',842,205);
+// Primary bath: tub under the window, shower beside it behind glass, a vanity
+// on each side wall with the linen cabinet past the far one; toilet room on the left.
+furnish('soakingTub','deck',1014,174.5,'down');
+furnish('shower','glass',1096,177,'down',undefined,{side:'none'});
+furnish('vanity','wide',982.75,236.5,'right',[1.3,0.55]);
+furnish('vanity','wide',1112.25,247.5,'left');
+furnish('linenCabinet','linen',1112.25,301,'left');
+furnish('toilet','standard',1108.5,345,'left');
+// Primary closet: double rods on the east and south walls, cubby towers by the laundry door.
+furnish('closetRun','double',1032.25,387.5,'left',[2.46,0.35]);
+furnish('closetRun','double',974,442.25,'up',[1.92,0.35]);
+furnish('cubbyTower','white',932.75,388,'right'); furnish('cubbyTower','white',932.75,418,'right');
+// Bedroom 2: bed on the yellow west wall with the desk north of it (short of
+// the closet door), low bookcase between the closet and hall doors.
+furnish('bed','queenShelf',799.5,732,'right');
+furnish('desk','hutch',762,665,'right',[1.0,0.6]); furnish('chair','desk',793.75,665,'left');
+furnish('bookcase','low',822.5,601.5,'down');
+furnish('ceilingFan','standard',828,685);
+furnish('closetRun','double',790,522.75,'down',[2.56,0.35]); furnish('closetRun','single',732.75,558.5,'right',[1.02,0.35]);
+// Jack-and-Jill: Bedroom 3's vanity (north), toilet and tub, Bedroom 2's vanity (south).
+furnish('vanity','alcove',960,526.5,'down',[1.6,0.5]);
+furnish('toilet','standard',983.5,612.5,'left');
+furnish('tubShower','alcove',979.25,677,'left',[1.5,0.75]);
+furnish('vanity','single',984.25,747.5,'left',[1.0,0.55]);
+// Bedroom 3: bunk lengthwise on the blue east wall, desk beyond it toward the
+// window, cube bookcase on the west wall past the vanity door.
+furnish('bed','bunk',1143.5,509.5,'left',[2.0,1.5]);
+furnish('desk','plain',1168.5,579.75,'left',[0.75,0.5]); furnish('chair','desk',1140.75,579.5,'right');
+furnish('bookcase','cube',1016.5,614,'right',[1.0,0.3]);
+furnish('closetRun','single',1089,382.75,'down',[1.6,0.35]);
+furnish('toyChest','wood',1071.5,386.5,'down');
+furnish('dresser','low',1117.75,422,'left',[1.15,0.45]);
 prop('table',340,fz(471),150,30,0); prop('table',340,fz(559),150,26,0); bed(850,180,85,80,0); bed(1030,lowerZ(330),85,80,0);
 prop('crate',1110,lowerZ(660),55,40,0); prop('crate',1040,lowerZ(665),45,40,0);
 prop('planter',740,900,70,30); prop('planter',580,795,35,75);
 const stairWindow=windows.find(w=>w.elevation===main&&Math.abs(w.position[0]-point(565,646)[0])<.01&&Math.abs(w.position[1]-point(565,646)[1])<.01);
 stairWindow.climbable=false;stairWindow.climbReason='The stairwell window has no level landing. Use the nearby front door.';
+// The primary bath window sits over the tub deck, which leaves no floor to land on.
+const bathWindow=windows.find(w=>w.elevation===main&&Math.abs(w.position[0]-point(1015,140)[0])<.01&&Math.abs(w.position[1]-point(1015,140)[1])<.01);
+bathWindow.climbable=false;bathWindow.climbReason='The tub deck fills the floor under the bath window. Use another opening.';
 
 export const martelli = {
   version: 2, id: 'martelli-01', name: 'Martelli House', stamp: 'MARTELLI HOUSE · MAIN + FOUNDATION · LAKE ↑',
@@ -209,7 +259,7 @@ export const martelli = {
   },
   extraction: { position: point(677,1010), elevation: main, radius: 1.2 },
   objective: { position: point(930,755), elevation: 0, radius: 1.2, label: 'Storage archive' },
-  walls, doors, windows, rooms, floors, props,
+  walls, doors, windows, rooms, floors, props, decor,
   ceilings: ceilingsFor([
     {outline:foundationOutline.map(([x,z])=>point(x,z)),height:2.4,holes:[rectangle(...point(510,510),...point(620,646))]},
     {outline:outline.map(([x,z])=>point(x,z)),elevation:main},
@@ -221,7 +271,7 @@ export const martelli = {
   scenery: [{ center: [0,-12.5], size: [32,3], elevation: 0.03, color: 0x4c8798 }],
   patrols: [
     [point(510,290),point(620,290)], [point(795,485),point(965,485)],
-    [point(1030,620),point(1140,620)], [point(350,310),point(650,310)],
+    [point(1045,620),point(1140,620)], [point(350,310),point(650,310)],
     [point(760,115),point(900,115)], [point(970,180),point(1100,180)],
     [point(780,700),point(950,700)], [point(1005,550),point(1140,550)],
   ],

@@ -29,7 +29,7 @@ test('short facade pieces keep their authored direction instead of protruding ac
   assert.ok(pieces.every(p=>Math.abs(p.center[0]-1)<1e-9));
   assert.ok(pieces.every(p=>Math.abs(p.center[2]-2)+p.size[2]/2<=.040001));
 });
-test('all 15 climbable Martelli windows work both ways, crouched and standing, without landing in walls',()=>{
+test('all 14 climbable Martelli windows work both ways, crouched and standing, without landing in walls',()=>{
   let count=0;
   for(const [index,window] of martelli.windows.entries()){
     if(window.climbable===false)continue;
@@ -48,7 +48,7 @@ test('all 15 climbable Martelli windows work both ways, crouched and standing, w
       assert.ok(clear(state,martelli));
     }
   }
-  assert.equal(count,15);
+  assert.equal(count,14);
 });
 test('windows with supported ground on both sides remain usable after physics ticks',()=>{
   for(const [index,window] of martelli.windows.entries()){
@@ -81,7 +81,7 @@ test('intact panes, obstructed headroom, unsafe stairwell landings and real drop
   const state=ready(paneMap);state.player=[-.65,0];state.facing=[1,0];assert.match(interact(state,paneMap),/intact/i);
   const low={...paneMap,ceilings:[{center:[0,0],size:[4,4],elevation:1.5,level:0}]},under=ready(low);under.player=[-.65,0];under.facing=[1,0];under.crouched=true;under.windowHealth[0]=0;
   assert.match(interact(under,low),/blocked/i);
-  const stair=martelli.windows.findIndex(w=>w.climbable===false),window=martelli.windows[stair],stairs=ready(martelli);
+  const stair=martelli.windows.findIndex(w=>/stairwell/i.test(w.climbReason??'')),window=martelli.windows[stair],stairs=ready(martelli);
   stairs.player=[window.position[0],window.position[1]+.65];stairs.playerY=window.elevation;stairs.facing=[0,-1];stairs.windowHealth[stair]=0;
   assert.match(interact(stairs,martelli),/no level landing/i);
   const index=martelli.windows.findIndex(w=>w.elevation===3.2&&w.position[1]<-8),high=martelli.windows[index],drop=ready(martelli);
