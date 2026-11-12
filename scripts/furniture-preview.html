@@ -10,6 +10,8 @@ button,select{padding:8px 11px;margin:0 6px 6px 0;background:#d8e7c9;color:#1725
 <header><h1>Furniture kit</h1><p>Every component and variant from <code>src/furniture.js</code>, drawn by the same code the game uses. Red frames are the single collision box each piece gets; blue labels are drawn only and never block.</p>
 <label>Show <select id="mode"><option value="kit">Kit</option><option value="main">Martelli · Main</option><option value="foundation">Martelli · Foundation</option><option value="finishes">Finishes</option></select></label><label>Facing <select id="facing"><option>down</option><option>up</option><option>left</option><option>right</option></select></label><label>Focus <select id="focus"></select></label><br>
 <button id="collision">Hide collision boxes</button><button id="labelsBtn">Hide labels</button><button id="overview">Overhead view</button>
+<button id="clearance" aria-pressed="false" hidden>Show clearance gaps</button>
+<p id="clearance-status" role="status" hidden></p>
 <p id="status" role="status"></p></header>
 <div id="labels"></div><canvas></canvas><footer>Drag to orbit, right-drag to pan, wheel to zoom. The grid is 1 m.</footer>
 <script type="module">
@@ -20,6 +22,7 @@ import { furnitureMeshes } from '/src/furniture-mesh.js';
 import { martelli } from '/src/maps/martelli.js';
 import { surfaceKinds, surfaceTile } from '/src/surface-plan.js';
 import { surfaceCanvas } from '/src/surface-textures.js';
+import { furnitureClearances } from '/src/clearance.js';
 
 const canvas=document.querySelector('canvas'),renderer=new THREE.WebGLRenderer({canvas,antialias:true});
 renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.setClearColor(0x1b2a26);renderer.shadowMap.enabled=true;renderer.outputColorSpace=THREE.SRGBColorSpace;
@@ -71,7 +74,20 @@ focus.onchange=()=>look(items[Number(focus.value)]??(focus.value===''?null:null)
 document.querySelector('#overview').onclick=()=>{controls.target.set(0,0,0);camera.position.set(0,26,.01);controls.update();focus.value='';};
 build(facing);look(null);
 // Martelli mode: the map's walls (cut at 1.6 m so rooms read from above) and its placed furniture.
-const house=new THREE.Group();house.visible=false;scene.add(house);let houseLevel=null;
+const house=new THREE.Group();house.visible=false;scene.add(house);
+const clearanceGroup = new THREE.Group();
+const clearanceButton = document.querySelector('#clearance');
+const clearanceStatus = document.querySelector('#clearance-status');
+const gapMaterials = [0xdd564a, 0xff2626].map(color => new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.7 }));
+const clearances = furnitureClearances(martelli);
+let showClearance = false;
+function updateClearance() {
+  clearanceGroup.visible = showClearance;
+  clearanceButton.setAttribute('aria-pressed', String(showClearance));
+  clearanceButton.textContent = showClearance ? 'Hide clearance gaps' : 'Show clearance gaps';
+  clearanceStatus.hidden = !showClearance || !house.visible;
+}
+clearanceButton.onclick = () => { showClearance = !showClearance; updateClearance(); };
 function buildHouse(level){
   house.clear();const y0=level*3.2,wallMat=material(0xd9d3c4),extMat=material(0x9d978a),shown=[...martelli.props,...(martelli.decor??[])].filter(p=>Math.round((p.elevation??0)/3.2)===level);
   for(const w of martelli.walls){if(Math.round(w.elevation/3.2-.01)!==level&&!(w.elevation>y0&&w.elevation<y0+3.2))continue;const base=w.elevation-y0,h=Math.max(.05,Math.min(w.height??2.8,1.6-base));if(base>=1.6)continue;const m=new THREE.Mesh(new THREE.BoxGeometry(w.size[0],h,w.size[1]),w.exterior?extMat:wallMat);m.position.set(w.center[0],base+h/2,w.center[1]);m.castShadow=m.receiveShadow=true;house.add(m);}
@@ -79,6 +95,17 @@ function buildHouse(level){
   for(const w of martelli.windows.filter(w=>Math.round(w.elevation/3.2)===level)){const m=new THREE.Mesh(new THREE.BoxGeometry(w.size[0],.03,Math.max(w.size[1],.1)),material(w.climbable===false?0xd06050:0x6fb6d0));m.position.set(w.position[0],.82,w.position[1]);house.add(m);}
   for(const p of shown){const flat={...p,elevation:(p.elevation??0)-y0};if(p.variant!==undefined||p.kind==='bed')furnitureMeshes(flat,material,glass).forEach(m=>house.add(m));else{const m=new THREE.Mesh(new THREE.BoxGeometry(p.size[0],p.height??1.1,p.size[1]),material(0x8a7a62));m.position.set(p.position[0],(p.height??1.1)/2,p.position[1]);house.add(m);}}
   for(const r of martelli.rooms.filter(r=>Math.round((r.elevation??0)/3.2)===level)){const tag=document.createElement('div');tag.className='tag';tag.innerHTML=`<b>${r.name}</b>`;labels.append(tag);roomTags.push({tag,top:new THREE.Vector3(r.center[0],1.8,r.center[1])});}
+  for (const marker of clearanceGroup.children) marker.geometry.dispose();
+  clearanceGroup.clear();
+  const gaps = clearances.filter(gap => gap.elevation === y0);
+  for (const gap of gaps) {
+    const marker = new THREE.Mesh(new THREE.BoxGeometry(gap.size[0], 0.025, gap.size[1]), gapMaterials[Number(gap.belowLocalMinimum)]);
+    marker.position.set(gap.center[0], 0.025, gap.center[1]);
+    clearanceGroup.add(marker);
+  }
+  house.add(clearanceGroup);
+  const narrow = gaps.filter(gap => gap.belowLocalMinimum).length;
+  clearanceStatus.textContent = `${narrow} below 70 cm (bright red) · ${gaps.length - narrow} from 70 to under 90 cm (muted red, review if on a main route)`;
 }
 const roomTags=[];
 // Finishes mode: each generated texture on a 2 m swatch at its real scale.
@@ -94,7 +121,7 @@ window.preview={view:(x,z,h=7)=>{controls.target.set(x,0,z);camera.position.set(
 document.querySelector('#mode').onchange=e=>{const mode=e.target.value,kit=mode==='kit';groups.forEach(g=>g.visible=kit);floor.visible=kit;
   for(const t of roomTags.filter(t=>!t.finish))t.tag.remove();roomTags.splice(0,roomTags.length,...roomTags.filter(t=>t.finish));items.forEach(i=>i.tag.style.visibility=kit?'':'hidden');
   const finishes=mode==='finishes';swatches.visible=finishes;roomTags.forEach(t=>{t.tag.style.visibility=t.finish&&!finishes?'hidden':'';});
-  house.visible=!kit&&!finishes;if(finishes){controls.target.set(0,0,0);camera.position.set(0,7,6);controls.update();}else if(!kit){buildHouse(mode==='main'?1:0);controls.target.set(3,0,-3);camera.position.set(3,22,8);controls.update();}else look(null);};
+  house.visible=!kit&&!finishes;clearanceButton.hidden=!house.visible;updateClearance();if(finishes){controls.target.set(0,0,0);camera.position.set(0,7,6);controls.update();}else if(!kit){buildHouse(mode==='main'?1:0);controls.target.set(3,0,-3);camera.position.set(3,22,8);controls.update();}else look(null);};
 document.querySelector('#status').textContent=`${items.length} pieces · ${Object.keys(furnitureKinds).length} components`;
 const v=new THREE.Vector3();
 function frame(){

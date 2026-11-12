@@ -11,6 +11,7 @@ import { createKitMenu } from './menus.js';
 import { bindCombatMouse } from './combat-input.js';
 import { togglePlayerCover, setPlayerPeek } from './player-cover.js';
 import { cutPower } from './lighting.js';
+import { graphicsPresets, loadGraphics, saveGraphics } from './graphics.js';
 
 const app = document.querySelector('#app');
 document.body.classList.add('rules-hidden');
@@ -37,7 +38,7 @@ app.innerHTML = `
         <p id="scan-status" role="status" aria-live="polite">Reveal guards on every floor for 10 mission seconds.</p>
         <button id="cut-power">Cut building power</button><p id="power-status" role="status">Building electricity on.</p>
       </section>
-      <div class="mission-card"><div class="eyebrow">OPERATION / 01</div><h1>The quiet house</h1><p id="objective">Retrieve the archive and extract.</p><div class="mission-line"><span class="status-dot"></span><span id="phase">PLANNING</span><span id="clock">00:00</span></div></div>
+      <div class="mission-card"><div class="eyebrow">OPERATION / 01</div><h1>The quiet house</h1><p id="objective">Retrieve the archive and extract.</p><div class="mission-line"><span class="status-dot"></span><span id="phase">PLANNING</span><span id="clock">00:00</span></div><div id="render-stats" hidden aria-label="Rendering performance"></div></div>
       <div class="map-stamp">N ↑<br><span>COURTYARD RESIDENCE<br>1 UNIT = 1 METRE</span></div>
       <div class="center-card" id="briefing"><div class="eyebrow">YOUR PLAN. YOUR RULES.</div><h2>Choose your kit.<br>Find your way.</h2><p>Retrieve the archive and extract. Plan your entry, choose weapons, ammunition and tools, then deploy. Doors and destructible interior partitions are alternative routes in the same guarded mission.</p><p class="muted">Tab opens inventory. E interacts. Left click fires while aimed or scoped. Headshots are lethal with every weapon and ammo configuration.</p><button id="deploy" class="primary">Loadout & planning <span>↗</span></button></div>
       <div class="bottom-hud"><div class="telemetry"><div class="health-panel"><span class="eyebrow">PLAYER HEALTH</span><div class="health-value"><strong id="health">100</strong><span>/ 100</span></div><div id="health-meter" role="meter" aria-label="Player health" aria-valuemin="0" aria-valuemax="100" aria-valuenow="100"><div id="health-fill"></div></div><span id="health-status">HEALTHY</span></div><div><span class="eyebrow">EXPOSURE</span><div class="meter"><div id="exposure"></div></div></div><div><span class="eyebrow">SUPPORT FUNDS</span><strong id="funds">$1,000</strong></div><div class="weapon-hud"><span class="eyebrow"><span id="equipped-name">ASSAULT RIFLE</span> / <span id="gait">WALK</span></span><strong id="ammo">30 / ∞</strong></div></div><p id="message" role="status" aria-live="polite">Choose your kit and plan your approach.</p><p id="guard-radio" hidden role="status" aria-live="polite"></p><div class="controls"><span><kbd>WASD</kbd> Move</span><span><kbd>Tab</kbd> Inventory</span><span><kbd>E</kbd> Door / climb</span><span><kbd>Shift</kbd> Hold to run</span><span><kbd>Ctrl</kbd> Creep</span><span><kbd>C</kbd> Crouch</span><span><kbd>Space</kbd> Jump</span><span><kbd>Mouse 4</kbd> Weapon strike</span><span><kbd>P</kbd> Pause</span><span><kbd>LMB</kbd> Use/fire</span><span><kbd>1–5</kbd> Weapons</span><span><kbd>H</kbd> Holster</span><span><kbd>R</kbd> Reload</span><span><kbd>Z</kbd> Aim/scope</span><span><kbd>B</kbd> Detonate</span><span><kbd>V/M</kbd> View/map</span></div></div>
@@ -45,6 +46,12 @@ app.innerHTML = `
     <aside id="rules-panel" aria-label="Sandbox rules">
       <div class="panel-heading"><div class="eyebrow">MAKE IT YOURS</div><h2>Sandbox rules</h2><p>A starting point, never a restriction.</p></div>
       <label class="preset-label" for="preset">Starting preset</label><select id="preset">${Object.keys(presets).map(name => `<option>${name}</option>`).join('')}<option disabled>Custom</option></select>
+      <section class="settings-group" aria-labelledby="graphics-heading">
+        <h3 id="graphics-heading">Graphics</h3>
+        <div class="setting"><label for="graphics-preset">Quality preset</label><select id="graphics-preset">${Object.keys(graphicsPresets).map(name => `<option>${name}</option>`).join('')}</select></div>
+        <div class="setting"><label for="graphics-stats">Show performance</label><input id="graphics-stats" type="checkbox" role="switch"></div>
+        <p id="graphics-notice" class="muted" role="status" hidden>Reload the page to apply the anti-aliasing change.</p>
+      </section>
       <div id="settings"></div>
       <div class="rules-note"><span>↳</span><p>Entry point, guard count, budget, and door durability apply on a new deployment. Other changes apply live. Rain reduces sight to 85%; fog to 60%.</p></div>
       <button id="restart" class="secondary">New deployment <span>↻</span></button>
@@ -83,8 +90,35 @@ const missionRules = () => ({ ...rules, missionSeed: rules.guardVariation ? rule
 const showSeed = () => { $('.mission-card .eyebrow').textContent = state.missionSeed ? `OPERATION / 01 · SEED ${state.missionSeed}` : 'OPERATION / 01'; };
 let state = createMission(map, missionRules(), loadout);
 showSeed();
+const graphics = loadGraphics();
+const initialAntialias = graphicsPresets[graphics.preset].antialias;
+const scenePreset = () => ({ ...graphicsPresets[graphics.preset], antialias: initialAntialias });
+const renderStats = $('#render-stats');
+let statsSince = null, statsFrames = 0;
+const resetStats = () => {
+  statsSince = null;
+  statsFrames = 0;
+  renderStats.textContent = '';
+};
+$('#graphics-preset').value = graphics.preset;
+$('#graphics-stats').checked = graphics.showStats;
+renderStats.hidden = !graphics.showStats;
+$('#graphics-preset').addEventListener('change', event => {
+  graphics.preset = event.target.value;
+  const preset = graphicsPresets[graphics.preset];
+  scene?.setGraphics(preset);
+  $('#graphics-notice').hidden = preset.antialias === initialAntialias;
+  resetStats();
+  saveGraphics(graphics);
+});
+$('#graphics-stats').addEventListener('change', event => {
+  graphics.showStats = event.target.checked;
+  renderStats.hidden = !graphics.showStats;
+  resetStats();
+  saveGraphics(graphics);
+});
 let scene;
-try { scene = createScene($('#world'), map); }
+try { scene = createScene($('#world'), map, scenePreset()); }
 catch (error) {
   $('#briefing').innerHTML = '<h2>3D rendering unavailable</h2><p>This prototype needs a browser with WebGL2 and hardware acceleration enabled.</p>';
   console.error(error);
@@ -271,10 +305,10 @@ function deploy() {
   if (!scene) return;
   const nextMap = resolveMap(plannedMap);
   if (map !== nextMap) {
-    releaseMouse(); scene.dispose(); map = nextMap; scene = createScene(canvas, map); scene.setView(view);
+    releaseMouse(); scene.dispose(); map = nextMap; scene = createScene(canvas, map, scenePreset()); scene.setView(view);
     updateMapLabels();
   }
-  held.clear(); state = createMission(map, missionRules(), loadout); state.status = 'active'; showSeed();
+  held.clear(); state = createMission(map, missionRules(), loadout); state.status = 'active'; showSeed(); resetStats();
   mapOpen = false; firing = false; aimed = false; scene.reset(state.spawnYaw); scene.setMap(false);
   $('#map-banner').hidden = true; $('#map-toggle').setAttribute('aria-pressed', 'false');
   $('.viewport').classList.remove('map-open');
@@ -365,10 +399,14 @@ window.addEventListener('keydown', event => {
 });
 window.addEventListener('keyup', event => { held.delete(event.code); if(event.code==='KeyX') setPlayerPeek(state,map,false); });
 window.addEventListener('blur', () => { held.clear(); firing = false; if (state.status === 'active') pause(); });
-document.addEventListener('visibilitychange', () => { if (document.hidden && state.status === 'active') pause(); });
+document.addEventListener('visibilitychange', () => {
+  resetStats();
+  if (document.hidden && state.status === 'active') pause();
+});
 let previous = performance.now(), oldStatus = state.status;
 function frame(now) {
-  const dt = Math.min((now - previous) / 1000, 0.05); previous = now;
+  const frameTime = now - previous;
+  const dt = Math.min(frameTime / 1000, 0.05); previous = now;
   const localInput = {
     x: Number(held.has('KeyD') || held.has('ArrowRight')) - Number(held.has('KeyA') || held.has('ArrowLeft')),
     z: Number(held.has('KeyS') || held.has('ArrowDown')) - Number(held.has('KeyW') || held.has('ArrowUp')),
@@ -387,6 +425,17 @@ function frame(now) {
   const exposed=!state.playerCover||state.playerCover.peeking;
   const scoped = exposed && aimed && state.inventory.equipped === 'sniper' && view === 'first' && !mapOpen && !menuVisible;
   scene?.draw(state, rules, dt, { moving: !!(input.x || input.z) && state.status === 'active', running: gait === 'run', firing: firing && state.status === 'active' && exposed, aimed:aimed&&exposed, scopeZoom, menuVisible });
+  if (scene && graphics.showStats) {
+    if (statsSince === null) statsSince = now;
+    else statsFrames++;
+    const elapsed = now - statsSince;
+    if (elapsed >= 500) {
+      const { calls, triangles, width, height } = scene.renderStats();
+      renderStats.textContent = `${(elapsed / statsFrames).toFixed(1)} ms/frame · ${calls} draws · ${triangles.toLocaleString()} tris · ${width}×${height}`;
+      statsSince = now;
+      statsFrames = 0;
+    }
+  }
   if (scene) $('#map-floor').value = String(scene.getFloor());
   $('#map-kills').textContent = `${state.kills}/${state.guards.length}`;
   if (state.surrenders) $('#map-kills').textContent += ` · ${state.surrenders} surrendered`;

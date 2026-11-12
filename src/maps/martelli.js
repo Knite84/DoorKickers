@@ -246,7 +246,7 @@ furnish('toyChest','wood',1071.5,386.5,'down');
 furnish('dresser','low',1117.75,422,'left',[1.15,0.45]);
 // Family room: L sectional floating mid-room facing the TV wall, its return
 // along the windows; squared-off corner fireplace; floor sofa and child's chair in the nook.
-props.push(...sectional('L',point(540,335),{size:[3.4,3.0],facing:'right',variant:'leather',mirror:true,seatDepth:1.0,elevation:0}));
+props.push(...sectional('L',point(560,335),{size:[3.4,3.0],facing:'right',variant:'leather',mirror:true,seatDepth:1.0,elevation:0}));
 furnish('fireplace','corner',686,230,'down',undefined,undefined,0);
 furnish('mediaConsole','tv',704.75,317,'left',undefined,undefined,0);
 furnish('sofa','floor',678.5,558,'up',[1.5,1.0],undefined,0);
@@ -296,10 +296,10 @@ furnish('cabinets','kitchen',337.5,499,'up',[1.5,0.6]);
 furnish('fridge','full',397.5,494,'up');
 furnish('island','seating',372.5,385,'right');
 for (const z of [345,385,425]) furnish('barStool','counter',413,z,'left');
-// Dining: table for six in the window bay, chairs kept off the window landings.
+// Dining: chairs tuck 0.3 m under the table to keep the great-room passage clear.
 furnish('diningTable','six',370,240,'down');
-for (const x of [345,395]) { furnish('chair','dining',x,202.5,'down'); furnish('chair','dining',x,277.5,'up'); }
-furnish('chair','dining',307.5,240,'right'); furnish('chair','dining',432.5,240,'left');
+for (const x of [345,395]) { furnish('chair','dining',x,217.5,'down'); furnish('chair','dining',x,262.5,'up'); }
+furnish('chair','dining',322.5,240,'right'); furnish('chair','dining',417.5,240,'left');
 // Great room: light grey L sectional facing the stone fireplace and built-in TV,
 // its return along the lake windows; blue armchair, end table with lamp, rug.
 props.push(...sectional('L',point(560,340),{size:[3.4,2.8],facing:'right',variant:'fabric',mirror:true,elevation:main}));

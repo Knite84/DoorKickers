@@ -24,9 +24,9 @@ Read `docs/HANDOFF.md` first for the state of the repo and the working agreement
 
 | Step | Summary | Done |
 |---|---|---|
-| 0.1 | Fix the two reported pinch points | ☐ |
+| 0.1 | Fix the two reported pinch points | ☑ |
 | 0.2 | Walkability audit and test | ☐ |
-| 1.1 | Frame-time readout and quality presets | ☐ |
+| 1.1 | Frame-time readout and quality presets | ☑ |
 | 1.2 | Tone mapping, exposure and colour | ☐ |
 | 1.3 | Sky and reflections | ☐ |
 | 1.4 | Post-processing stack | ☐ |
@@ -107,6 +107,23 @@ Done when: the owner can walk both routes in the browser, `npm test` passes (mov
 
 Done when: the audit reports no unapproved pinch points on Martelli and the reachability test is in the suite.
 
+#### Martelli audit for review
+
+In the furniture preview, select either Martelli floor, then **Show clearance gaps** and **Overhead view**. Bright red marks widths under 0.70 m. Muted red marks 0.70 m to under 0.90 m and needs review only where the gap is part of a main route. The overlay shows all 86 measured spans, including furniture groupings and fixture gaps. The table lists candidates where someone might expect to walk through. [Main without overlay](martelli-clearance-before.jpg) · [Main with overlay](martelli-clearance-after.jpg) · [Foundation with overlay](martelli-clearance-foundation.jpg)
+
+| Floor | Gap | Width | Review |
+|---|---|---:|---|
+| Main | South end of the kitchen island to the mudroom-side cabinet run and fridge | 0.68 m, then 0.48 m | Should players be able to pass around this end of the island? |
+| Main | Fridge to nearest island stool | 0.75 m | Check whether this is the intended kitchen exit toward the great room. |
+| Main | Great-room armchair to wall | 0.62 m | Confirm whether the aisle behind the chair should be walkable. |
+| Main | Great-room end table to media console | 0.58 m | Confirm whether the window-side gap is a route. |
+| Main | Laundry machines to wall | 0.80 m | Adequate for a local aisle. Review if treated as part of the closet through-route. |
+| Foundation | Armchair to wall in the stair nook | 0.63 m | Confirm whether the chair should leave a path along the wall. |
+| Foundation | Bedroom 5 bed to wall | 0.66 m | Confirm whether the wall-side gap is intentionally tight. |
+| Foundation | Bedroom 4 bed to bookcase | 0.62 m | Confirm whether this gap should serve as a walkway. |
+
+The 0.35 m-radius audit reuses the walking grid at 0.10 m spacing. From both entries it reaches walkable space in 15 of 17 Main rooms. The powder room and the entry-side closet have no reachable cell within their bounds. The return staircase also breaks connectivity for this radius, so the test checks Foundation separately from the stair foot. From there it reaches 9 of 10 playable rooms. The lower bath is the exception. Some room centres fall inside furniture or a partition, including the dining table and shared bath. The test records those separately from inaccessible rooms. The existing player test still walks both stair flights and returns through them with the standard 0.28 m collision padding.
+
 ---
 
 ## Phase 1: Rendering foundation
@@ -120,6 +137,18 @@ Small in code, the largest single visual jump, and everything later is judged th
 - Record baseline numbers on Martelli with eight guards. GPU cost has never been measured (see the sluggishness notes in the handoff).
 
 Done when: the readout works in all camera views and switching preset changes resolution scale live.
+
+**Verification.** Open **Sandbox rules → Graphics** to choose a preset or enable the readout. Medium is the default. Resolution and shadow size change live. Crossing between Low and either higher preset changes WebGL anti-aliasing on page reload. The readout averages frame intervals over roughly half a second and reports the latest frame's draw calls, triangles and buffer dimensions.
+
+Chrome on Martelli, with eight guards deployed and the sidebar closed:
+
+| Preset and view | Render buffer | Draw calls | Triangles |
+|---|---:|---:|---:|
+| Medium, first person at spawn | 1475 × 1040 | 2745 | 272,638 |
+| Medium, overhead | 1475 × 1040 | 1564 | 206,274 |
+| Low, first person at spawn | 1128 × 795 | 2735 | 272,518 |
+
+Guard movement makes the first-person counters vary slightly. The tactical map also displayed stats and confirmed eight guards. Chrome throttled the automation tab to roughly one frame per second, so the numbers above are render counters only. A foreground 1080p frame-time baseline is still needed to judge the 60 fps budget. [Medium screenshot](martelli-graphics-before.jpg) · [Low screenshot](martelli-graphics-after.jpg)
 
 ### 1.2 Tone mapping, exposure and colour
 

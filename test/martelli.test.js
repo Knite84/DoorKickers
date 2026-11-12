@@ -86,6 +86,17 @@ test('patrol waypoints start clear of walls, furniture and closed doors on both 
     path.forEach(position => assert.equal(boxes.some(box=>intersectsBox(position,position,box,0.28)),false,`patrol ${index} obstructed at ${position}`));
   });
 });
+test('the player can pass the dining chairs and the family-room sectional in both directions', () => {
+  const state = ready();
+  state.player = point(451,280);
+  walk(state,451,242);
+  walk(state,451,280);
+
+  state.player = point(460,445);
+  state.playerY = 0;
+  walk(state,460,350);
+  walk(state,460,445);
+});
 test('the aligned foundation bedrooms, baths and closets remain reachable from the stairs',()=>{
   const state=ready();
   [[677,560],[677,485],[592.5,485],[592.5,610],[537.5,610],[537.5,485],[680,485]].forEach(([x,z])=>walk(state,x,z));

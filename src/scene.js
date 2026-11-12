@@ -13,12 +13,12 @@ import { piecesInArea } from './spatial.js';
 import { isFurniture } from './furniture.js';
 import { furnitureMeshes } from './furniture-mesh.js';
 import { createSurfaceShading } from './surface-materials.js';
+import { graphicsPresets } from './graphics.js';
 
 // Asset boundary: replace these factories with GLB-backed factories later.
 // The simulation only knows positions and collision boxes, never meshes.
-export function createScene(canvas, map) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+export function createScene(canvas, map, preset = graphicsPresets.Medium) {
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: preset.antialias });
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
   renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -52,7 +52,6 @@ export function createScene(canvas, map) {
   const sun = new THREE.DirectionalLight(0xffebc4, 3.2);
   sun.position.set(...lighting.sunDirection.map(v=>v*35));
   sun.castShadow = true;
-  sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -24, right: 24, top: 24, bottom: -24 });
   sun.shadow.normalBias = 0.03;
   scene.add(sun);
@@ -326,6 +325,9 @@ export function createScene(canvas, map) {
   scene.add(rain);
   function resize() {
     const { width, height } = canvas.getBoundingClientRect();
+    if (!width || !height) return;
+    const pixelRatio = Math.min(window.devicePixelRatio, 2) * preset.resolution;
+    if (renderer.getPixelRatio() !== pixelRatio) renderer.setPixelRatio(pixelRatio);
     renderer.setSize(width, height, false);
     const aspect = width / height;
     firstPerson.aspect = aspect; firstPerson.updateProjectionMatrix();
@@ -336,6 +338,17 @@ export function createScene(canvas, map) {
     mapCamera.left = -halfHeight * aspect; mapCamera.right = halfHeight * aspect;
     mapCamera.top = halfHeight; mapCamera.bottom = -halfHeight; mapCamera.updateProjectionMatrix();
   }
+  function setGraphics(nextPreset) {
+    preset = nextPreset;
+    if (sun.shadow.mapSize.x !== preset.shadowSize) {
+      sun.shadow.mapSize.setScalar(preset.shadowSize);
+      sun.shadow.map?.dispose();
+      sun.shadow.map = null;
+      sun.shadow.needsUpdate = true;
+    }
+    resize();
+  }
+  setGraphics(preset);
   const resizeObserver = new ResizeObserver(resize); resizeObserver.observe(canvas);
   const zoomWheel = e => {
     if (view === 'first' && !mapOpen) return;
@@ -475,7 +488,13 @@ export function createScene(canvas, map) {
     renderer.render(scene, currentCamera);
   }
   return {
-    draw, shotEffect, eventEffect,
+    draw, shotEffect, eventEffect, setGraphics,
+    renderStats: () => ({
+      calls: renderer.info.render.calls,
+      triangles: renderer.info.render.triangles,
+      width: canvas.width,
+      height: canvas.height,
+    }),
     dispose: () => {
       lighting.dispose(); surfaceShading?.dispose();
       resizeObserver.disconnect(); canvas.removeEventListener('pointermove', pointerMove); canvas.removeEventListener('wheel', zoomWheel);

@@ -6,11 +6,11 @@ import { damageCount } from './spatial.js';
 // Cell size defaults to 0.65 m; maps with ordinary house doors ask for a finer
 // grid so at least one walkable cell always falls inside each doorway.
 const cache = new WeakMap();
-export function navigationFor(state, map) {
-  const signature = damageCount(state) + ':' + state.windowHealth?.join(',');
+export function navigationFor(state, map, { radius = 0.28, cell = map.navCell ?? 0.65 } = {}) {
+  const signature = [damageCount(state), state.windowHealth?.join(','), radius, cell].join(':');
   const prior = cache.get(state);
   if (prior?.signature === signature) return prior;
-  const CELL = map.navCell ?? 0.65, x0 = map.bounds.minX + 0.3, z0 = map.bounds.minZ + 0.3;
+  const CELL = cell, x0 = map.bounds.minX + 0.3, z0 = map.bounds.minZ + 0.3;
   const width = Math.floor((map.bounds.maxX - x0 - 0.3) / CELL) + 1;
   const depth = Math.floor((map.bounds.maxZ - z0 - 0.3) / CELL) + 1;
   const bases = (map.levels ?? [{ elevation: 0 }]).map(elevation), plane = width * depth;
@@ -34,11 +34,11 @@ export function navigationFor(state, map) {
       const center = [piece.center[0], piece.center[2]], size = [piece.size[0], piece.size[2]];
       if (between(piece) && landingHere(top)) { raster(level, center, size, -0.05, id => { landing[id % plane] = top; }); continue; }
       if (piece.floor && Math.abs(top - base) < 0.15) raster(level, center, size, 0.08, id => { supported[id % plane] = 1; });
-      if (bottom < base + 1.8 && top > base + 0.12) raster(level, center, size, 0.28, id => { blocked[id] = 1; });
+      if (bottom < base + 1.8 && top > base + 0.12) raster(level, center, size, radius, id => { blocked[id] = 1; });
     }
-    for (const prop of map.props) if (elevation(prop) < base + 1.8 && elevation(prop) + propHeight(prop) > base + 0.12) raster(level, prop.position, prop.size, 0.28, id => { blocked[id] = 1; });
+    for (const prop of map.props) if (elevation(prop) < base + 1.8 && elevation(prop) + propHeight(prop) > base + 0.12) raster(level, prop.position, prop.size, radius, id => { blocked[id] = 1; });
     (map.windows ?? []).forEach((window, index) => {
-      if (state.windowHealth[index] > 0 && Math.abs(elevation(window) - base) < 0.5) raster(level, window.position, window.size, 0.28, id => { blocked[id] = 1; });
+      if (state.windowHealth[index] > 0 && Math.abs(elevation(window) - base) < 0.5) raster(level, window.position, window.size, radius, id => { blocked[id] = 1; });
     });
     for (let at = 0; at < plane; at++) {
       const id = level * plane + at, stair = stairHeight(map, point(id)) ?? (Number.isNaN(landing[at]) ? null : landing[at]);
@@ -67,8 +67,37 @@ class Heap {
     } a[at] = last; return first;
   }
 }
+function visitNeighbors(g, id, visit) {
+  const { width, depth, plane, blocked, heights, onStair } = g;
+  const x = id % plane % width, z = Math.floor(id % plane / width), level = Math.floor(id / plane);
+  for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
+    if (!dx && !dz || x + dx < 0 || x + dx >= width || z + dz < 0 || z + dz >= depth) continue;
+    if (dx && dz && (blocked[level * plane + z * width + x + dx] || blocked[level * plane + (z + dz) * width + x])) continue;
+    for (let nextLevel = 0; nextLevel < g.bases.length; nextLevel++) {
+      const next = nextLevel * plane + (z + dz) * width + x + dx;
+      const rise = heights[next] - heights[id];
+      if (blocked[next] || Math.abs(rise) > 0.5 || rise > 0.12 && !onStair[next]) continue;
+      visit(next, dx, dz, rise);
+    }
+  }
+}
+
+export function reachableCells(graph, source) {
+  const visited = new Uint8Array(graph.blocked.length);
+  if (source < 0 || source >= visited.length || graph.blocked[source]) return visited;
+  const queue = [source];
+  visited[source] = 1;
+  const enqueue = next => {
+    if (visited[next]) return;
+    visited[next] = 1;
+    queue.push(next);
+  };
+  for (let i = 0; i < queue.length; i++) visitNeighbors(graph, queue[i], enqueue);
+  return visited;
+}
+
 export function findGuardPath(state, map, start, startY, target, targetY) {
-  const g = navigationFor(state, map), { width, depth, plane, blocked, heights, point, cell, x0, z0 } = g;
+  const g = navigationFor(state, map), { width, plane, blocked, heights, point, cell, x0, z0 } = g;
   // Plan position of a cell without allocating; searches call these constantly.
   const cellX = id => x0 + (id % plane % width) * cell, cellZ = id => z0 + Math.floor(id % plane / width) * cell;
   function nearest(position, y) {
@@ -87,23 +116,18 @@ export function findGuardPath(state, map, start, startY, target, targetY) {
   const scratch = g.scratch ??= { costs: new Float64Array(blocked.length), parents: new Int32Array(blocked.length), closed: new Uint8Array(blocked.length) };
   const costs = scratch.costs.fill(Infinity), parents = scratch.parents.fill(-1), closed = scratch.closed.fill(0), open = new Heap();
   costs[source] = 0; open.push({ id: source, score: heuristic(source) }); let best = source;
+  let id;
+  function relax(next, dx, dz, rise) {
+    if (closed[next]) return;
+    const cost = costs[id] + g.cell * Math.hypot(dx, dz) + Math.abs(rise);
+    if (cost >= costs[next]) return;
+    costs[next] = cost; parents[next] = id; open.push({ id: next, score: cost + heuristic(next) });
+  }
   while (open.values.length) {
-    const { id } = open.pop(); if (closed[id]) continue; closed[id] = 1;
+    id = open.pop().id; if (closed[id]) continue; closed[id] = 1;
     if (heuristic(id) < heuristic(best)) best = id;
     if (id === goal) { best = goal; break; }
-    const x = id % plane % width, z = Math.floor(id % plane / width), level = Math.floor(id / plane);
-    for (let dz = -1; dz <= 1; dz++) for (let dx = -1; dx <= 1; dx++) {
-      if (!dx && !dz || x + dx < 0 || x + dx >= width || z + dz < 0 || z + dz >= depth) continue;
-      for (let nextLevel = 0; nextLevel < g.bases.length; nextLevel++) {
-        const next = nextLevel * plane + (z + dz) * width + x + dx;
-        if (blocked[next] || closed[next] || Math.abs(heights[next] - heights[id]) > 0.5) continue;
-        if (heights[next] - heights[id] > 0.12 && !g.onStair[next]) continue;
-        if (dx && dz && (blocked[level * plane + z * width + x + dx] || blocked[level * plane + (z + dz) * width + x])) continue;
-        const cost = costs[id] + g.cell * Math.hypot(dx, dz) + Math.abs(heights[next] - heights[id]);
-        if (cost >= costs[next]) continue;
-        costs[next] = cost; parents[next] = id; open.push({ id: next, score: cost + heuristic(next) });
-      }
-    }
+    visitNeighbors(g, id, relax);
   }
   const path = []; for (let at = best; at !== source && at >= 0; at = parents[at]) path.push({ position: point(at), elevation: heights[at] });
   return path.reverse();
