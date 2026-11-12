@@ -20,6 +20,7 @@ export const bindingLabels = {
   reload: 'Reload', aim: 'Aim / scope', holster: 'Holster', cover: 'Take cover', peek: 'Peek (hold)', detonate: 'Detonate charges',
   nightvision: 'Night vision', thermal: 'Thermals', view: 'Change view', map: 'Tactical map', floor: 'Switch floor', pause: 'Pause',
   weapon1: 'Weapon 1', weapon2: 'Weapon 2', weapon3: 'Weapon 3', weapon4: 'Weapon 4', weapon5: 'Weapon 5',
+  weapon6: 'Slot 6 · Grenade', weapon7: 'Slot 7 · Flashbang', weapon8: 'Slot 8 · Det cord',
 };
 export const defaultBindings = {
   forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD',
@@ -27,6 +28,7 @@ export const defaultBindings = {
   reload: 'KeyR', aim: 'KeyZ', holster: 'KeyH', cover: 'KeyQ', peek: 'KeyX', detonate: 'KeyB',
   nightvision: 'KeyN', thermal: 'KeyT', view: 'KeyV', map: 'KeyM', floor: 'KeyF', pause: 'KeyP',
   weapon1: 'Digit1', weapon2: 'Digit2', weapon3: 'Digit3', weapon4: 'Digit4', weapon5: 'Digit5',
+  weapon6: 'Digit6', weapon7: 'Digit7', weapon8: 'Digit8',
 };
 export const reservedCodes = ['Escape', 'Tab', 'F5', 'F11', 'F12'];
 

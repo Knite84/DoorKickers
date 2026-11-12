@@ -81,6 +81,23 @@ export function equip(state, id) {
   state.ammo = state.inventory.magazines[id] ?? 0;
   return true;
 }
+// Number-key slots, in order: weapon1 is slot 1. The mouse wheel cycles through
+// the same list, skipping anything not carried or used up.
+export const slotOrder = ['rifle', 'pistol', 'shotgun', 'sniper', 'minigun', 'grenade', 'flashbang', 'detcord'];
+const slotReady = (state, id) => weapons[id] ? !!state.inventory.weapons[id]?.carried : state.inventory.items[id] > 0;
+// Step to the next (+1) or previous (-1) ready slot from what is in hand. From
+// something off the list (hands, knife), +1 starts at the first slot and -1 at
+// the last. Returns the id equipped, or null when nothing else is ready.
+export function cycleEquipped(state, step) {
+  const current = slotOrder.indexOf(state.inventory.equipped), count = slotOrder.length;
+  for (let offset = 1; offset <= count; offset++) {
+    const index = current < 0 ? (step > 0 ? offset - 1 : count - offset) : ((current + step * offset) % count + count) % count;
+    const id = slotOrder[index];
+    if (id === state.inventory.equipped) return null;
+    if (slotReady(state, id) && equip(state, id)) return id;
+  }
+  return null;
+}
 export function isArmed(state) {
   return Object.hasOwn(weapons, state.inventory.equipped) || ['knife', 'axe', 'crowbar', 'detcord', 'claymore', 'grenade', 'flashbang', 'molotov'].includes(state.inventory.equipped);
 }

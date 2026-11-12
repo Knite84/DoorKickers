@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { defaults } from '../src/rules.js';
 import { courtyard } from '../src/maps/courtyard.js';
 import { createMission, stepMission, movePlayer } from '../src/simulation.js';
-import { defaultLoadout, validateLoadout, equip, weapons } from '../src/kit.js';
+import { defaultLoadout, validateLoadout, equip, weapons, slotOrder, cycleEquipped } from '../src/kit.js';
 import { fireWeapon, reload, finishReload } from '../src/weapons.js';
 import { useEquipment, detonateCharges, stepEquipment } from '../src/equipment.js';
 import { damagePlayer } from '../src/combat.js';
@@ -123,4 +123,24 @@ test('pausing freezes projectiles and guard damage as well as movement', () => {
   const state = ready(); equip(state, 'grenade'); useEquipment(state, arena, safeRules, [0, 1, 0], [1, 0, 0]);
   state.status = 'paused'; const before = structuredClone(state);
   stepMission(state, arena, safeRules, 1, { x: 0, z: 0 }); assert.deepEqual(state, before);
+});
+
+test('slots 6 to 8 hold the grenade, flashbang and det cord, and the wheel cycles all eight', () => {
+  assert.deepEqual(slotOrder.slice(5), ['grenade', 'flashbang', 'detcord']);
+  const state = createMission(courtyard, { ...defaults, guardCount: 0 }, defaultLoadout());
+  state.inventory.equipped = 'rifle';
+  const seen = [];
+  for (let i = 0; i < slotOrder.length; i++) seen.push(cycleEquipped(state, 1));
+  assert.deepEqual(seen, [...slotOrder.slice(1), 'rifle'], 'down the list and back round');
+  assert.equal(cycleEquipped(state, -1), 'detcord', 'up from slot 1 wraps to slot 8');
+  // Used-up and uncarried slots are skipped.
+  state.inventory.items.flashbang = 0; state.inventory.weapons.minigun.carried = false;
+  state.inventory.equipped = 'sniper';
+  assert.equal(cycleEquipped(state, 1), 'grenade');
+  assert.equal(cycleEquipped(state, 1), 'detcord');
+  // From something off the list, down starts at slot 1 and up at slot 8.
+  state.inventory.equipped = 'knife';
+  assert.equal(cycleEquipped(state, 1), 'rifle');
+  state.inventory.equipped = 'unarmed';
+  assert.equal(cycleEquipped(state, -1), 'detcord');
 });

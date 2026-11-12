@@ -9,6 +9,10 @@ test('defaults are valid and every action has a label and one distinct key', () 
   assert.deepEqual(Object.keys(defaultBindings), Object.keys(bindingLabels));
   assert.equal(new Set(Object.values(defaultBindings)).size, Object.keys(defaultBindings).length);
   assert.deepEqual(validateBindings(defaultBindings), defaultBindings);
+  assert.deepEqual([defaultBindings.weapon6, defaultBindings.weapon7, defaultBindings.weapon8], ['Digit6', 'Digit7', 'Digit8']);
+  // A kit saved before slots 6 to 8 existed gets them on their default keys.
+  const { weapon6, weapon7, weapon8, ...older } = defaultBindings;
+  assert.deepEqual(validateBindings(older), defaultBindings);
 });
 
 test('settings are clamped, and wrong types fall back to defaults', () => {

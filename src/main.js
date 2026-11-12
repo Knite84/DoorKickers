@@ -6,7 +6,7 @@ import { createMission, stepMission, interact, distance, movementGait, toggleCro
 import { createScene } from './scene.js';
 import { fireWeapon, reload } from './weapons.js';
 import { createGunAudio } from './audio.js';
-import { weapons, items, ammoTypes, defaultLoadout, validateLoadout, equip, toggleHolster, restockEquipment } from './kit.js';
+import { weapons, items, ammoTypes, defaultLoadout, validateLoadout, equip, toggleHolster, restockEquipment, slotOrder, cycleEquipped } from './kit.js';
 import { useEquipment, detonateCharges, weaponStrike } from './equipment.js';
 import { createKitMenu } from './menus.js';
 import { bindCombatMouse } from './combat-input.js';
@@ -323,9 +323,24 @@ function toggleAim() {
   if (view !== 'first' || mapOpen || menuVisible || state.status !== 'active' || !weapons[state.inventory.equipped]) return;
   aimed = !aimed;
 }
+// Wheel: zooms the sniper scope while aiming; otherwise, in first person, cycles
+// the slots (down = next). A short cooldown keeps one trackpad swipe to one step.
+let wheelReadyAt = 0;
 canvas.addEventListener('wheel', event => {
-  if (aimed && state.inventory.equipped === 'sniper') { event.preventDefault(); scopeZoom = Math.max(2, Math.min(8, scopeZoom - Math.sign(event.deltaY))); }
+  if (aimed && state.inventory.equipped === 'sniper') { event.preventDefault(); scopeZoom = Math.max(2, Math.min(8, scopeZoom - Math.sign(event.deltaY))); return; }
+  if (view !== 'first' || mapOpen || menuVisible || state.status !== 'active' || !event.deltaY) return;
+  event.preventDefault();
+  const now = performance.now();
+  if (now < wheelReadyAt) return;
+  wheelReadyAt = now + 150;
+  if (cycleEquipped(state, Math.sign(event.deltaY))) { aimed = false; firing = false; }
 }, { passive: false });
+function equipSlot(slot) {
+  const id = slotOrder[slot - 1];
+  if (!id) return;
+  if (equip(state, id)) { aimed = false; firing = false; }
+  else message(`${weapons[id]?.name ?? items[id].name} not carried${items[id] ? ' or used up' : ''}. Add it in loadout planning.`);
+}
 function detonate() {
   if (state.status !== 'active') return message('Resume the mission before detonating charges.');
   const count = detonateCharges(state, map, rules);
@@ -478,7 +493,7 @@ window.addEventListener('keydown', event => {
   if (action === 'reload' && reload(state)) message('Reloading…');
   if (action === 'aim') toggleAim();
   if (action === 'detonate') detonate();
-  if (action?.startsWith('weapon')) { equip(state, ['rifle', 'pistol', 'shotgun', 'sniper', 'minigun'][Number(action.slice(6)) - 1]); aimed = false; }
+  if (action?.startsWith('weapon')) equipSlot(Number(action.slice(6)));
   if (action === 'jump' && !mapOpen) jump(state, map);
   if (action === 'interact') { const result = interact(state, map); if (result) message(result); }
 });
