@@ -422,6 +422,18 @@ export const furnitureKinds = {
     default: 'stack',
     draw: (w, d) => [0, 1, 2].flatMap(i => [box(0, i * 0.3, 0, w - i * 0.01, 0.27, d, color.tote), box(0, i * 0.3 + 0.27, 0, w + 0.02 - i * 0.01, 0.03, d + 0.02, color.navy)]),
   },
+  fireplace: {
+    label: 'Fireplace',
+    // A corner fireplace squared off against the walls: brick to the ceiling,
+    // raised hearth, dark tiled surround and a wood mantel.
+    variants: { corner: { size: [1.2, 1.0], height: 2.35 } },
+    default: 'corner',
+    draw: (w, d, v) => {
+      const hearthD = 0.35, massD = d - hearthD, mz = -d / 2 + massD / 2, face = -d / 2 + massD;
+      return [box(0, 0, mz, w, v.height, massD, color.brick), box(0, 0, d / 2 - hearthD / 2, w, 0.4, hearthD, color.brick), box(0, 0.4, face + 0.01, w * 0.8, 0.85, 0.02, color.black),
+        box(0, 0.48, face + 0.02, w * 0.5, 0.55, 0.01, 0x2a1d17), box(0, 0.5, face + 0.03, w * 0.35, 0.12, 0.01, 0xd07a35), box(0, 1.3, face + 0.08, w * 0.9, 0.1, 0.16, color.walnut)];
+    },
+  },
   // Drawn only: never in map.props, never blocks movement, shots or guards.
   rug: {
     label: 'Rug', drawnOnly: true,
@@ -506,10 +518,12 @@ export function piece(kind, variant, position, { size, facing = 'down', elevatio
 
 // L- or U-shaped sectional as two or three ordinary sofa pieces. `size` is
 // the local overall width x depth; the long back run sits against the back.
-export function sectional(shape, position, { size = [3.4, 2.8], facing = 'down', variant = 'fabric', seatDepth = 0.95, elevation } = {}) {
+// `mirror` puts an L's return on the right-hand end (seen from the front).
+export function sectional(shape, position, { size = [3.4, 2.8], facing = 'down', variant = 'fabric', seatDepth = 0.95, elevation, mirror = false } = {}) {
   const [w, d] = size, q = quarter(facing), returnLength = d - seatDepth;
-  const parts = [{ at: [0, -d / 2 + seatDepth / 2], size: [w, seatDepth], turn: 0, arms: shape === 'U' ? 'none' : 'right' }];
-  parts.push({ at: [-w / 2 + seatDepth / 2, seatDepth / 2], size: [returnLength, seatDepth], turn: 1, arms: 'left' });
+  const parts = [{ at: [0, -d / 2 + seatDepth / 2], size: [w, seatDepth], turn: 0, arms: shape === 'U' ? 'none' : mirror ? 'left' : 'right' }];
+  if (mirror && shape === 'L') parts.push({ at: [w / 2 - seatDepth / 2, seatDepth / 2], size: [returnLength, seatDepth], turn: 3, arms: 'right' });
+  else parts.push({ at: [-w / 2 + seatDepth / 2, seatDepth / 2], size: [returnLength, seatDepth], turn: 1, arms: 'left' });
   if (shape === 'U') parts.push({ at: [w / 2 - seatDepth / 2, seatDepth / 2], size: [returnLength, seatDepth], turn: 3, arms: 'right' });
   else if (shape !== 'L') throw new Error(`Sectional shape must be L or U, not "${shape}"`);
   return parts.map(part => {

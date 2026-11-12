@@ -63,8 +63,8 @@ test('no map puts a drawn-only piece where it would collide', () => {
 });
 
 test('L and U sectionals are two and three non-overlapping sofas inside the overall footprint', () => {
-  for (const [shape, count] of [['L', 2], ['U', 3]]) for (const facing of facings) {
-    const parts = sectional(shape, [1, 1], { size: [3.4, 2.8], facing }), outer = footprint([3.4, 2.8], facing);
+  for (const [shape, count, mirror] of [['L', 2, false], ['L', 2, true], ['U', 3, false]]) for (const facing of facings) {
+    const parts = sectional(shape, [1, 1], { size: [3.4, 2.8], facing, mirror }), outer = footprint([3.4, 2.8], facing);
     assert.equal(parts.length, count);
     for (const p of parts) for (const i of [0, 1]) assert.ok(Math.abs(p.position[i] - 1) + p.size[i] / 2 <= outer[i] / 2 + 1e-9, `${shape} ${facing} part outside`);
     for (let a = 0; a < parts.length; a++) for (let b = a + 1; b < parts.length; b++) {

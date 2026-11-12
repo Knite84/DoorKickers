@@ -1,5 +1,5 @@
 import { ceilingsFor, rectangle } from './ceilings.js';
-import { piece, isDrawnOnly } from '../furniture.js';
+import { piece, sectional, isDrawnOnly } from '../furniture.js';
 // Traced from the two local floorplans. Plan-up faces the lake (south in the
 // north-up aerial photograph). Door annotations imply roughly 2 cm per pixel.
 // Foundation is engine datum 0; the main floor and front approach are at 3.2 m.
@@ -175,7 +175,8 @@ v(1133,452,fz(565),[],0);
 h(fz(570),720,fx(932),[door(fx(803),80)],0);
 // Wet bar beneath the kitchen behind the brick wall's 6 ft arch, and the arched
 // alcove beside the stairs.
-h(fz(440),248,fx(440),[],0); v(fx(440),fz(440),518,[gap(fz(504),92)],0);
+// The bar's north side is a brick half wall carrying the bar top (a furniture piece below).
+v(fx(440),fz(440),518,[gap(fz(504),92)],0);
 h(518,425,510,[gap(478,46)],0);
 // Side of the lower flight; its north end opens directly into the family room.
 v(510,510,590,[],0);
@@ -236,6 +237,19 @@ furnish('bookcase','cube',1016.5,614,'right',[1.0,0.3]);
 furnish('closetRun','single',1089,382.75,'down',[1.6,0.35]);
 furnish('toyChest','wood',1071.5,386.5,'down');
 furnish('dresser','low',1117.75,422,'left',[1.15,0.45]);
+// Family room: L sectional floating mid-room facing the TV wall, its return
+// along the windows; squared-off corner fireplace; floor sofa and child's chair in the nook.
+props.push(...sectional('L',point(540,335),{size:[3.4,3.0],facing:'right',variant:'leather',mirror:true,seatDepth:1.0,elevation:0}));
+furnish('fireplace','corner',686,230,'down',undefined,undefined,0);
+furnish('mediaConsole','tv',704.75,317,'left',undefined,undefined,0);
+furnish('sofa','floor',678.5,558,'up',[1.5,1.0],undefined,0);
+furnish('armchair','child',614,570,'right',undefined,undefined,0);
+// Wet bar: brick half wall with the raised top facing the room, four stools,
+// beverage fridge at the end; back counter with sink and uppers on the far wall.
+furnish('barCounter','brick',342,373,'up',[3.48,0.4],undefined,0);
+for (const x of [305,340,375,410]) furnish('barStool','bar',x,349,'down',undefined,undefined,0);
+furnish('fridge','under',271,348,'up',undefined,undefined,0);
+furnish('cabinets','wetBar',342,496,'up',[3.48,0.6],undefined,0);
 prop('table',340,fz(471),150,30,0); prop('table',340,fz(559),150,26,0); bed(850,180,85,80,0); bed(1030,lowerZ(330),85,80,0);
 prop('crate',1110,lowerZ(660),55,40,0); prop('crate',1040,lowerZ(665),45,40,0);
 prop('planter',740,900,70,30); prop('planter',580,795,35,75);
@@ -285,7 +299,7 @@ export const martelli = {
     ['bedroom hall', 890, 483, main, 2], ['primary bedroom', 770, 280, main, 1], ['primary bath', 1050, 230, main, 0.4],
     ['bedroom 3', 1100, 620, main, 0.8], ['bedroom 2', 880, 700, main, 0.8], ['garage', 300, 720, main, 1],
     ['mudroom', 480, 555, main, 0.8], ['rear deck', 585, 120, main, 1, 1.5],
-    ['family room', 500, 330, 0, 1.5], ['stair foot', 537, 470, 0, 2], ['bar', 340, 440, 0, 1, 1.5],
+    ['family room', 440, 300, 0, 1.5], ['stair foot', 537, 470, 0, 2], ['bar', 340, 440, 0, 1, 1.5],
     ['lower hall', 830, 465, 0, 2], ['archive', 900, 700, 0, 3, 1.6], ['storage east', 1100, 550, 0, 1.5],
     ['bedroom 5', 760, 200, 0, 0.7], ['bedroom 4', 980, 180, 0, 0.7],
   ].map(([name, x, z, elevation, weight, dwell = 1]) => ({ name, position: point(x, z), elevation, weight, dwell })),
