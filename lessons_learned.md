@@ -152,6 +152,8 @@ The original health number was too easy to miss. Keep the large labeled health p
   - **Fix:** `src/door-visual.js` adds a white colour attribute.
   - **Lesson:** a material that reads vertex colours needs that attribute on every geometry drawn with it. A whole object rendering black points to a missing attribute, not to lighting. The step's screenshot check missed it because no door was in clear view, so check interiors with `scripts/interior-preview.html`.
 - **Material patches must chain.** `lighting.decorate` replaces `onBeforeCompile`, so it must run first. Every later patch wraps the previous one and extends `customProgramCacheKey`. Otherwise two different shaders can share one compiled program. See "Rendering conventions" in `docs/POLISH_PLAN.md`.
+- **Light samples can land inside walls.** The baked light field samples a fixed 0.65 m grid. A sample 5 mm inside Bedroom 3's west wall saw no light at all, and the wall face beside it rendered nearly black. About a hundred samples in eleven Martelli rooms were embedded this way. `sample()` in `src/lighting.js` now steps such a point toward its room's centre before tracing light.
+- **Paint zones are rectangles, not walls.** An accent-wall zone also caught the first half-metre of the two side walls. Zones take `facing: 'x' | 'z'`. Face direction comes from the wall's own axis, because a stub shorter than the wall is thick reads the wrong way from its shape.
 
 ## 9. Definition of a useful checkpoint
 

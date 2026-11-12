@@ -16,7 +16,7 @@ Updated 2026-11-12. This is the current state of the project for a fresh session
   - **Black doors fixed:** every panelled door rendered black from step 3.3 until the fix. The furniture materials read vertex colours and the door geometry had none; `src/door-visual.js` now adds them.
   - **Garage doors:** the two garage doors carry `garage: true` and are drawn without a lever.
   - **Door height:** Martelli doors are 2.03 m tall (garage doors 2.13 m) under a breakable wall header, instead of ceiling-high slabs. `doorHeight(door)` in `src/world.js` reads `door.height`; other maps keep 2.8 m doors. As a result, light no longer passes over doors between rooms, and a jump inside a doorway can hit the header.
-- `npm test`: 261 passing on 2026-11-12, about 6 seconds.
+- `npm test`: 263 passing on 2026-11-12, about 6 seconds.
 
 ## Waiting on the owner
 

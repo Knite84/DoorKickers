@@ -42,7 +42,7 @@ export function createLightingModel(map) {
   function sample(position,base=0,destroyed=[],height=1.2,state) {
     const direction = lightingProfile(state?.timeOfDay).direction;
     const unobstructed = (a, b) => clear(a, b, state);
-    const room=indoorRooms.some(r=>Math.abs(elevation(r)-base)<.2&&inside(position,r.center,r.size));
+    const roomAt=indoorRooms.find(r=>Math.abs(elevation(r)-base)<.2&&inside(position,r.center,r.size)),room=!!roomAt;
     const slab=(map.floors??[]).some(f=>Math.abs(f.elevation-base)<.1&&(!f.solid||base===0&&f.material==='concrete')&&inside(position,f.center,f.size));
     if(!room&&!slab) {
       let electric = 0;
@@ -57,6 +57,18 @@ export function createLightingModel(map) {
       return {interior:false,daylight:1,solar:1,electric};
     }
     let daylight=0,solar=0,electric=0;
+    // A grid point can land inside a wall (Bedroom 3's west wall sat 5 mm into
+    // one), where every ray is blocked and the wall face beside it baked black.
+    // Step toward the room's centre until the point is clear of structure.
+    const solidAt=p=>(state?.wallPieces?piecesAlong(state.wallPieces,p,p):boxes).some(box=>(box.hp??1)>0&&!box.floor
+      &&[0,1,2].every(axis=>Math.abs(p[axis]-box.center[axis])<=box.size[axis]/2));
+    if(roomAt&&solidAt([position[0],base+height,position[1]])){
+      const [cx,cz]=roomAt.center,away=Math.hypot(cx-position[0],cz-position[1])||1;
+      for(let step=.05;step<=.5;step+=.05){
+        const moved=[position[0]+(cx-position[0])/away*step,position[1]+(cz-position[1])/away*step];
+        if(!solidAt([moved[0],base+height,moved[1]])){position=moved;break;}
+      }
+    }
     const eye=[position[0],base+height,position[1]];
     for(const window of windows) {
       if(Math.abs(elevation(window)-base)>.2) continue;

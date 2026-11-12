@@ -60,3 +60,17 @@ test('interior wall skins are painted for the room they face', () => {
   assert.equal(roomAt(martelli, ...point(340, 440), 0).name, 'BAR');
   assert.equal(paintAt(martelli, ...point(960, 550), 1), martelli.paint.default, 'vanity alcove stays cream');
 });
+
+test('Bedroom 3 accent blue stays on its own wall and stops at the corners', () => {
+  const pieces = buildWallPieces(martelli), blue = 0x2e8ed0;
+  const onMain = pieces.filter(p => p.material === 'masonry' && p.level === 1 && !p.floor);
+  // The accent wall: plan x 1188 between z 455 and 646.
+  const accent = onMain.filter(p => Math.abs(p.center[0] - point(1188, 0)[0]) < 0.05 && p.center[2] > point(0, 470)[1] && p.center[2] < point(0, 630)[1]);
+  assert.ok(accent.length > 0);
+  for (const p of accent) assert.equal(exteriorFaces(martelli, p).paint, blue);
+  // The side walls' last metre beside that corner keeps the room grey.
+  const sides = onMain.filter(p => p.center[0] > point(1160, 0)[0] && p.center[0] < point(1185, 0)[0]
+    && [452, 646].some(z => Math.abs(p.center[2] - point(0, z)[1]) < 0.05));
+  assert.ok(sides.length > 0);
+  for (const p of sides) assert.equal(exteriorFaces(martelli, p).paint, martelli.paint['BEDROOM 3']);
+});

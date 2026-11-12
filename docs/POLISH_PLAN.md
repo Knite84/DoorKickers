@@ -21,7 +21,7 @@ Read [HANDOFF.md](HANDOFF.md) first for the state of the repo and the working ag
   - When you finish building a step, mark it ◐ and list its open checks in the table. Never mark ☑ yourself.
   - A ◐ step does not block the next step. Checks that need the owner's machine, such as frame timing, are collected in the handoff.
 - Steps marked **Propose first** are open-ended. Show the owner a short proposal, with a preview page or screenshot where possible, and wait for a go-ahead before building.
-- Keep `npm test` green (261 passing on 2026-11-12). Add tests for anything that is pure data or geometry. Change layout tests only on purpose, and say why in the step's notes.
+- Keep `npm test` green (263 passing on 2026-11-12). Add tests for anything that is pure data or geometry. Change layout tests only on purpose, and say why in the step's notes.
 - **Verify every visual step in the browser** on the Martelli map. Follow **Verification** below.
 - When a step lands, record it in two places:
   - **This plan:** update its row in the status table and add a short **Built** note under the step: what changed, what was seen, what is open, and before and after screenshot links.

@@ -455,8 +455,9 @@ export const martelli = {
   paint: { default: 0xe4ddcf, 'PRIMARY BEDROOM': 0x3d4b4e, 'PRIMARY BATH': 0xc2a37c, 'BEDROOM 2': 0xa7a8a3, 'BEDROOM 3': 0xa7a8a3,
     'SHARED BATH': 0x2b3c5e, 'BEDROOM 5': 0x2b3b54, UTILITY: 0xb89466, GARAGE: 0xd9d6cc },
   paintZones: [
-    { color: 0xe2c94f, rect: [...point(740,590), ...point(770,780)], elevation: main },
-    { color: 0x2e8ed0, rect: [...point(1158,455), ...point(1188,646)], elevation: main },
+    // Accent walls: only the faces looking along x, so the colour stops at the corners.
+    { color: 0xe2c94f, rect: [...point(740,590), ...point(770,780)], elevation: main, facing: 'x' },
+    { color: 0x2e8ed0, rect: [...point(1158,455), ...point(1188,646)], elevation: main, facing: 'x' },
     { color: 0xe4ddcf, rect: [...point(915,510), ...point(1005,590)], elevation: main },
     { color: 0xe4ddcf, rect: [...point(915,718), ...point(1005,780)], elevation: main },
   ],

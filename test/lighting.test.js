@@ -163,3 +163,13 @@ test('solid cover blocks shots aimed at a light',()=>{
   fireWeapon(state,layout,rules,[0,1,-2],[0,1.55,4]);
   assert.equal(state.destroyedLights[0],false);
 });
+
+test('light samples that land inside a wall are taken from the room side instead of baking black', () => {
+  const state = createMission(martelli, { ...defaults, guardCount: 0 }, defaultLoadout());
+  const model = createLightingModel(martelli);
+  // The 0.65 m light grid puts a sample 5 mm inside Bedroom 3's west wall (plan x 1188).
+  const x = martelli.bounds.minX + 42.5 * 0.65, z = martelli.bounds.minZ + 23.5 * 0.65;
+  const sample = model.sample([x, z], 3.2, [], 1.2, state);
+  assert.equal(sample.interior, true);
+  assert.ok(sample.daylight > 0.2 && sample.electric > 0.2, JSON.stringify(sample));
+});
