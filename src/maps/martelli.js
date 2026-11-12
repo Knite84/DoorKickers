@@ -173,6 +173,10 @@ v(fx(1027),fz(422),fz(565),[],0); h(fz(513),fx(932),fx(1027),[],0); h(fz(565),fx
 v(1133,452,fz(565),[],0);
 // Double doors from the lower hall into unfinished storage.
 h(fz(570),720,fx(932),[door(fx(803),80)],0);
+// The gym behind those doors is finished; the unfinished utility room east of it
+// is reached only through the mechanical door. The split leaves a 1.2 m passage
+// from the mechanical vestibule into the utility room.
+v(fx(932),fz(570),565,[],0); h(565,fx(932),1005,[],0); v(1005,565,646,[],0);
 // Wet bar beneath the kitchen behind the brick wall's 6 ft arch, and the arched
 // alcove beside the stairs.
 // The bar's north side is a brick half wall carrying the bar top (a furniture piece below).
@@ -193,7 +197,7 @@ room('FAMILY ROOM',248,198,720,510,0); room('BAR',248,fz(440),fx(440),518,0);
 room('BEDROOM 5',720,90,fx(932),fz(350),0); room('BEDROOM 4',fx(932),140,1133,fz(422),0);
 room('CLOSET',720,fz(350),fx(800),fz(488),0); room('BATH',fx(800),fz(350),fx(880),fz(488),0);
 room('CLOSET',fx(932),fz(422),fx(1027),fz(513),0); room('LOWER BATH',fx(1027),fz(422),1133,fz(565),0);
-room('UTILITY / STORAGE',740,fz(570),1005,780,0);
+room('GYM',720,fz(570),1005,780,0); room('UTILITY',1005,502,1188,646,0);
 room('UNEXCAVATED / BELOW GARAGE',14,590,510,900,0);
 prop('table',370,265,110,48); prop('table',350,365,75,38); prop('crate',265,420,20,95);
 prop('table',704,358,24,90);
@@ -264,8 +268,32 @@ furnish('vanity','single',823.75,396,'right',undefined,undefined,0);
 furnish('vanity','single',1059.75,381.5,'right',undefined,undefined,0);
 furnish('toilet','standard',1063.5,425,'right',undefined,undefined,0);
 furnish('tubShower','alcove',1083.5,478,'up',undefined,undefined,0);
-prop('table',340,fz(471),150,30,0); prop('table',340,fz(559),150,26,0); bed(850,180,85,80,0); bed(1030,lowerZ(330),85,80,0);
-prop('crate',1110,lowerZ(660),55,40,0); prop('crate',1040,lowerZ(665),45,40,0);
+// Bedroom 5, used as an office: daybed along the east wall beside the door,
+// executive desk floating near the window with its chair facing east.
+furnish('bed','daybed',940,180,'left',undefined,undefined,0);
+furnish('desk','executive',840,185,'left',undefined,undefined,0); furnish('chair','office',800,185,'right',undefined,undefined,0);
+furnish('ceilingFan','standard',846,185,'down',undefined,{ceiling:2.4},0);
+furnish('closetRun','single',732.75,374.5,'right',[1.78,0.35],undefined,0);
+furnish('linenCabinet','closet',790.75,404.75,'left',undefined,undefined,0);
+// Bedroom 4: platform bed on the east wall with the dresser in the corner beside
+// it (clear of the window), bookcase between the bath and closet doors; double
+// rods in the walk-in closet. The photos' glass desk is left out: with it the
+// room had no guard-width path to the window side.
+furnish('bed','platform',1076,266,'left',[1.6,2.0],undefined,0);
+furnish('dresser','white',1116,190,'left',[1.4,0.4],undefined,0);
+furnish('bookcase','tall',1065,344,'up',[0.8,0.28],undefined,0);
+furnish('closetRun','double',984.75,401.5,'right',[1.46,0.35],undefined,0);
+furnish('closetRun','double',1016.5,429.25,'up',[0.86,0.35],undefined,0);
+// Gym (owner's decision): a wall TV and a yoga mat only.
+furnish('wallTV','small',773,771.5,'up',undefined,undefined,0);
+furnish('yogaMat','mat',870,660,'down',undefined,undefined,0);
+// Utility room: furnace and water heater in the back corner (the photos show
+// them by the door, but there they choked the only way in), shelving and tote
+// stacks along the back wall. The archive objective is kept here.
+furnish('furnace','upflow',1155,479,'down',undefined,undefined,0);
+furnish('waterHeater','tank',1157,512,'down',undefined,undefined,0);
+furnish('storageShelf','totes',1042.5,627.75,'up',undefined,undefined,0);
+furnish('totes','stack',1090,629,'up',undefined,undefined,0); furnish('totes','stack',1120,629,'up',undefined,undefined,0);
 prop('planter',740,900,70,30); prop('planter',580,795,35,75);
 const stairWindow=windows.find(w=>w.elevation===main&&Math.abs(w.position[0]-point(565,646)[0])<.01&&Math.abs(w.position[1]-point(565,646)[1])<.01);
 stairWindow.climbable=false;stairWindow.climbReason='The stairwell window has no level landing. Use the nearby front door.';
@@ -275,7 +303,7 @@ bathWindow.climbable=false;bathWindow.climbReason='The tub deck fills the floor 
 
 export const martelli = {
   version: 2, id: 'martelli-01', name: 'Martelli House', stamp: 'MARTELLI HOUSE · MAIN + FOUNDATION · LAKE ↑',
-  description: 'Enter from the front walk on Main, explore the great room and bedroom wing, then take the return staircase down to Foundation. Retrieve the archive in lower storage and return to the front walk. Layout traced from the supplied plans; scale and furnishings are approximate. Plan-up faces the lake, south in the north-up aerial.',
+  description: 'Enter from the front walk on Main, explore the great room and bedroom wing, then take the return staircase down to Foundation. Retrieve the archive from the utility room behind the mechanical door and return to the front walk. Layout traced from the supplied plans; scale and furnishings are approximate. Plan-up faces the lake, south in the north-up aerial.',
   bounds: { minX: -16, maxX: 16, minZ: -14, maxZ: 14 },
   // Interior doors are 0.8 m; a 0.2 m walking grid always finds a way through.
   navCell: 0.2,
@@ -286,7 +314,7 @@ export const martelli = {
     'west gallery': { position: point(145,1010), elevation: main, yaw: 0, label: 'Driveway · outside garage' },
   },
   extraction: { position: point(677,1010), elevation: main, radius: 1.2 },
-  objective: { position: point(930,755), elevation: 0, radius: 1.2, label: 'Storage archive' },
+  objective: { position: point(1150,590), elevation: 0, radius: 1.2, label: 'Utility room archive' },
   walls, doors, windows, rooms, floors, props, decor,
   ceilings: ceilingsFor([
     {outline:foundationOutline.map(([x,z])=>point(x,z)),height:2.4,holes:[rectangle(...point(510,510),...point(620,646))]},
@@ -300,8 +328,8 @@ export const martelli = {
   patrols: [
     [point(510,290),point(620,290)], [point(795,485),point(965,485)],
     [point(1045,620),point(1140,620)], [point(350,310),point(650,310)],
-    [point(760,115),point(900,115)], [point(970,180),point(1100,180)],
-    [point(780,700),point(950,700)], [point(1005,550),point(1140,550)],
+    [point(760,115),point(900,115)], [point(985,180),point(1090,180)],
+    [point(780,700),point(950,700)], [point(1030,575),point(1140,550)],
   ],
   guardElevations: [main, main, main, 0, 0, 0, 0, 0],
   // Places guards gravitate to. Weight is how often a post is someone's home;
@@ -314,7 +342,7 @@ export const martelli = {
     ['bedroom 3', 1100, 620, main, 0.8], ['bedroom 2', 880, 700, main, 0.8], ['garage', 300, 720, main, 1],
     ['mudroom', 480, 555, main, 0.8], ['rear deck', 585, 120, main, 1, 1.5],
     ['family room', 440, 300, 0, 1.5], ['stair foot', 537, 470, 0, 2], ['bar', 340, 440, 0, 1, 1.5],
-    ['lower hall', 830, 465, 0, 2], ['archive', 900, 700, 0, 3, 1.6], ['storage east', 1100, 550, 0, 1.5],
+    ['lower hall', 830, 465, 0, 2], ['archive', 1150, 590, 0, 3, 1.6], ['storage east', 1100, 550, 0, 1.5],
     ['bedroom 5', 760, 200, 0, 0.7], ['bedroom 4', 980, 180, 0, 0.7],
   ].map(([name, x, z, elevation, weight, dwell = 1]) => ({ name, position: point(x, z), elevation, weight, dwell })),
 };

@@ -39,7 +39,7 @@ test('Martelli is selectable and both exterior starts have main-floor support', 
 });
 test('walk from outside through Main, down both return flights, collect and extract', () => {
   const state = ready();
-  const route = [[677,560],[677,485],[592.5,485],[592.5,610],[537.5,610],[537.5,485],[680,485],[795,485],[795,625],[930,625],[930,755]];
+  const route = [[677,560],[677,485],[592.5,485],[592.5,610],[537.5,610],[537.5,485],[680,485],[913,470],[913,480],[1000,480],[1010,520],[1030,580],[1150,590]];
   route.forEach(([x,z])=>walk(state,x,z));
   assert.equal(state.playerY,0); assert.match(interact(state,martelli),/secured/i);
   [...route].reverse().forEach(([x,z])=>walk(state,x,z));
@@ -129,5 +129,5 @@ test('Bedroom 4 bath is sealed from storage and beds are low furniture',()=>{
   assert.equal(segmentClear(state,martelli,at(point(1100,480),1.2),at(point(1165,480),1.2),-1,{glass:false}),false);
   assert.equal(segmentClear(state,martelli,at(point(1100,480),1.2),at(point(1100,540),1.2),-1,{glass:false}),false);
   const beds=martelli.props.filter(p=>p.kind==='bed');
-  assert.equal(beds.length,5); assert.ok(beds.every(b=>propHeight(b)<=(b.variant==='bunk'?1.7:0.6)));
+  assert.equal(beds.length,5); assert.ok(beds.every(b=>propHeight(b)<=(({bunk:1.7,daybed:0.8})[b.variant]??0.6)));
 });
