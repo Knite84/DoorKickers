@@ -71,6 +71,14 @@ The build currently produces a JavaScript chunk above Vite's size-warning thresh
 | `src/menus.js` | Loadout planning, map/enemy-count selection, carried inventory |
 | `src/rules.js` | Settings schema, defaults, presets, validation and retired-preset migration |
 | `src/audio.js` | Optional synthesized gunfire audio |
+| `src/furniture.js`, `src/furniture-mesh.js`, `src/clearance.js` | Furniture kit as data (one collision box per piece), its meshes, and the walkability audit |
+| `src/surface-plan.js`, `src/surface-materials.js`, `src/surface-textures.js` | Room floor finishes and wall paint as data, applied as world-space textures |
+| `src/trim.js`, `src/stair-dress.js`, `src/door-visual.js` | Baseboards and casings, stair railings and carpet, panelled doors (all drawn only) |
+| `src/roof.js`, `src/site.js` and their `*-mesh.js` files | Drawn-only roof, lawn slopes, retaining walls, porch screens and trees |
+| `src/scene-lighting.js`, `src/scene-sky.js`, `src/scene-shadows.js`, `src/scene-post.js`, `src/contact-shading.js`, `src/light-rebake.js`, `src/graphics.js` | Light field and material patch, sky, sun shadows, post-processing, baked contact shading, rebakes after damage, quality presets |
+| `src/guard-traits.js`, `src/guard-posts.js`, `src/guard-wounds.js`, `src/guard-weapon.js`, `src/guard-radio.js` | Guard variety systems; see `docs/HANDOFF.md` |
+| `src/settings.js`, `src/settings-menu.js`, `src/screens.js`, `src/hud-model.js`, `src/debrief.js`, `src/plan-view.js`, `src/ui.css` | Settings and key bindings, menu screens, HUD rules, debrief timeline, briefing floor plan |
+| `src/weapon-models.js` | First-person firearm models as data |
 | `src/maps/` | Authored map data and map selection registry |
 | `test/` | Pure gameplay/geometry/input regression tests |
 | `docs/` | Design notes, verification screenshots and dependency-license snapshot |
@@ -79,11 +87,12 @@ The build currently produces a JavaScript chunk above Vite's size-warning thresh
 
 ## Maps and coordinate model
 
-Three authored maps are registered in `src/maps/index.js`:
+Four authored maps are registered in `src/maps/index.js`:
 
 - **The quiet house:** original residence and courtyard retrieval mission.
 - **The long house:** three successive interior partitions with a side inspection corridor for penetration comparisons.
 - **Meridian Lodge:** two stories, twelve rooms plus hallways, a west stairwell, windows, locked entries and an upstairs archive.
+- **Martelli House:** a two-storey lake house traced from local floorplans. It has furnished rooms, a roof, sloped side yards, a deck with stairs, and a lower-level archive. Authoring notes: [docs/MARTELLI_REFERENCE.md](docs/MARTELLI_REFERENCE.md).
 
 Map/gameplay positions use `[x, z]` in metres. Three-dimensional positions use `[x, y, z]`, with Y up. Player height is stored separately in `playerY`; map doors, props, rooms, objectives and guards can have an `elevation`. Lodge stories are at 0 and 3.2 m.
 
@@ -93,7 +102,7 @@ Geometry, mission anchors and patrol paths are authored JavaScript data. There i
 
 `requestAnimationFrame` in `src/main.js` advances simulation with a capped delta, then renders and updates HUD state. Pausing, the tactical map, focus loss, and the default inventory behavior stop simulation. Mission simulation can run in Node tests without creating a DOM, WebGL renderer, or audio context.
 
-The player moves along X/Z with axis-wise collision sliding and a radius allowance. Height comes from stairs, gravity and remaining floor support. Crouching changes both eye and collision height; there is no general jumping or free vertical movement. Projectile and visibility tests use three-dimensional axis-aligned bounds.
+The player moves along X/Z with axis-wise collision sliding and a radius allowance. Height comes from stairs and outdoor slopes (both ramps, `stairHeight` in `src/world.js`), gravity and remaining floor support. Crouching changes both eye and collision height. Space jumps; there is no free vertical movement. Projectile and visibility tests use three-dimensional axis-aligned bounds.
 
 Thousands of structural pieces are drawn through a few material-grouped `THREE.InstancedMesh` batches. Piece state and instance indices remain aligned. Tactical/overhead views select a story; first person renders all geometry with normal depth occlusion. Destruction effects and tracers are temporary visual effects, not independent collision state.
 
@@ -152,7 +161,7 @@ The browser origin owns this storage. There is no synchronization, cloud backup,
 
 ## Tests and verification
 
-At this documentation checkpoint, 108 Node tests cover simulation, input chords, kit validation/migration, separate magazines, scoped/head hits, multi-layer penetration, blast cover, doors, wall support, lodge reachability, crouch, floor breaches, windows, picking, M134 movement restrictions, guard communication/navigation/detention, knife behavior, articulated injuries/ragdolls, glass-breaking tools/throwables, framing/body resistance, and repeatable equipment restocking.
+On 2026-11-12, 264 Node tests passed (`npm test`, about 6 seconds). They cover simulation, input chords, kit validation/migration, separate magazines, scoped/head hits, multi-layer penetration, blast cover, doors, wall support, lodge reachability, crouch, floor breaches, windows, picking, M134 movement restrictions, guard communication/navigation/detention, knife behavior, articulated injuries/ragdolls, glass-breaking tools/throwables, framing/body resistance, and repeatable equipment restocking. Newer tests cover the Martelli map (walking routes, reachability, windows, furniture clearance), lighting and contact shading, surface finishes, trim, stair dressing, roof and site geometry, the HUD and settings models, and weapon slots.
 
 Melee targeting includes intact window bounds so axe/crowbar hits shatter the nearest pane and other tools cannot act through it. Each throwable movement step sweeps window intersections in distance order, verifies solid cover to each impact, and shatters reachable panes before resolving ordinary solid collision. Grenades, flashbangs, and Molotovs retain their velocity and fuse through glass; only solid impact/landing triggers early Molotov ignition. `test/window-equipment.test.js` includes actual lodge windows on both stories, multiple panes per step, range/cooldown, and glass behind solid cover.
 

@@ -21,7 +21,7 @@ Read [HANDOFF.md](HANDOFF.md) first for the state of the repo and the working ag
   - When you finish building a step, mark it ◐ and list its open checks in the table. Never mark ☑ yourself.
   - A ◐ step does not block the next step. Checks that need the owner's machine, such as frame timing, are collected in the handoff.
 - Steps marked **Propose first** are open-ended. Show the owner a short proposal, with a preview page or screenshot where possible, and wait for a go-ahead before building.
-- Keep `npm test` green (263 passing on 2026-11-12). Add tests for anything that is pure data or geometry. Change layout tests only on purpose, and say why in the step's notes.
+- Keep `npm test` green (264 passing on 2026-11-12). Add tests for anything that is pure data or geometry. Change layout tests only on purpose, and say why in the step's notes.
 - **Verify every visual step in the browser** on the Martelli map. Follow **Verification** below.
 - When a step lands, record it in two places:
   - **This plan:** update its row in the status table and add a short **Built** note under the step: what changed, what was seen, what is open, and before and after screenshot links.
@@ -105,9 +105,10 @@ These are traps that have already cost time. Follow them on every rendering chan
 | 6.2 | Loose physics: casings, debris, doors, chairs | ☐ |  | Opus |
 | 6.3 | Movement feel | ☐ |  | Sonnet (mantling: Opus) |
 | 6.4 | Sound | ☐ |  | Opus brief, then Sonnet |
+| 6.5 | Destructible furniture | ☐ | Owner answered the design questions on 2026-11-12 (recorded in the step); ready to build. Expect tuning afterwards | Sonnet |
 | 7.1 | Interface foundation | ◐ | Not proposed first, by the owner's instruction to build 7.2 to 7.4. Only tokens and a window-relative scale exist (`src/ui.css`); the older `style.css` still carries the map banner and kit menu | Opus to propose |
 | 7.2 | In-mission HUD | ◐ | Owner look at the HUD at several window sizes; damage arrow and window-climb prompt not seen in play; minimal mode and HUD scale not seen | Sonnet |
-| 7.3 | Settings screen | ◐ | Mouse sensitivity, invert and master volume not tried in play; rebound keys not played with | Sonnet |
+| 7.3 | Settings screen | ◐ | Mouse sensitivity, invert and master volume not tried in play; rebound keys not played with (slots 6 to 8 and wheel switching added 2026-11-12, tried in play) | Sonnet |
 | 7.4 | Loading, briefing, planning and debrief screens | ◐ | Debrief seen only with test data, not at the end of a real mission; kit menu not restyled; the planning screen is still the existing dialog | Sonnet |
 | 8 | Compound-assault game loop (design questions) | ☐ | Owner decisions | Opus, with the owner |
 
@@ -540,6 +541,62 @@ Start from: `createGunAudio()` in `src/audio.js` (synthesized gunfire), the nois
 - A mix bus with a compressor, positional sound, room reverb sized from the current room, and muffling through walls using the existing obstruction checks.
 - Sound matters to play here: what the player hears should match what guards are deemed to have heard.
 
+### 6.5 Destructible furniture
+
+The owner asked on 2026-11-12 for furniture that can be destroyed. Today every piece in `map.props` is one indestructible collision box. Shots stop dead at it: `traceShot` in `src/weapons.js` leaves `resistance` at Infinity for props. Blasts and tools never damage it.
+
+**Where furniture is read.** Every one of these must respect a broken piece, or the game will disagree with what is drawn:
+- **Shots:** `traceShot` in `src/weapons.js`, and `consider(..., 'prop')` in `src/equipment.js` for tool strikes and throws.
+- **Movement and standing:** `obstacles` and `playerSupport` in `src/simulation.js`. Players can stand on furniture tops.
+- **Guards:** the walking grid in `src/navigation.js`. Its cache `signature` must change when a piece breaks. Also cover and concealment in `src/guard-tactics.js`.
+- **The player:** cover in `src/player-cover.js` (its signature uses `map.props.length`), and window landings in `src/window-traversal.js`.
+- **Ragdolls:** contacts in `src/npc-body.js`.
+- **Lighting:** contact shading in `src/contact-shading.js`, and the rebake trigger in `src/light-rebake.js` / `src/scene-lighting.js`.
+- **Drawing:** kit pieces are drawn by `furnitureMeshes` and batched into instanced meshes by `batchFurnitureMeshes` (`src/furniture-mesh.js`). The legacy `table`, `crate`, `planter` and `bed` kinds are drawn in `src/scene.js`. Hiding one broken piece inside a batch needs per-instance visibility, like the wall pieces (convention 3).
+
+**Owner's answers (2026-11-12).** The proposal stage is done. Build from these, and expect the owner to tune the numbers afterwards.
+1. **What breaks: lean toward more, not less.** Almost everything breaks, including TVs, mirrors, rugs, bathroom fixtures, benches and end tables. Only counters and kitchen appliances stay unbreakable: `cabinets`, `island`, `barCounter` and `fridge` in `src/furniture.js`.
+   - Laundry machines, the furnace, the water heater and the fireplace are not kitchen appliances, so they break, with high health.
+   - The drawn-only brick `arch` is part of the walls and stays.
+   - TVs, mirrors, rugs, the yoga mat and ceiling fans are drawn-only `map.decor`, with no collision. Breaking them changes only the drawing: they need their own health in the mission state, hit by the same shots and blasts.
+2. **Soft furniture never stops bullets,** even intact: sofas, armchairs, beds, the bench cushions and similar pieces. It is concealment, not cover. It still blocks movement and sight until broken.
+3. **What is left is low debris** on the piece's footprint, about 0.9 m high. The player and guards can both crouch behind it. It is **concealment only**:
+   - it blocks sight below its top, the way the planters' foliage does in `src/guard-tactics.js` and `src/player-cover.js`;
+   - it does not stop bullets or blasts;
+   - it does not block movement, so it can be walked through, which is what opens routes (answer 5).
+4. **Damage by source, fastest first:**
+   - explosions;
+   - fire (Molotov);
+   - shotguns;
+   - pistols and rifles, which "poke holes but are surprisingly slow";
+   - the axe and crowbar, the slowest against anything but walls.
+
+   Bullet holes are a visual (decals, step 6.1). Until 6.1 exists, show damage some other way, for example darkening as doors do.
+5. **Broken furniture opens routes.** Debris is no longer collision, so the walking grid rebuilds and guards path through it.
+
+**Build:**
+- Keep `map.props` and `map.decor` unchanged; they are shared map data. Put damage in the mission state, as doors do: `state.propHealth[i]` and `state.decorHealth[i]`, reset on each deployment.
+- Add one helper in `src/world.js`, for example `propIntact(state, index)` and `propBox(state, map, index)`, which returns the full box, the debris box or nothing. Use it everywhere listed above.
+- **One tuning table** in `src/furniture.js`, so the owner can tune from one place:
+  - each kind's class: `soft`, `wood`, `heavy`, `fixture`, `glass` (TV, mirror) or `unbreakable`;
+  - health per class, scaled by the piece's size;
+  - per-class multipliers for each damage source;
+  - whether bullets pass through, with a penetration cost.
+- Consider a sandbox rule "Furniture durability" next to "Door durability" in `src/rules.js`. The owner expects to tweak.
+- Reuse the door pattern in `src/doors.js` for damage, the break event and guard discovery. Guards already radio about damaged walls, doors and windows.
+
+**Tests:**
+- A shot stops at an intact `wood` or `heavy` piece, and passes through an intact `soft` piece and through debris.
+- Debris hides a crouched player from a guard, and the player can walk through it.
+- The order of damage sources holds for one piece: a blast breaks it fastest, then fire, the shotgun, the rifle and pistol, and the axe and crowbar.
+- Counters and kitchen appliances never break.
+- Cover turns into concealment when its piece breaks, for both the player and guards.
+- The walking grid rebuilds after a break.
+- `map.props` and `map.decor` are unchanged, and a new deployment restores every piece.
+- Furniture must stay identical on the courtyard, long house and lodge unless the owner says otherwise. Their legacy `table`, `crate` and `planter` props are part of other tests.
+
+**Done when:** almost everything in Martelli breaks in the owner's order of damage sources, debris gives crouch-height concealment, what is drawn always matches what collides, and the tests above pass. Knocking light furniture over (6.2) is separate; this step only breaks it.
+
 Done when (phase): a firefight in the great room leaves marks, debris and brass, and can be followed by ear.
 
 ---
@@ -571,7 +628,8 @@ Start from: `src/style.css`, the HUD markup built in `src/main.js`, and the dial
 - **Graphics:** the existing preset, performance and exposure controls. **Game:** the existing rules, preset, import and export. **Audio:** master volume. **Controls:** sensitivity, invert, and a key table. **Interface:** HUD scale, minimal HUD, crosshair style, control hints.
 - `src/settings.js` holds the schema, validation, saving and key bindings, with conflict detection that refuses a taken key and names its owner (`test/settings.test.js`). Tab and Esc are fixed.
 - The key handler in `main.js` now reads the bindings. Movement still also answers to the arrow keys.
-- **Not built:** music and radio volume sliders (those sounds do not exist yet; see 6.4), separate effects volume (gunfire volume stays a Game rule), and per-weapon bindings beyond slots 1 to 5.
+- **Not built:** music and radio volume sliders (those sounds do not exist yet; see 6.4) and a separate effects volume (gunfire volume stays a Game rule).
+- **Added later (2026-11-12, owner request):** slots 6, 7 and 8 equip the grenade, flashbang and det cord (`weapon6` to `weapon8` in `src/settings.js`, rebindable; older saved bindings gain them on their default keys). The mouse wheel cycles the eight slots in first person, skipping anything not carried or used up. While aiming the sniper, the wheel still zooms the scope. The slot order and `cycleEquipped` live in `src/kit.js` (`test/kit-equipment.test.js`). Tried in play in Chrome: keys 6, 7, 8 and 1, and the wheel in both directions.
 - Seen in Chrome: all five tabs, rebinding with a refused conflict and an accepted key saved to storage (reset afterwards).
 
 - Tabbed settings: Graphics (preset plus individual toggles from Phase 1), Audio (master, effects, music, radio), Controls (sensitivity, invert, key bindings with conflict detection), Interface (HUD scale, crosshair, hints), Game (the existing sandbox rules, with import and export kept).

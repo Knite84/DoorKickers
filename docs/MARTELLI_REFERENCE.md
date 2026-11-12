@@ -4,7 +4,7 @@ How the Martelli map is authored, the owner's layout decisions, and the photo in
 
 ## How the map is built
 
-File: `src/maps/martelli.js`. Everything is authored in **main-floorplan pixels** and converted by `point(x, z)` at 0.02 m per pixel, origin at pixel (600, 500). Plan-up is the lake side.
+File: `src/maps/martelli.js`. Everything is authored in **main-floorplan pixels** and converted by `point(x, z)` at 0.02 m per pixel, origin at pixel (600, 500). Plan-up is the lake side, which faces **south**. Plan +x is west. The owner talks in real compass directions: "Bedroom 3's west wall" is plan x 1188.
 
 - `h(z, x1, x2, openings, elevation, exterior)` and `v(x, z1, z2, …)` draw axis-aligned walls. Openings are `door(at, width)`, `win(at, width)` or `gap(at, width)`. `door(at, width, { garage: true })` marks an overhead garage door, drawn without a lever (the two garage doors use it). Doors are 2.03 m tall (garage doors 2.13 m) under a breakable wall header; `doorHeight(door)` in `src/world.js` reads `door.height`, and other maps keep 2.8 m ceiling-high doors.
 - `rail(axis, fixed, lo, hi)` draws a 1 m guard rail (blocks movement, not sight).
@@ -12,6 +12,13 @@ File: `src/maps/martelli.js`. Everything is authored in **main-floorplan pixels*
 - The foundation drawing is about 4% smaller than the main one. Use `fx(x)` and `fz(z)` to convert **foundation-plan pixels** into map pixels.
 - `room(name, x1, z1, x2, z2, elevation)` adds a map label only.
 - `furnish(kind, variant, x, z, facing, size, options, elevation)` places a kit piece in plan pixels (elevation defaults to Main). `prop(kind, x, z, width, depth, elevation)` places a legacy prop (the two yard planters use it); `bed(...)` is unused.
+- **Outside (step 4.3).** All of these are built near the top of the file and drawn by `src/site.js` and `src/roof.js`:
+  - `slope(x1, z1, x2, z2, grade)` adds a walkable ramp to `slopes`;
+  - `retaining(...)` adds a drawn-only retaining wall;
+  - `STRIP` is the level strip's width beside the side walls;
+  - the deck posts, rails, screens and stairs follow the deck slab;
+  - `trees` holds the solid trunks;
+  - `roof.wings` holds the roof outlines.
 - `posts` near the bottom lists where guards stand. `navCell: 0.2` gives guards a fine walking grid; interior doors are only 0.8 m wide.
 - Walls must be axis-aligned. Angled features (dining bay, corner fireplace, the angled mechanical-room door) are squared off.
 
