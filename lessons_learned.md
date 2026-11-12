@@ -147,6 +147,11 @@ The original health number was too easy to miss. Keep the large labeled health p
 - Tactical views hide other stories consistently across walls, floors, doors, panes, props, actors, routes, and room labels. First person uses real occlusion instead of a floor cutaway.
 - The Vite build currently emits a chunk-size warning. A successful build with this warning is not a runtime failure. Download/bundle size and GPU draw-call cost are different problems; instancing fixes the latter.
 - Keep generated audio optional. Autoplay restrictions or missing audio support must not prevent gameplay.
+- **Black panelled doors (fixed 2026-11-12).** From polish step 3.3, every panelled door rendered pure black.
+  - **Cause:** doors reused the furniture materials, which set `vertexColors: true`. The merged door geometry had no `color` attribute, and WebGL supplies (0, 0, 0) for a missing attribute.
+  - **Fix:** `src/door-visual.js` adds a white colour attribute.
+  - **Lesson:** a material that reads vertex colours needs that attribute on every geometry drawn with it. A whole object rendering black points to a missing attribute, not to lighting. The step's screenshot check missed it because no door was in clear view, so check interiors with `scripts/interior-preview.html`.
+- **Material patches must chain.** `lighting.decorate` replaces `onBeforeCompile`, so it must run first. Every later patch wraps the previous one and extends `customProgramCacheKey`. Otherwise two different shaders can share one compiled program. See "Rendering conventions" in `docs/POLISH_PLAN.md`.
 
 ## 9. Definition of a useful checkpoint
 

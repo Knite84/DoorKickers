@@ -1,4 +1,4 @@
-import { BoxGeometry, CylinderGeometry, Mesh } from 'three';
+import { BoxGeometry, BufferAttribute, CylinderGeometry, Mesh } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { doorCenter, doorSize } from './world.js';
 
@@ -29,6 +29,10 @@ export function createPaneledDoor(door, paint, bronze) {
   function combine(parts) {
     const geometry = mergeGeometries(parts);
     for (const part of parts) part.dispose();
+    // The furniture materials read vertex colours; without this attribute
+    // WebGL supplies black and the whole door renders dark.
+    const white = new Float32Array(geometry.attributes.position.count * 3).fill(1);
+    geometry.setAttribute('color', new BufferAttribute(white, 3));
     return geometry;
   }
   const mesh = new Mesh(combine(leaf), paint);
