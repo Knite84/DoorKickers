@@ -44,7 +44,7 @@ export function buildWallPieces(map) {
   for (const [index, floor] of (map.floors ?? []).entries()) {
     if (floor.solid) {
       const depth = floor.depth ?? 0.2;
-      add(map.walls.length + index, [floor.center[0], floor.elevation - depth / 2, floor.center[1]], [floor.size[0], depth, floor.size[1]], floor.material ?? 'masonry', Infinity, { floor: true, level: Math.round(floor.elevation / 3.2) });
+      add(map.walls.length + index, [floor.center[0], floor.elevation - depth / 2, floor.center[1]], [floor.size[0], depth, floor.size[1]], floor.material ?? 'masonry', Infinity, { floor: true, level: floor.level ?? Math.round(floor.elevation / 3.2) });
       continue;
     }
     const columns = Math.ceil(floor.size[0] / 1.2), rows = Math.ceil(floor.size[1] / 1.2);
@@ -66,8 +66,25 @@ export function buildWallPieces(map) {
     const count = 16, dx = stair.to[0] - stair.from[0], dz = stair.to[1] - stair.from[1];
     for (let step = 0; step < count; step++) {
       const t = (step + 0.5) / count, height = stair.bottom + (step + 1) / count * (stair.top - stair.bottom);
-      add(map.walls.length + (map.floors?.length ?? 0) + (map.ceilings?.length??0) + index, [stair.from[0] + dx * t, height / 2, stair.from[1] + dz * t], [Math.abs(dx) / count || stair.size[0], height, Math.abs(dz) / count || stair.size[1]], 'masonry', Infinity, { stair: true, level: 0 });
+      add(map.walls.length + (map.floors?.length ?? 0) + (map.ceilings?.length??0) + index, [stair.from[0] + dx * t, height / 2, stair.from[1] + dz * t], [Math.abs(dx) / count || stair.size[0], height, Math.abs(dz) / count || stair.size[1]], stair.material ?? 'masonry', Infinity, { stair: true, level: 0 });
     }
+  }
+  // Outdoor slopes: solid earth under the ramp, in 0.25 m steps whose tops stay
+  // just under the smooth surface (src/site.js draws the lawn over them). They
+  // stop shots and sight; the ramp itself owns foot support, like a stair.
+  const slopeBase = map.walls.length + (map.floors?.length ?? 0) + (map.ceilings?.length ?? 0) + (map.stairs?.length ?? 0);
+  for (const [index, slope] of (map.slopes ?? []).entries()) {
+    const dx = slope.to[0] - slope.from[0], dz = slope.to[1] - slope.from[1], count = Math.max(1, Math.ceil(Math.hypot(dx, dz) / 0.25));
+    for (let step = 0; step < count; step++) {
+      const t = (step + 0.5) / count, height = Math.max(0.02, slope.bottom + step / count * (slope.top - slope.bottom) - 0.02);
+      add(slopeBase + index, [slope.from[0] + dx * t, height / 2, slope.from[1] + dz * t], [Math.abs(dx) / count || slope.size[0], height, Math.abs(dz) / count || slope.size[1]], 'earth', Infinity, { stair: true, slope: true, level: 0 });
+    }
+  }
+  // Tree trunks: solid cover from the ground up, drawn as round trunks by src/site-mesh.js.
+  const treeBase = slopeBase + (map.slopes?.length ?? 0);
+  for (const [index, tree] of (map.trees ?? []).entries()) {
+    const top = tree.base + tree.trunkHeight;
+    add(treeBase + index, [tree.position[0], top / 2, tree.position[1]], [tree.trunk, top, tree.trunk], 'trunk', Infinity, { tree: true, level: Math.round(tree.base / 3.2) });
   }
   return pieces;
 }

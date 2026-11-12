@@ -83,9 +83,9 @@ Things to respect when placing furniture:
 - Great-room window wall is two small windows; the plan shows near-continuous glass. Changing the window count needs the 13-window test updated.
 - Garage floor should be about four steps below the main floor, with a rear side door and two separate overhead doors. Build walls and stairs only, from the new garage photos; no contents.
 - The under-stair storage cubby is closed (owner's decision); the corner fireplace and bathroom fixtures are placed but squared off.
-- Rear deck has no stairs, screens or railing; there is no walk-out patio beneath it. Deck stairs would add an outdoor route between floors. New patio photos exist.
-- Side yards are a sheer drop instead of slopes with retaining walls.
-- No pitched roof; ceilings are flat.
+- **Site (step 4.3).** Both side yards slope from the front grade to the lake grade (`slopes`). A level strip along each side wall is held by brick-capped retaining walls (`retainingWalls`). The deck has posts, rails, screens and a U-shaped stair to the patio. Three trees have solid trunks. These outdoor routes between floors were approved by the owner on 2026-11-12.
+- The pitched roof (`roof` in the map) is drawn only and approximates the aerial photo's ridges. Ceilings inside are still flat.
+- Plan up is south. `planUpHeading: 180` makes the HUD compass agree. The sun still comes from plan down, which is north.
 - `docs/martelli-main.png` and `docs/martelli-foundation.png` predate the wall corrections.
 - Not placed: the main-hall flush linen cabinet (location not confirmed) and the family-room ladder shelf (no photo shows where).
 

@@ -19,6 +19,7 @@
   <label>Quality <select id="preset"><option>Low</option><option selected>Medium</option><option>High</option></select></label>
   <label><input id="contact" type="checkbox" checked> Contact shading</label>
   <label><input id="trim" type="checkbox" checked> Trim</label>
+  <label><input id="roof" type="checkbox" checked> Roof</label>
   <label>Weapon <select id="weapon"><option value="">hidden</option><option>rifle</option><option>pistol</option><option>shotgun</option><option>sniper</option></select></label>
   <label><input id="suppressor" type="checkbox"> Suppressor</label>
   <label>Time <select id="time"><option>day</option><option>dusk</option><option>night</option></select></label>
@@ -47,6 +48,15 @@ const views = [
   { name: 'Family room corner fireplace', at: [600, 340], level: 0, look: [686, 230], pitch: -0.1 },
   { name: 'Wet bar arch (lower)', at: [520, 480], level: 0, look: [433, 505], pitch: -0.05 },
   { name: 'Wet bar (lower)', at: [380, 300], level: 0, look: [342, 460], pitch: -0.25 },
+  // Exterior: `y` lifts the eye above the floor, in metres, for a wider look at the roof.
+  { name: 'Outside: front walk', at: [677, 1100], level: 1, look: [677, 500], pitch: 0.18 },
+  { name: 'Outside: driveway and garage', at: [250, 1150], level: 1, look: [300, 600], pitch: 0.15 },
+  { name: 'Outside: lake side', at: [620, -180], level: 0, look: [620, 300], pitch: 0.3 },
+  { name: 'Outside: raised, front corner', at: [1300, 1150], level: 1, y: 8, look: [700, 450], pitch: -0.2 },
+  { name: 'Outside: raised, lake corner', at: [-100, -180], level: 0, y: 11, look: [600, 400], pitch: -0.25 },
+  { name: 'Outside: west slope from the lake lawn', at: [420, -150], level: 0, look: [150, 330], pitch: 0.05 },
+  { name: 'Outside: east slope from the lake lawn', at: [900, -150], level: 0, look: [1250, 330], pitch: 0.05 },
+  { name: 'Above: roof plan (lake at top)', at: [600, 560], level: 0, y: 24, look: [600, 545], pitch: -1.35 },
 ];
 const metres = ([x, z]) => [(x - 600) * 0.02, (z - 500) * 0.02];
 const select = document.getElementById('view');
@@ -61,7 +71,7 @@ function place() {
   const view = views[select.value];
   state = createMission(martelli, { ...rules, timeOfDay: document.getElementById('time').value }, defaultLoadout());
   state.status = 'active';
-  state.player = metres(view.at); state.playerY = view.level * 3.2;
+  state.player = metres(view.at); state.playerY = view.level * 3.2 + (view.y ?? 0);
   const [x, z] = metres(view.look);
   scene.reset(Math.atan2(-(x - state.player[0]), -(z - state.player[1])));
   scene.look(0, view.pitch);
@@ -76,6 +86,7 @@ document.getElementById('time').onchange = place;
 document.getElementById('preset').onchange = applyGraphics;
 document.getElementById('contact').onchange = applyGraphics;
 document.getElementById('trim').onchange = event => scene.setTrim(event.target.checked);
+document.getElementById('roof').onchange = event => scene.setRoof(event.target.checked);
 let dragging = false;
 canvas.addEventListener('pointerdown', () => { dragging = true; });
 addEventListener('pointerup', () => { dragging = false; });

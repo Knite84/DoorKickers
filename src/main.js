@@ -549,7 +549,7 @@ function frame(now) {
   document.body.classList.toggle('on-screen', !!screens.current() && screens.current() !== 'pause');
   const hudAlert = alertState(state);
   $('#alert-pill').textContent = hudAlert.label; $('#alert-pill').dataset.level = String(hudAlert.level);
-  const heading = headingDegrees(state.facing);
+  const heading = headingDegrees(state.facing, map.planUpHeading);
   $('#compass-heading').textContent = `${compassPoint(heading)} ${String(heading).padStart(3, '0')}°`;
   if (!playerSettings.minimalHud) for (const tick of compassTicks) {
     const diff = ((tick.degrees - heading + 540) % 360) - 180;

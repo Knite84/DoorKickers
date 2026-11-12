@@ -19,10 +19,12 @@ export function alertState(state) {
   return { level, label: ['UNDETECTED', 'SUSPICIOUS', 'SEARCHING', 'HUNTED'][level] };
 }
 
-// Facing as a compass heading in degrees, 0 = plan up (-z), clockwise.
-// `facing` is the aim direction on the plan, [x, z].
-export function headingDegrees(facing) {
-  return Math.round(wrap(Math.atan2(facing[0], -facing[1])) * 180 / Math.PI) % 360;
+// Facing as a compass heading in degrees, clockwise from north.
+// `facing` is the aim direction on the plan, [x, z]. `planUp` is the compass
+// heading of plan up (-z): 0 when plan up is north, 180 when it is south
+// (map.planUpHeading).
+export function headingDegrees(facing, planUp = 0) {
+  return Math.round(wrap(Math.atan2(facing[0], -facing[1]) + planUp * Math.PI / 180) * 180 / Math.PI) % 360;
 }
 export const compassPoint = degrees => ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round(wrap(degrees * Math.PI / 180) / (TAU / 8)) % 8];
 

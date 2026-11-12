@@ -21,7 +21,7 @@ Read [HANDOFF.md](HANDOFF.md) first for the state of the repo and the working ag
   - When you finish building a step, mark it ◐ and list its open checks in the table. Never mark ☑ yourself.
   - A ◐ step does not block the next step. Checks that need the owner's machine, such as frame timing, are collected in the handoff.
 - Steps marked **Propose first** are open-ended. Show the owner a short proposal, with a preview page or screenshot where possible, and wait for a go-ahead before building.
-- Keep `npm test` green (248 passing on 2026-11-12). Add tests for anything that is pure data or geometry. Change layout tests only on purpose, and say why in the step's notes.
+- Keep `npm test` green (261 passing on 2026-11-12). Add tests for anything that is pure data or geometry. Change layout tests only on purpose, and say why in the step's notes.
 - **Verify every visual step in the browser** on the Martelli map. Follow **Verification** below.
 - When a step lands, record it in two places:
   - **This plan:** update its row in the status table and add a short **Built** note under the step: what changed, what was seen, what is open, and before and after screenshot links.
@@ -40,6 +40,7 @@ These are traps that have already cost time. Follow them on every rendering chan
    - Always decorate first.
    - Any further patch must wrap the previous `onBeforeCompile` and append to `customProgramCacheKey`. Copy `patch()` in `src/surface-materials.js` or `roundEdges()` in `src/furniture-mesh.js`.
    - Two materials with different shader code but the same cache key share one compiled program and render wrongly.
+   - Exterior geometry that sits over the house footprint (the roof) must pass `{ outdoor: true }` as the third argument, or the baked field lights it as indoor and it renders dark.
 2. **Vertex colours.** Furniture materials (`createFurnitureMaterials`) set `vertexColors: true`. Any geometry drawn with them needs a `color` attribute. Without one, WebGL reads black: every panelled door rendered black from step 3.3 until 2026-11-12 for this reason.
 3. **Breakable structure is instanced.**
    - Wall, floor and ceiling pieces are drawn as one `InstancedMesh` per material (`wallBatches` in `src/scene.js`).
@@ -95,7 +96,7 @@ These are traps that have already cost time. Follow them on every rendering chan
 | 3.4 | Baked contact shading and softened edges | ◐ | Owner review of shading strength; timing |  |
 | 4.1 | Baseboards, casings and door frames | ◐ | Owner look at trim contrast and the casing-versus-window-frame decision; passage openings still show raw timber ends; timing |  |
 | 4.2 | Stairs, railings and fireplaces | ◐ | Owner look at railing, carpet colour, fireplace and arch shapes against photos; special views and timing not checked |  |
-| 4.3 | Roof, deck and site | ☐ |  | Opus to propose terrain, then Sonnet |
+| 4.3 | Roof, deck and site | ◐ | Owner look at the roof against the aerial, the level strips (keep or drop), the solid deck stairs, and the sun direction; Low/High, night vision, thermal and frame time not checked; fence, shrubs and driveway edge not built | Sonnet |
 | 4.4 | Known map gaps | ☐ |  | Sonnet, with owner answers |
 | 5.1 | Skinned guard bodies | ☐ |  | Opus |
 | 5.2 | First-person weapon and hands | ◐ | Owner look at the four firearm models; separate view layer (no wall clipping), melee and thrown-item hands, and minigun not done | Sonnet |
@@ -431,6 +432,29 @@ Goal: tall white baseboards along interior wall faces, wide white casings around
   - Screens, a picket rail, posts, and exterior stairs with a landing, plus a covered patio below.
   - **Deck stairs add an outdoor route between floors. Confirm with the owner first, then update guard routes, `test/martelli.test.js` and the reachability expectations in `test/clearance.test.js`.**
 - **Site.** Sloped side yards with retaining walls, a driveway, and simple trees and shrubs. **Propose first** for the terrain: it changes foot support and window drops.
+
+**Roof built (2026-11-12).**
+- `src/roof.js` (pure, tested in `test/roof.test.js`) turns `map.roof` into triangles: each wing, a wall-line rectangle, becomes a hip roof at one eave height and pitch, with fascia and a flat soffit. Overlapping wings intersect like real hips. `src/roof-mesh.js` draws it as two meshes (shingles with a shingle texture painted in code, and white trim): 4 extra draw calls with shadows.
+- Martelli has six wings in `src/maps/martelli.js`: the main block, the primary bump-out and bay, the Bedroom 3 corner, Bedroom 2 and the shared bath, the garage, and the entry with its eave over the front door. The eave is 6.4 m, the soffit sits on the 6.0 m wall tops, the pitch is 5 in 12 and the overhang 0.45 m. All of these are guesses for the owner.
+- The roof is not in `map.walls`, `map.props` or the mission state. It hides in the overhead and tactical views. It is double-sided, so a destroyed ceiling shows its underside rather than sky.
+- `lighting.decorate(material, heat, { outdoor: true })` is new: the roof sits inside the house footprint, where the baked light field says "indoor", and would otherwise render dark. The soffit is level with the Main ceiling's underside, so the trim material uses a polygon offset to let the ceiling win; without it the great-room ceiling showed streaks.
+- `scripts/interior-preview.html` has a **Roof** checkbox and five exterior views (front walk, driveway, lake side, and two raised corners; a view's `y` lifts the eye).
+- Seen in Chrome at Medium: both raised corners, the front walk, the lake corner at dusk, the overhead view (roof hidden) and the great room (ceiling clean). No console errors. Not checked: Low and High, night vision, thermal and frame time. The deck has no roof yet; it needs the deck's posts.
+- **Terrain and deck:** see [TERRAIN_PROPOSAL.md](TERRAIN_PROPOSAL.md) for the proposal and the owner's answers.
+
+**Roof reworked, site and deck built (2026-11-12, after the owner's answers).**
+- **Roof:** the owner pointed at the aerial photo. The wings now follow its main ridges: the main block stops at the primary bedroom (x 965), the primary bath and Bedroom 3 get their own front-to-back ridge, and the deck has a hipped roof running toward the lake. Eight wings in all. Shape is still approximate.
+- **Compass:** the owner noticed north and south were reversed. Plan up on Martelli is the lake, which faces south, but the HUD compass read N there. `headingDegrees(facing, planUp)` in `src/hud-model.js` now takes `map.planUpHeading` (180 on Martelli). The sun still comes from plan down, the real north, which the owner may want fixed too.
+- **Slopes** (`map.slopes`): both side yards fall from the front grade (3.2 m) to the lake grade (0 m) at plan z 40, beside a level strip at Main grade along each side wall (`STRIP` in `src/maps/martelli.js`, 2 m). A slope is a ramp like a stair: `stairHeight` in `src/world.js` reads `map.slopes` too, so foot support, guard height and the walking grid needed no other change. `src/destruction.js` puts solid earth steps (`slope: true`, `stair: true`) just under the surface for shots and sight. The scene hides them and `src/site.js` draws a smooth lawn.
+- **Retaining walls** (`map.retainingWalls`): stucco with a brick cap, drawn only, along each strip edge and continuing each side wall's line toward the lake, as in the photos. The earth slabs behind them collide.
+- **Deck:** posts under and above the deck (solid floor slabs with `material: 'post'` and an explicit `level`), three picket rails (`rail()` walls, drawn by the stair railing code), screens (drawn only, see-through), and a U-shaped stair: a flight down from the deck's lake edge at the east corner to a landing at 1.6 m, then back to the patio. The deck stairs use the stair mechanism with `material: 'deck'`.
+- **Trees** (`map.trees`): three, from the aerial (west slope, front lawn, beside the front walk). Each trunk is a solid, indestructible wall piece (`tree: true`) that stops movement, shots and sight; det cord leaves trunks and slope earth alone. Canopies are drawn only and hidden in the overhead views.
+- **Routes changed on purpose:** the slopes and the deck stairs are outdoor routes between floors, approved by the owner. `test/clearance.test.js` now expects Foundation rooms reachable from both entries, and `test/stair-dress.test.js` counts six rails. `test/site.test.js` covers slopes, strips, deck stairs, trunks and det cord.
+- **Seen in Chrome at Medium:** raised lake corner, lake side, both slopes from the lake lawn, and the roof from above. No console errors. **Not checked:** Low and High, night vision, thermal, frame time, and walking the slopes in the game itself.
+- **Open:**
+  - The level strips leave a 2 to 2.4 m retaining face at each house corner, which the photos don't show. Setting `STRIP` to 0 puts the slope against the wall as photographed, but then the kitchen's two west windows can no longer be climbed in from outside.
+  - The deck stairs are solid blocks down to the ground, not open treads.
+  - The floor framing between storeys shows as a brown band on the outside walls, now easier to see from the side yards.
 
 **Done when:**
 - The exterior from the front walk and from the lake side shows a roof, a finished deck and shaped yards, with screenshots.

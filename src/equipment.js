@@ -88,7 +88,8 @@ export function detonateCharges(state, map, rules) {
       else state.doors[charge.door] = true;
     }
     if (rules.destructibleWalls && charge.wall !== undefined) for (const piece of state.wallPieces) {
-      if (piece.wall === charge.wall && Math.hypot(...piece.center.map((v, axis) => v - charge.position[axis])) < 1.2) piece.hp = Math.max(0, piece.hp - (piece.floor ? 60 : Infinity));
+      // Ground under a slope and tree trunks do not breach.
+      if (piece.wall === charge.wall && !piece.slope && !piece.tree && Math.hypot(...piece.center.map((v, axis) => v - charge.position[axis])) < 1.2) piece.hp = Math.max(0, piece.hp - (piece.floor ? 60 : Infinity));
     }
     blast(state, map, rules, charge.position, 2.5, 100);
   }

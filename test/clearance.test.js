@@ -56,14 +56,19 @@ test('Martelli preserves reachable room centres and room space on the 35 cm radi
     const unreachable = rooms.filter(room => !reaches(room, point => inside(point, room.center, room.size)));
     const knownBlocked = start.foundationOnly
       ? rooms.filter(room => room.name === 'LOWER BATH')
-      : rooms.filter(room => room.elevation === 0 || room.name === 'POWDER'
-        || room.name === 'CLOSET' && room.center[1] > 0);
+      // Since step 4.3 the side-yard slopes and the deck stairs are outdoor routes
+      // down to the walk-out level, so Foundation is reachable from the entries;
+      // only the lower bath stays out of reach of this coarse grid, as from the stair foot.
+      : rooms.filter(room => room.name === 'POWDER' || room.name === 'LOWER BATH'
+        || room.name === 'CLOSET' && room.elevation > 0 && room.center[1] > 0);
     assert.deepEqual(unreachable, knownBlocked, `reachability changed from ${start.label ?? 'stair foot'}`);
     const centerTolerance = Math.SQRT2 * cell / 2 + 1e-8;
     const displaced = rooms.filter(room => !unreachable.includes(room) && !reaches(room,
       point => Math.hypot(point[0] - room.center[0], point[1] - room.center[1]) <= centerTolerance));
     assert.deepEqual(displaced.map(room => room.name), start.foundationOnly
       ? ['FAMILY ROOM', 'BEDROOM 5', 'BEDROOM 4', 'BATH', 'CLOSET']
-      : ['GREAT ROOM', 'DINING', 'KITCHEN', 'PRIMARY BEDROOM', 'LAUNDRY', 'CLOSET', 'BEDROOM 2', 'BEDROOM 3', 'SHARED BATH', 'REAR DECK']);
+      // Foundation rooms join the list from the entries now that they are reachable outdoors (step 4.3).
+      : ['GREAT ROOM', 'DINING', 'KITCHEN', 'PRIMARY BEDROOM', 'LAUNDRY', 'CLOSET', 'BEDROOM 2', 'BEDROOM 3', 'SHARED BATH', 'REAR DECK',
+        'FAMILY ROOM', 'BEDROOM 5', 'BEDROOM 4', 'BATH', 'CLOSET']);
   }
 });

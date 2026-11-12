@@ -17,6 +17,10 @@ test('compass headings run clockwise from plan up', () => {
   assert.equal(headingDegrees([1, 0]), 90);
   assert.equal(headingDegrees([0, 1]), 180);
   assert.equal(headingDegrees([-1, 0]), 270);
+  // Martelli: plan up is south, so facing the lake reads 180 and plan right is west.
+  assert.equal(headingDegrees([0, -1], 180), 180);
+  assert.equal(headingDegrees([1, 0], 180), 270);
+  assert.equal(headingDegrees([0, 1], 180), 0);
   assert.deepEqual([0, 45, 90, 180, 270, 359].map(compassPoint), ['N', 'NE', 'E', 'S', 'W', 'N']);
 });
 

@@ -11,12 +11,12 @@ Updated 2026-11-12. This is the current state of the project for a fresh session
 ## Where things stand
 
 - **Polish steps 0.1 to 3.4 are built.** The [status table](POLISH_PLAN.md#status) gives each step's state and the checks still open. Steps marked ◐ are waiting on the owner. Don't treat them as finished, and don't redo them.
-- **Step 4.1 (baseboards, casings, door frames) is built, awaiting owner check** (`src/trim.js`). Step 4.2 (stairs, railings, fireplaces, arches) is also built, awaiting owner check. The next step in order is 4.3 (Opus to propose terrain). Passage openings still lack casings; see the 4.1 note. Steps 7.1 to 7.4 are built together and await the owner's check: HUD (`src/hud-model.js`, `src/ui.css`), settings dialog (`src/settings.js`, `src/settings-menu.js`), screens (`src/screens.js`, `src/debrief.js`, `src/plan-view.js`). 7.1 was not proposed first. Step 5.2 (firearm models and hands) is also waiting on the owner. Pending owner checks don't block the next step.
+- **Step 4.1 (baseboards, casings, door frames) is built, awaiting owner check** (`src/trim.js`). Step 4.2 (stairs, railings, fireplaces, arches) is also built, awaiting owner check. Step 4.3 (roof, side-yard slopes, deck and trees) is **built, awaiting owner check**: `src/roof.js`, `src/site.js` and their `*-mesh.js` glue. See the 4.3 notes for what is open. Next in order is 4.4. The Martelli HUD compass now reads S toward the lake (`map.planUpHeading`). Passage openings still lack casings; see the 4.1 note. Steps 7.1 to 7.4 are built together and await the owner's check: HUD (`src/hud-model.js`, `src/ui.css`), settings dialog (`src/settings.js`, `src/settings-menu.js`), screens (`src/screens.js`, `src/debrief.js`, `src/plan-view.js`). 7.1 was not proposed first. Step 5.2 (firearm models and hands) is also waiting on the owner. Pending owner checks don't block the next step.
 - **Door changes (2026-11-12, committed in b45fa24 and earlier):**
   - **Black doors fixed:** every panelled door rendered black from step 3.3 until the fix. The furniture materials read vertex colours and the door geometry had none; `src/door-visual.js` now adds them.
   - **Garage doors:** the two garage doors carry `garage: true` and are drawn without a lever.
   - **Door height:** Martelli doors are 2.03 m tall (garage doors 2.13 m) under a breakable wall header, instead of ceiling-high slabs. `doorHeight(door)` in `src/world.js` reads `door.height`; other maps keep 2.8 m doors. As a result, light no longer passes over doors between rooms, and a jump inside a doorway can hit the header.
-- `npm test`: 248 passing on 2026-11-12, about 4 seconds.
+- `npm test`: 261 passing on 2026-11-12, about 6 seconds.
 
 ## Waiting on the owner
 
@@ -24,7 +24,11 @@ These need the owner's machine or knowledge, so a session can't finish them. Rem
 
 1. **Frame timing.** Measure 1080p at Low, Medium and High in a foreground tab using `scripts/interior-preview.html`. This is the 60 fps budget check for steps 1.1, 1.4, 3.2 and 3.4.
 2. **Interior walkthrough.** Check window highlights (1.2), reflections (1.3), shadow shimmer (1.5), contact shading strength (3.4), and fixture styles and positions against the photos (2.2).
-3. **Walkability decisions.** The remaining rows of the [0.2 audit](POLISH_PLAN.md#martelli-audit-for-review) are deferred by the owner. Don't change them until asked.
+3. **Site check.** On the interior preview page's exterior views:
+   - Look at the roof against the aerial.
+   - Decide whether the level strips along the side walls stay (see the 4.3 notes).
+   - Say whether the sun should come from the lake side, which is south.
+4. **Walkability decisions.** The remaining rows of the [0.2 audit](POLISH_PLAN.md#martelli-audit-for-review) are deferred by the owner. Don't change them until asked.
 
 ## Working agreement with the owner
 

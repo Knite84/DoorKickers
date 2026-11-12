@@ -21,6 +21,8 @@ import { trimFor, trimKinds } from './trim.js';
 import { weaponModels, suppressorLength } from './weapon-models.js';
 import { stairDressFor, dressKinds, railWalls } from './stair-dress.js';
 import { createScenePost } from './scene-post.js';
+import { createRoofMesh } from './roof-mesh.js';
+import { createSiteMesh } from './site-mesh.js';
 import { fitSunShadow, tuneSunShadow } from './scene-shadows.js';
 
 // Asset boundary: replace these factories with GLB-backed factories later.
@@ -42,7 +44,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   scene.add(firstPerson);
   const mapCamera = new THREE.OrthographicCamera(-17, 17, 14, -14, 0.1, 100);
   mapCamera.position.set(0, 45, 0); mapCamera.up.set(0, 0, -1); mapCamera.lookAt(0, 0, 0);
-  let lookSensitivity = 1, lookInvert = 1;
+  let lookSensitivity = 1, lookInvert = 1, roofShown = true;
   let view = 'first', mapOpen = false, yaw = -0.55, pitch = 0, recoil = 0, selectedLevel = 0;
   let currentCamera = firstPerson;
   const pointer = new THREE.Vector2();
@@ -92,7 +94,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   const unitBox = new THREE.BoxGeometry(1, 1, 1), instanceTransform = new THREE.Object3D();
   for (const kind of new Set(structure.map(piece => piece.material))) {
     const indices = structure.flatMap((piece, index) => piece.material === kind ? [index] : []);
-    const baseColor = ({ ceiling: 0xd8d7cd, timber: 0xa16d3f, drywall: 0xd5ceb5, particleboard: 0xa68552, truss: 0x79512e, earth: 0x59734c, concrete: 0xaaa99d, deck: 0x8c7253 })[kind] ?? 0xb7b198;
+    const baseColor = ({ ceiling: 0xd8d7cd, timber: 0xa16d3f, drywall: 0xd5ceb5, particleboard: 0xa68552, truss: 0x79512e, earth: 0x59734c, concrete: 0xaaa99d, deck: 0x8c7253, post: 0x5f6b75, trunk: 0x5b4636 })[kind] ?? 0xb7b198;
     const mesh = new THREE.InstancedMesh(unitBox, material(baseColor), indices.length);
     // Maps that declare room finishes (map.surfaces) get textured floors, paint and siding.
     surfaceShading?.dress(mesh, kind, indices.map(index => structure[index]), baseColor, lighting.decorate);
@@ -116,6 +118,12 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
       trimBatches.push({ mesh, items });
     }
   }
+  // Drawn-only pitched roof (src/roof.js), hidden in the overhead and tactical views.
+  const roof = createRoofMesh(map, lighting.decorate);
+  if (roof) scene.add(roof);
+  // Lawn slopes, retaining walls, porch screens and trees (src/site.js).
+  const site = createSiteMesh(map, lighting.decorate, surfaceShading?.grass);
+  if (site) scene.add(site.group);
   const windowGlass = lighting.decorate(new THREE.MeshStandardMaterial(map.surfaces
     ? { color: 0xb8d8db, transparent: true, opacity: 0.24, roughness: 0.065, metalness: 0.28, side: THREE.DoubleSide, depthWrite: false }
     : { color: 0x8bdce4, transparent: true, opacity: 0.27, roughness: 0.1, side: THREE.DoubleSide, depthWrite: false }));
@@ -477,7 +485,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     for (const { mesh, indices } of wallBatches) {
       let changed = false;
       indices.forEach((index, instance) => {
-        const piece = state.wallPieces[index], visible = Number(piece.hp > 0 && !hiddenRails.has(piece.wall) && (!overview || !piece.ceiling&&(piece.stair || (piece.level ?? 0) === selectedLevel)));
+        const piece = state.wallPieces[index], visible = Number(piece.hp > 0 && !hiddenRails.has(piece.wall) && !piece.slope && !piece.tree && (!overview || !piece.ceiling&&(piece.stair || (piece.level ?? 0) === selectedLevel)));
         if (wallDisplay[index] === visible) return;
         wallDisplay[index] = visible; instanceTransform.position.set(...piece.center); instanceTransform.scale.set(...(visible ? piece.size : [0, 0, 0]));
         instanceTransform.updateMatrix(); mesh.setMatrixAt(instance, instanceTransform.matrix); changed = true;
@@ -520,6 +528,8 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     labels.forEach((l, i) => { l.visible = grid.visible && onLevel(map.rooms[i]); });
     extraction.visible = onLevel(map.extraction); extractionLabel.visible = grid.visible && onLevel(map.extraction);
     scenery.forEach(mesh => { mesh.visible = !overview || selectedLevel === 0; });
+    if (roof) roof.visible = !overview && roofShown;
+    site?.update(overview, selectedLevel);
     for (let i = 0; i < 8; i++) {
       const guard = state.guards[i];
       const visible = !!guard && onLevel(guard) && (!overview || rules.fullIntel || state.scanUntil > state.elapsed || (distance(guard.position, state.player) < 9 && coverClear(state,map,playerEye(state),guardEye(guard))));
@@ -597,6 +607,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     setContactShading: strength => lighting.setContactStrength(strength),
     // Preview switch for before/after comparisons of baseboards and casings.
     setTrim: on => trimBatches.forEach(({ mesh }) => { mesh.visible = !!on; }),
+    setRoof: on => { roofShown = !!on; },
     capturingLight: lighting.capturing,
     renderStats: () => ({
       calls: renderer.info.render.calls,

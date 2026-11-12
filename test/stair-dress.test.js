@@ -8,8 +8,9 @@ import { furnitureBoxes, furnitureHeight } from '../src/furniture.js';
 
 const pieces = buildWallPieces(martelli), dress = stairDressFor(martelli, pieces);
 
-test('the three stair guard rails get newels, a handrail and balusters', () => {
-  assert.equal(railWalls(martelli).size, 3);
+// Three stair guard rails, plus three deck rails since step 4.3.
+test('the stair and deck guard rails get newels, a handrail and balusters', () => {
+  assert.equal(railWalls(martelli).size, 6);
   for (const kind of ['handrail', 'newel', 'baluster']) assert.ok(dress.filter(d => d.kind === kind).length >= 3, kind);
   for (const box of dress) {
     assert.ok(dressKinds.includes(box.kind));
@@ -34,7 +35,7 @@ test('the lower flight is carpeted tread by tread, and the upper flight is not',
 });
 
 test('dressing is drawn-only: collision walls are unchanged and other maps get none', () => {
-  assert.equal(martelli.walls.filter(w => w.height === 1).length, 3);
+  assert.equal(martelli.walls.filter(w => w.height === 1).length, 6);
   for (const [id, map] of Object.entries(maps)) if (map !== martelli) assert.deepEqual(stairDressFor(map, buildWallPieces(map)), [], id);
 });
 

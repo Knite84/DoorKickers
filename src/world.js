@@ -17,8 +17,10 @@ export const windowSize = window => [window.size[0], window.height ?? 1.5, windo
 export function inside(position, center, size, padding = 0) {
   return position.every((v, i) => Math.abs(v - center[i]) <= size[i] / 2 + padding);
 }
+// Stairs and outdoor slopes (map.slopes) are both ramps: smooth foot support
+// from `bottom` at `from` to `top` at `to`, inside an axis-aligned rectangle.
 export function stairHeight(map, position) {
-  for (const stair of map.stairs ?? []) {
+  for (const stair of map.slopes ? [...(map.stairs ?? []), ...map.slopes] : map.stairs ?? []) {
     if (!inside(position, stair.center, stair.size)) continue;
     const dz = stair.to[1] - stair.from[1], dx = stair.to[0] - stair.from[0];
     const t = Math.max(0, Math.min(1, ((position[0] - stair.from[0]) * dx + (position[1] - stair.from[1]) * dz) / (dx * dx + dz * dz)));

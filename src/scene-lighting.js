@@ -54,12 +54,14 @@ export function createSceneLighting(map, pieces = []) {
   });
   let contactKey = 0, contactTime = -Infinity;
   const decorated=new WeakSet();
-  function decorate(material,heat=0){
+  // outdoor: always lit as outside (the roof sits inside the house footprint,
+  // where the baked field says indoor).
+  function decorate(material,heat=0,{outdoor=false}={}){
     if(decorated.has(material)||!material.isMeshStandardMaterial)return material;
     decorated.add(material);
     material.onBeforeCompile=shader=>{
       Object.assign(shader.uniforms, uniforms, {
-        bodyHeat: { value: heat },
+        bodyHeat: { value: heat }, forceOutdoor: { value: outdoor ? 1 : 0 },
         indoorSpecular: { value: material.metalness >= .7 ? .55 : material.transparent && material.metalness > .2 ? .4 : .1 },
       });
       shader.vertexShader='varying vec3 vLightWorld;\n'+shader.vertexShader;
@@ -72,7 +74,7 @@ export function createSceneLighting(map, pieces = []) {
         #include <project_vertex>`);
       shader.fragmentShader=`varying vec3 vLightWorld;
         uniform sampler2D lightField;uniform vec4 lightBounds;
-        uniform float lightLevels,lightDay,lightSunny,lightPower,lightVision,lightTactical,bodyHeat,lightSlices,lightSliceDepth,lightSolar,lightWeather,indoorSpecular;
+        uniform float lightLevels,lightDay,lightSunny,lightPower,lightVision,lightTactical,bodyHeat,lightSlices,lightSliceDepth,lightSolar,lightWeather,indoorSpecular,forceOutdoor;
         uniform sampler2D contactField;uniform vec4 contactBounds,contactCeilings;uniform float contactLevels,contactDepth,contactRange,contactStrength;
         float contactShade(vec3 world,vec3 worldNormal,float indoor){
           vec3 p=world+worldNormal*0.08;
@@ -102,7 +104,7 @@ export function createSceneLighting(map, pieces = []) {
           float upperLayer=lightFloor*lightSlices+min(firstSlice+1.0,lightSlices-1.0);
           vec4 upper=texture2D(lightField,vec2(fieldUV.x,(fieldUV.y+upperLayer)/layerCount));
           vec4 field=mix(lower,upper,fract(slice));
-          float indoor=field.a;
+          float indoor=field.a*(1.0-forceOutdoor);
           float contact=contactShade(vLightWorld,inverseTransformDirection(normal,viewMatrix),indoor);
           float ambient=mix(1.0,0.012+field.r*0.65*lightDay*lightWeather,indoor)*contact;
           float direct=mix(1.0,field.g*lightSunny*lightSolar,indoor);
@@ -119,7 +121,7 @@ export function createSceneLighting(map, pieces = []) {
         }
         #include <opaque_fragment>`);
     };
-    material.customProgramCacheKey=()=>`architectural-light-${heat}`;
+    material.customProgramCacheKey=()=>`architectural-light-${heat}${outdoor?'-outdoor':''}`;
     return material;
   }
   let lightKey='day:intact';

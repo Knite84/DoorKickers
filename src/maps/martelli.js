@@ -76,15 +76,51 @@ const contains = (x, z, polygon = outline) => {
   return inside;
 };
 
+// Side yards (step 4.3). Both sides fall from the front grade (Main, 3.2 m) to
+// the lake grade (0 m) beside the house. A level strip at Main grade runs along
+// each side wall, held by a brick-capped retaining wall; the lawn slopes beyond
+// it, and a retaining wall continues each side wall's line toward the lake.
+// Grades are linear in plan z: 0 at LAKE_EDGE, Main at each side's top.
+const LAKE_EDGE = 40, STRIP = 100;
+const westGrade = z => main * Math.max(0, Math.min(1, (z - LAKE_EDGE) / (476 - LAKE_EDGE)));
+const eastGrade = z => main * Math.max(0, Math.min(1, (z - LAKE_EDGE) / (646 - LAKE_EDGE)));
+const slopes = [], retainingWalls = [];
+// A ramp rising toward +z across a plan rectangle, with foot support like a stair.
+function slope(x1, z1, x2, z2, grade) {
+  const [a, b] = point(x1, z1), [c, d] = point(x2, z2);
+  slopes.push({ center: [(a + c) / 2, (b + d) / 2], size: [c - a, d - b], from: [(a + c) / 2, b], to: [(a + c) / 2, d], bottom: grade(z1), top: grade(z2) });
+}
+slope(-200, LAKE_EDGE, 248 - STRIP, 476, westGrade); slope(248 - STRIP, LAKE_EDGE, 248, 140, westGrade);
+slope(1133 + STRIP, LAKE_EDGE, 1188 + STRIP, 452, eastGrade); slope(1188 + STRIP, LAKE_EDGE, 1400, 646, eastGrade);
+slope(1133, LAKE_EDGE, 1133 + STRIP, 140, eastGrade);
+const inSlope = (x, z) => slopes.some(({ center, size }) => {
+  const [px, pz] = point(x, z);
+  return Math.abs(px - center[0]) < size[0] / 2 && Math.abs(pz - center[1]) < size[1] / 2;
+});
+// Retaining wall from (x1, z1) to (x2, z2): `high(z)` is the grade it holds up,
+// `low(z)` the grade in front of it. Drawn only (src/site.js); the strip slabs
+// and the earth under the slopes are the collision.
+function retaining(x1, z1, x2, z2, high, low) {
+  retainingWalls.push({ from: point(x1, z1), to: point(x2, z2), top: [high(z1), high(z2)], bottom: [low(z1), low(z2)] });
+}
+const flat = height => () => height;
+retaining(248, LAKE_EDGE, 248, 140, westGrade, flat(0)); retaining(1133, LAKE_EDGE, 1133, 140, eastGrade, flat(0));
+retaining(248 - STRIP, 140, 248 - STRIP, 476, flat(main), westGrade); retaining(248 - STRIP, 140, 248, 140, flat(main), westGrade);
+retaining(1133 + STRIP, 140, 1133 + STRIP, 452, flat(main), eastGrade); retaining(1133, 140, 1133 + STRIP, 140, flat(main), eastGrade);
+retaining(1188 + STRIP, 452, 1188 + STRIP, 646, flat(main), eastGrade); retaining(1133 + STRIP, 452, 1188 + STRIP, 452, flat(main), eastGrade);
+
 // Merge each scan strip into rectangles, excluding the complete return stairwell.
-const xs = [...new Set([-200, 1400, 510, 620, ...outline.map(p => p[0])])].sort((a,b) => a-b);
-const zs = [...new Set([198, 510, 640, 1200, ...outline.map(p => p[1])])].sort((a,b) => a-b);
+const xs = [...new Set([-200, 1400, 510, 620, 248 - STRIP, 1133 + STRIP, 1188 + STRIP, ...outline.map(p => p[0])])].sort((a,b) => a-b);
+const zs = [...new Set([140, 198, 510, 640, 1200, ...outline.map(p => p[1])])].sort((a,b) => a-b);
 for (let j = 0; j < zs.length - 1; j++) {
   for (const outdoor of [false, true]) {
     let start = null;
     for (let i = 0; i < xs.length; i++) {
       const x = (xs[i] + xs[i + 1]) / 2, z = (zs[j] + zs[j + 1]) / 2;
-      const include = i < xs.length - 1 && (outdoor ? z >= 198 && !contains(x, z) : contains(x, z) && !(x > 510 && x < 620 && z > 510 && z < 640));
+      // Front grade: outside the house, south of the lake wall, clear of the
+      // deck notch (452-720, 140-198) and the side-yard slopes.
+      const yard = z >= 140 && !contains(x, z) && !(x > 452 && x < 720 && z < 198) && !inSlope(x, z);
+      const include = i < xs.length - 1 && (outdoor ? yard : contains(x, z) && !(x > 510 && x < 620 && z > 510 && z < 640));
       if (include && start === null) start = xs[i];
       if (!include && start !== null) {
         floor(start, zs[j], xs[i], zs[j + 1], main, outdoor ? { solid: true, depth: main, material: 'earth' } : {});
@@ -95,6 +131,25 @@ for (let j = 0; j < zs.length - 1; j++) {
 }
 // Rear deck, porch paving and driveway sit on permanent structural slabs.
 floor(452, 10, 720, 198, main, { solid: true, depth: 0.25, material: 'deck' });
+// Screened deck (step 4.3): posts under the deck and up to its roof are solid
+// cover; the picket rail is a guard rail (src/stair-dress.js draws it); the
+// screens are drawn only. A U-shaped stair with a mid landing drops from the
+// deck's lake edge at the east corner to the patio under the deck.
+const deckRoofTop = main + 3.0;
+// Posts under the deck clear the lower flight; above it, one post frames the stair head.
+for (const [x, z] of [[461, 19], [586, 19], [711, 19], [461, 75]]) floor(x - 7, z - 7, x + 7, z + 7, main - 0.25, { solid: true, depth: main - 0.25, material: 'post', level: 0 });
+for (const [x, z] of [[461, 19], [586, 19], [663, 19], [711, 90], [461, 75]]) floor(x - 6, z - 6, x + 6, z + 6, deckRoofTop, { solid: true, depth: 3.0, material: 'post', level: 1 });
+rail('x', 10, 452, 670); rail('z', 452, 10, 140); rail('z', 720, 10, 90);
+floor(620, -140, 720, -90, main / 2, { solid: true, depth: main / 2, material: 'deck' });
+const screens = [
+  { from: point(452, 10), to: point(670, 10) }, { from: point(452, 10), to: point(452, 140) }, { from: point(720, 10), to: point(720, 90) },
+].map(screen => ({ ...screen, bottom: main + 1.0, top: deckRoofTop }));
+// Trees from the aerial: a large one on the west slope, one in the front lawn
+// and a small one beside the front walk. Trunks are solid cover and concealment.
+const trees = [[-11, 264, 0.42, 7.5], [912, 1045, 0.36, 6.5], [603, 905, 0.2, 3.6]].map(([x, z, trunk, height]) => {
+  const base = inSlope(x, z) ? westGrade(z) : main;
+  return { position: point(x, z), base, trunk: trunk, trunkHeight: Math.min(2.6, height * 0.4), height, canopy: height * 0.32 };
+});
 floor(14, 930, 514, 1195, main + 0.01, { solid: true, depth: 0.1, material: 'concrete' });
 floor(635, 590, 710, 1120, main + 0.01, { solid: true, depth: 0.1, material: 'concrete' });
 const foundationOutline = [[248,140],[452,140],[452,198],[720,198],[720,90],[965,90],[965,140],[1133,140],[1133,452],[1188,452],[1188,646],[1005,646],[1005,780],[945,780],[945,792],[806,792],[806,780],[740,780],[740,590],[620,590],[620,646],[510,646],[510,590],[425,590],[425,518],[248,518]];
@@ -382,6 +437,8 @@ export const martelli = {
   version: 2, id: 'martelli-01', name: 'Martelli House', stamp: 'MARTELLI HOUSE · MAIN + FOUNDATION · LAKE ↑',
   description: 'Enter from the front walk on Main, explore the great room and bedroom wing, then take the return staircase down to Foundation. Retrieve the archive from the utility room behind the mechanical door and return to the front walk. Layout traced from the supplied plans; scale and furnishings are approximate. Plan-up faces the lake, south in the north-up aerial.',
   bounds: { minX: -16, maxX: 16, minZ: -14, maxZ: 14 },
+  // Plan up is the lake side, which faces south: the HUD compass reads S there.
+  planUpHeading: 180,
   // Interior doors are 0.8 m; a 0.2 m walking grid always finds a way through.
   navCell: 0.2,
   levels: [{ name: 'Foundation', elevation: 0 }, { name: 'Main', elevation: main }],
@@ -407,10 +464,31 @@ export const martelli = {
     {outline:foundationOutline.map(([x,z])=>point(x,z)),height:2.4,holes:[rectangle(...point(510,510),...point(620,646))]},
     {outline:outline.map(([x,z])=>point(x,z)),elevation:main},
   ]),
+  // Drawn-only hip roof (src/roof.js). Wings are wall-line rectangles in plan
+  // pixels; overlapping wings intersect like real hips. The soffit (eave minus
+  // fascia) sits on the 6.0 m wall tops, just under the Main ceiling slab's top.
+  // Wing layout follows the aerial photo's main ridges; pitch and overhang are estimates.
+  roof: {
+    eave: main + 3.0, pitch: 5 / 12, overhang: 0.45, fascia: 0.2,
+    wings: [
+      [248, 140, 965, 590],  // kitchen, great room and primary bedroom
+      [452, -20, 720, 320],  // screened deck, hipped toward the lake
+      [720, 76, 965, 200],   // primary bedroom bump-out and bay toward the lake
+      [965, 140, 1133, 646], // primary bath and Bedroom 3, ridge running front to back
+      [1005, 452, 1188, 646], // Bedroom 3 corner
+      [740, 560, 1005, 792], // Bedroom 2 and shared bath
+      [14, 476, 514, 930],   // garage
+      [514, 560, 740, 646],  // entry, eave over the front door
+    ].map(([x1, z1, x2, z2]) => [...point(x1, z1), ...point(x2, z2)]),
+  },
   stairs: [
     { center: point(537.5,550), size: [1.1,1.6], from: point(537.5,510), to: point(537.5,590), bottom: 0, top: 1.6 },
     { center: point(592.5,550), size: [1.1,1.6], from: point(592.5,590), to: point(592.5,510), bottom: 1.6, top: main },
+    // Deck stairs: down from the deck to the landing, then back toward the house.
+    { center: point(695,-40), size: [1.0,2.0], from: point(695,-90), to: point(695,10), bottom: main / 2, top: main, material: 'deck' },
+    { center: point(645,-40), size: [1.0,2.0], from: point(645,10), to: point(645,-90), bottom: 0, top: main / 2, material: 'deck' },
   ],
+  slopes, retainingWalls, screens, trees,
   scenery: [{ center: [0,-12.5], size: [32,3], elevation: 0.03, color: 0x4c8798 }],
   patrols: [
     [point(480,470),point(600,470)], [point(795,485),point(965,485)],
