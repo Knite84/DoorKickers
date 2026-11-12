@@ -131,3 +131,8 @@ test('Bedroom 4 bath is sealed from storage and beds are low furniture',()=>{
   const beds=martelli.props.filter(p=>p.kind==='bed');
   assert.equal(beds.length,5); assert.ok(beds.every(b=>propHeight(b)<=(({bunk:1.7,daybed:0.8})[b.variant]??0.6)));
 });
+test('every Martelli prop and decor piece sits on one of the map floors', () => {
+  const floors = martelli.levels.map(level => level.elevation);
+  for (const prop of [...martelli.props, ...(martelli.decor ?? [])])
+    assert.ok(floors.includes(prop.elevation ?? 0), `${prop.kind}/${prop.variant} at ${prop.position} has elevation ${prop.elevation}`);
+});

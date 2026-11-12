@@ -199,8 +199,6 @@ room('CLOSET',720,fz(350),fx(800),fz(488),0); room('BATH',fx(800),fz(350),fx(880
 room('CLOSET',fx(932),fz(422),fx(1027),fz(513),0); room('LOWER BATH',fx(1027),fz(422),1133,fz(565),0);
 room('GYM',720,fz(570),1005,780,0); room('UTILITY',1005,502,1188,646,0);
 room('UNEXCAVATED / BELOW GARAGE',14,590,510,900,0);
-prop('table',370,265,110,48); prop('table',350,365,75,38); prop('crate',265,420,20,95);
-prop('table',704,358,24,90);
 // Bedroom wing furniture, placed from the photos. Positions are plan pixels;
 // door landings, window landings and guard posts are kept clear.
 // Primary bedroom: king bed on the bath-door wall, dresser and chest opposite.
@@ -284,6 +282,27 @@ furnish('dresser','white',1116,190,'left',[1.4,0.4],undefined,0);
 furnish('bookcase','tall',1065,344,'up',[0.8,0.28],undefined,0);
 furnish('closetRun','double',984.75,401.5,'right',[1.46,0.35],undefined,0);
 furnish('closetRun','double',1016.5,429.25,'up',[0.86,0.35],undefined,0);
+// Kitchen: range and hood centred on the outside wall run, pantry in the corner,
+// counter with uppers and the fridge along the mudroom side, island with three
+// stools facing it from the great-room side.
+furnish('cabinets','range',270,405,'right',[3.0,0.6]);
+furnish('linenCabinet','pantry',277.5,499,'up');
+furnish('cabinets','kitchen',337.5,499,'up',[1.5,0.6]);
+furnish('fridge','full',397.5,494,'up');
+furnish('island','seating',372.5,385,'right');
+for (const z of [345,385,425]) furnish('barStool','counter',413,z,'left');
+// Dining: table for six in the window bay, chairs kept off the window landings.
+furnish('diningTable','six',370,240,'down');
+for (const x of [345,395]) { furnish('chair','dining',x,202.5,'down'); furnish('chair','dining',x,277.5,'up'); }
+furnish('chair','dining',307.5,240,'right'); furnish('chair','dining',432.5,240,'left');
+// Great room: light grey L sectional facing the stone fireplace and built-in TV,
+// its return along the lake windows; blue armchair, end table with lamp, rug.
+props.push(...sectional('L',point(560,340),{size:[3.4,2.8],facing:'right',variant:'fabric',mirror:true,elevation:main}));
+furnish('armchair','blue',660,436,'up',[1.0,0.9]);
+furnish('endTable','lamp',652,270,'down');
+furnish('rug','cool',585,340,'right');
+furnish('mediaConsole','tv',704.75,280,'left');
+furnish('fireplace','wall',701,377.5,'left');
 // Gym (owner's decision): a wall TV and a yoga mat only.
 furnish('wallTV','small',773,771.5,'up',undefined,undefined,0);
 furnish('yogaMat','mat',870,660,'down',undefined,undefined,0);
@@ -326,7 +345,7 @@ export const martelli = {
   ],
   scenery: [{ center: [0,-12.5], size: [32,3], elevation: 0.03, color: 0x4c8798 }],
   patrols: [
-    [point(510,290),point(620,290)], [point(795,485),point(965,485)],
+    [point(480,470),point(600,470)], [point(795,485),point(965,485)],
     [point(1045,620),point(1140,620)], [point(350,310),point(650,310)],
     [point(760,115),point(900,115)], [point(985,180),point(1090,180)],
     [point(780,700),point(950,700)], [point(1030,575),point(1140,550)],
@@ -336,8 +355,8 @@ export const martelli = {
   // dwell stretches how long they stand there. The archive, stairs and entry
   // are usually covered, never always.
   posts: [
-    ['entry', 670, 545, main, 2.5, 1.3], ['stair head', 592, 488, main, 2], ['great room', 585, 330, main, 1.5],
-    ['deck windows', 560, 235, main, 1], ['kitchen', 330, 440, main, 1], ['dining', 290, 190, main, 0.6],
+    ['entry', 670, 545, main, 2.5, 1.3], ['stair head', 592, 488, main, 2], ['great room', 470, 460, main, 1.5],
+    ['deck windows', 560, 235, main, 1], ['kitchen', 312, 450, main, 1], ['dining', 290, 190, main, 0.6],
     ['bedroom hall', 890, 483, main, 2], ['primary bedroom', 770, 280, main, 1], ['primary bath', 1050, 230, main, 0.4],
     ['bedroom 3', 1100, 620, main, 0.8], ['bedroom 2', 880, 700, main, 0.8], ['garage', 300, 720, main, 1],
     ['mudroom', 480, 555, main, 0.8], ['rear deck', 585, 120, main, 1, 1.5],

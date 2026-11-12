@@ -426,11 +426,11 @@ export const furnitureKinds = {
     label: 'Fireplace',
     // A corner fireplace squared off against the walls: brick to the ceiling,
     // raised hearth, dark tiled surround and a wood mantel.
-    variants: { corner: { size: [1.2, 1.0], height: 2.35 } },
+    variants: { corner: { size: [1.2, 1.0], height: 2.35 }, wall: { size: [1.5, 0.6], height: 2.35, stone: 0xe9e4da, hearth: 0.2 } },
     default: 'corner',
     draw: (w, d, v) => {
-      const hearthD = 0.35, massD = d - hearthD, mz = -d / 2 + massD / 2, face = -d / 2 + massD;
-      return [box(0, 0, mz, w, v.height, massD, color.brick), box(0, 0, d / 2 - hearthD / 2, w, 0.4, hearthD, color.brick), box(0, 0.4, face + 0.01, w * 0.8, 0.85, 0.02, color.black),
+      const hearthD = v.hearth ?? 0.35, massD = d - hearthD, mz = -d / 2 + massD / 2, face = -d / 2 + massD, stone = v.stone ?? color.brick;
+      return [box(0, 0, mz, w, v.height, massD, stone), box(0, 0, d / 2 - hearthD / 2, w, 0.4, hearthD, stone), box(0, 0.4, face + 0.01, w * 0.8, 0.85, 0.02, color.black),
         box(0, 0.48, face + 0.02, w * 0.5, 0.55, 0.01, 0x2a1d17), box(0, 0.5, face + 0.03, w * 0.35, 0.12, 0.01, 0xd07a35), box(0, 1.3, face + 0.08, w * 0.9, 0.1, 0.16, color.walnut)];
     },
   },
