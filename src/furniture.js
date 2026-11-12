@@ -444,11 +444,30 @@ export const furnitureKinds = {
     default: 'corner',
     draw: (w, d, v) => {
       const hearthD = v.hearth ?? 0.35, massD = d - hearthD, mz = -d / 2 + massD / 2, face = -d / 2 + massD, stone = v.stone ?? color.brick;
-      return [box(0, 0, mz, w, v.height, massD, stone), box(0, 0, d / 2 - hearthD / 2, w, 0.4, hearthD, stone), box(0, 0.4, face + 0.01, w * 0.8, 0.85, 0.02, color.black),
-        box(0, 0.48, face + 0.02, w * 0.5, 0.55, 0.01, 0x2a1d17), box(0, 0.5, face + 0.03, w * 0.35, 0.12, 0.01, 0xd07a35), box(0, 1.3, face + 0.08, w * 0.9, 0.1, 0.16, color.walnut)];
+      const corbelX = w * 0.45 - 0.06;
+      return [box(0, 0, mz, w, v.height, massD, stone), box(0, 0, d / 2 - hearthD / 2, w, 0.4, hearthD, stone),
+        // Hearth cap, dark tiled surround, firebox with logs and embers, stone lintel.
+        box(0, 0.4, d / 2 - hearthD / 2, w, 0.04, hearthD, color.granite),
+        box(0, 0.4, face + 0.005, w * 0.92, 1.0, 0.01, color.charcoal),
+        box(0, 0.4, face + 0.01, w * 0.8, 0.85, 0.02, color.black),
+        box(0, 0.48, face + 0.02, w * 0.5, 0.55, 0.01, 0x2a1d17), box(0, 0.5, face + 0.03, w * 0.35, 0.12, 0.01, 0xd07a35),
+        box(-w * 0.07, 0.4, face + 0.06, w * 0.26, 0.09, 0.09, color.espresso), box(w * 0.08, 0.46, face + 0.07, w * 0.24, 0.08, 0.08, color.walnut),
+        box(0, 1.25, face + 0.02, w * 0.92, 0.05, 0.04, color.granite),
+        // Wood mantel on two corbels.
+        box(0, 1.3, face + 0.08, w * 0.9, 0.1, 0.16, color.walnut),
+        box(-corbelX, 1.12, face + 0.06, 0.1, 0.18, 0.1, color.walnut), box(corbelX, 1.12, face + 0.06, 0.1, 0.18, 0.1, color.walnut)];
     },
   },
   // Drawn only: never in map.props, never blocks movement, shots or guards.
+  // A painted-brick header over a wall opening: a lintel with three stepped
+  // courses at each end that narrow the opening towards the top.
+  arch: {
+    label: 'Brick arch header', drawnOnly: true,
+    variants: { wide: { size: [1.84, 0.2] }, narrow: { size: [0.92, 0.2] } },
+    default: 'wide',
+    draw: (w, d) => [box(0, 1.95, 0, w, 0.45, d, color.brick),
+      ...[[0.3, 1.83], [0.2, 1.71], [0.1, 1.59]].flatMap(([step, y]) => [-1, 1].map(side => box(side * (w / 2 - step / 2), y, 0, step, 0.12, d, color.brick)))],
+  },
   rug: {
     label: 'Rug', drawnOnly: true,
     variants: { warm: { size: [3, 4], color: color.rugA }, cool: { size: [3, 4], color: color.rugB }, entry: { size: [1.2, 0.8], color: color.charcoal } },

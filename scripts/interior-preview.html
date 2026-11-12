@@ -19,6 +19,8 @@
   <label>Quality <select id="preset"><option>Low</option><option selected>Medium</option><option>High</option></select></label>
   <label><input id="contact" type="checkbox" checked> Contact shading</label>
   <label><input id="trim" type="checkbox" checked> Trim</label>
+  <label>Weapon <select id="weapon"><option value="">hidden</option><option>rifle</option><option>pistol</option><option>shotgun</option><option>sniper</option></select></label>
+  <label><input id="suppressor" type="checkbox"> Suppressor</label>
   <label>Time <select id="time"><option>day</option><option>dusk</option><option>night</option></select></label>
   <span id="stats"></span>
   <p>The game's own renderer, standing at fixed points inside the house. Drag to look around. Keep this tab in the foreground to read frame times.</p>
@@ -40,6 +42,10 @@ const views = [
   { name: 'Primary bedroom', at: [790, 290], level: 1, look: [906, 182], pitch: -0.2 },
   { name: 'Bedroom 2', at: [860, 640], level: 1, look: [799, 732], pitch: -0.25 },
   { name: 'Family room (lower)', at: [440, 460], level: 0, look: [560, 300], pitch: -0.2 },
+  { name: 'Entry stair head and railing', at: [690, 545], level: 1, look: [590, 550], pitch: -0.35 },
+  { name: 'Lower stair flight', at: [537, 505], level: 0, look: [537, 580], pitch: -0.2 },
+  { name: 'Family room corner fireplace', at: [600, 340], level: 0, look: [686, 230], pitch: -0.1 },
+  { name: 'Wet bar arch (lower)', at: [520, 480], level: 0, look: [433, 505], pitch: -0.05 },
   { name: 'Wet bar (lower)', at: [380, 300], level: 0, look: [342, 460], pitch: -0.25 },
 ];
 const metres = ([x, z]) => [(x - 600) * 0.02, (z - 500) * 0.02];
@@ -81,7 +87,9 @@ let last = performance.now(), frames = 0, total = 0;
 function frame(now) {
   const dt = Math.min(0.05, (now - last) / 1000); total += now - last; frames++; last = now;
   state.elapsed = (state.elapsed ?? 0) + dt;
-  scene.draw(state, { ...rules, timeOfDay: state.timeOfDay }, dt, { exposure: 1.2, menuVisible: true });
+  const weaponId = document.getElementById('weapon').value;
+  if (weaponId) { state.inventory.equipped = weaponId; state.inventory.weapons[weaponId].suppressor = document.getElementById('suppressor').checked; }
+  scene.draw(state, { ...rules, timeOfDay: state.timeOfDay }, dt, { exposure: 1.2, menuVisible: !weaponId });
   if (total > 500) {
     const info = scene.renderStats();
     stats.textContent = `${(total / frames).toFixed(1)} ms/frame · ${info.calls} draws · ${(info.triangles / 1000).toFixed(0)}k triangles · ${info.width}×${info.height}`;

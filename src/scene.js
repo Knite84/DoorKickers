@@ -18,6 +18,8 @@ import { exposureRange, graphicsPresets } from './graphics.js';
 import { createSceneSky } from './scene-sky.js';
 import { createPaneledDoor } from './door-visual.js';
 import { trimFor, trimKinds } from './trim.js';
+import { weaponModels, suppressorLength } from './weapon-models.js';
+import { stairDressFor, dressKinds, railWalls } from './stair-dress.js';
 import { createScenePost } from './scene-post.js';
 import { fitSunShadow, tuneSunShadow } from './scene-shadows.js';
 
@@ -82,6 +84,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }
   }
   // Thousands of damageable pieces share a handful of draw calls.
+  const hiddenRails = railWalls(map); // drawn as railings instead (src/stair-dress.js)
   const wallBatches = [], wallDisplay = new Uint8Array(structure.length).fill(2);
   fitSunShadow(sun, structure);
   let currentSunDirection = lighting.sunDirection;
@@ -99,12 +102,14 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   // the visibility of the wall piece it hangs on (convention 3 in POLISH_PLAN.md).
   const trimBatches = [], trimDisplay = new Map();
   if (map.surfaces) {
-    const boxes = trimFor(map, structure);
-    const trimPaint = lighting.decorate(new THREE.MeshStandardMaterial({ color: 0xf3f0e8, roughness: 0.5 }));
-    for (const kind of trimKinds) {
+    const boxes = [...trimFor(map, structure), ...stairDressFor(map, structure)];
+    const paint = (color, roughness) => lighting.decorate(new THREE.MeshStandardMaterial({ color, roughness }));
+    const finishes = { baseboard: paint(0xf3f0e8, 0.5), casing: paint(0xf3f0e8, 0.5), doorFrame: paint(0xf3f0e8, 0.5),
+      handrail: paint(0x6b4a30, 0.55), newel: paint(0x6b4a30, 0.55), baluster: paint(0x17191b, 0.4), carpet: paint(0xb7a68c, 1) };
+    for (const kind of [...trimKinds, ...dressKinds]) {
       const items = boxes.filter(item => item.kind === kind);
       if (!items.length) continue;
-      const mesh = new THREE.InstancedMesh(unitBox, trimPaint, items.length);
+      const mesh = new THREE.InstancedMesh(unitBox, finishes[kind], items.length);
       mesh.castShadow = false; mesh.receiveShadow = true; mesh.frustumCulled = false; scene.add(mesh);
       trimDisplay.set(mesh, new Uint8Array(items.length).fill(2));
       trimBatches.push({ mesh, items });
@@ -155,14 +160,22 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material(color));
     mesh.position.set(...position); weapon.add(mesh); return mesh;
   }
-  const weaponBody = weaponBox([0.22, -0.23, -0.48], [0.13, 0.15, 0.48], 0x28312e);
-  const weaponBarrel = weaponBox([0.22, -0.21, -0.84], [0.06, 0.06, 0.35], 0x161e1d);
-  weaponBox([0.22, -0.36, -0.4], [0.09, 0.22, 0.12], 0x4d5545);
-  weaponBox([0.22, -0.13, -0.53], [0.04, 0.06, 0.06], 0x111b18);
-  const suppressor = weaponBox([0.22, -0.21, -1.03], [0.1, 0.1, 0.23], 0x222b28);
-  const scopeModel = weaponBox([0.22, -0.1, -0.62], [0.09, 0.09, 0.26], 0x16211d);
+  // Firearm models come from src/weapon-models.js: one group per weapon, shown when equipped.
+  const cylinders = new Map();
+  const cylinder = (radius, length) => { const key = radius + ',' + length; if (!cylinders.has(key)) cylinders.set(key, new THREE.CylinderGeometry(radius, radius, length, 12).rotateX(Math.PI / 2)); return cylinders.get(key); };
+  const weaponModelGroups = {};
+  for (const [id, model] of Object.entries(weaponModels)) {
+    const group = new THREE.Group(); group.position.set(0.17, -0.15, -0.45); group.visible = false; weapon.add(group);
+    const suppressorParts = [];
+    for (const part of model.parts) {
+      const mesh = new THREE.Mesh(part.shape === 'box' ? new THREE.BoxGeometry(...part.size) : cylinder(part.radius, part.length), material(part.color));
+      mesh.position.set(...part.position); if (part.rotation) mesh.rotation.set(...part.rotation);
+      group.add(mesh); if (part.role === 'suppressor') suppressorParts.push(mesh);
+    }
+    weaponModelGroups[id] = { group, suppressorParts, muzzle: model.muzzle };
+  }
   const flash = new THREE.Mesh(new THREE.OctahedronGeometry(0.09), new THREE.MeshBasicMaterial({ color: 0xffd486 }));
-  flash.position.set(0.22, -0.21, -1.04); flash.visible = false; weapon.add(flash);
+  flash.position.set(0.22, -0.19, -1.2); flash.visible = false; weapon.add(flash);
   firstPerson.add(weapon);
   const minigun = new THREE.Group(), rotor = new THREE.Group();
   minigun.position.set(0.3, -0.35, -0.65); minigun.add(rotor); firstPerson.add(minigun);
@@ -432,10 +445,12 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     const fov = controls.aimed && spec ? (scoped ? 76 / controls.scopeZoom : 55) : 76;
     if (firstPerson.fov !== fov) { firstPerson.fov = fov; firstPerson.updateProjectionMatrix(); }
     if (spec) {
-      weaponBody.scale.z = spec.length / 0.48; weaponBody.material = material(spec.color);
-      weaponBarrel.scale.z = spec.length / 0.48; weaponBarrel.position.z = -0.6 - spec.length * 0.5;
-      suppressor.visible = config.suppressor; suppressor.position.z = -0.6 - spec.length;
-      scopeModel.visible = equipped === 'sniper'; flash.position.z = suppressor.position.z - 0.13;
+      for (const [id, entry] of Object.entries(weaponModelGroups)) entry.group.visible = id === equipped;
+      const shown = weaponModelGroups[equipped];
+      if (shown) {
+        shown.suppressorParts.forEach(mesh => { mesh.visible = !!config.suppressor; });
+        flash.position.set(0.17 + shown.muzzle[0], -0.15 + shown.muzzle[1], -0.45 + shown.muzzle[2] - (config.suppressor ? suppressorLength[equipped] : 0) - 0.06);
+      }
     }
     const strike = state.status === 'active' ? Math.sin(Math.PI * Math.max(0, Math.min(1, ((state.meleeUntil ?? 0) - state.elapsed) / .65))) : 0;
     weapon.position.set(-0.03 + strike * 0.12, -0.05 + Math.sin(state.elapsed * (controls.running ? 14 : 9)) * (controls.moving ? 0.008 : 0), -0.2 + recoil);
@@ -461,7 +476,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     for (const { mesh, indices } of wallBatches) {
       let changed = false;
       indices.forEach((index, instance) => {
-        const piece = state.wallPieces[index], visible = Number(piece.hp > 0 && (!overview || !piece.ceiling&&(piece.stair || (piece.level ?? 0) === selectedLevel)));
+        const piece = state.wallPieces[index], visible = Number(piece.hp > 0 && !hiddenRails.has(piece.wall) && (!overview || !piece.ceiling&&(piece.stair || (piece.level ?? 0) === selectedLevel)));
         if (wallDisplay[index] === visible) return;
         wallDisplay[index] = visible; instanceTransform.position.set(...piece.center); instanceTransform.scale.set(...(visible ? piece.size : [0, 0, 0]));
         instanceTransform.updateMatrix(); mesh.setMatrixAt(instance, instanceTransform.matrix); changed = true;

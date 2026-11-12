@@ -190,6 +190,9 @@ v(fx(932),fz(570),565,[],0); h(565,fx(932),1005,[],0); v(1005,565,646,[],0);
 // The bar's north side is a brick half wall carrying the bar top (a furniture piece below).
 v(fx(440),fz(440),518,[gap(fz(504),92)],0);
 h(518,425,510,[gap(478,46)],0);
+// Brick arch headers over both openings (drawn only).
+furnish('arch','wide',fx(440),fz(504),'left',[1.84,0.2],undefined,0);
+furnish('arch','narrow',478,518,'down',[0.92,0.2],undefined,0);
 // Side of the lower flight; its north end opens directly into the family room.
 v(510,510,590,[],0);
 

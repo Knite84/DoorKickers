@@ -11,9 +11,9 @@ Updated 2026-11-12. This is the current state of the project for a fresh session
 ## Where things stand
 
 - **Polish steps 0.1 to 3.4 are built.** The [status table](POLISH_PLAN.md#status) gives each step's state and the checks still open. Steps marked ◐ are waiting on the owner. Don't treat them as finished, and don't redo them.
-- **Step 4.1 (baseboards, casings, door frames) is built, awaiting owner check** (`src/trim.js`). The next step in order is 4.2. Passage openings still lack casings; see the 4.1 note. Pending owner checks don't block the next step.
+- **Step 4.1 (baseboards, casings, door frames) is built, awaiting owner check** (`src/trim.js`). Step 4.2 (stairs, railings, fireplaces, arches) is also built, awaiting owner check. The next step in order is 4.3 (Opus to propose terrain). Passage openings still lack casings; see the 4.1 note. Step 5.2 (firearm models and hands, `src/weapon-models.js`) was built out of order and awaits the owner's check. Pending owner checks don't block the next step.
 - **Fixed on 2026-11-12, after 2265a28:** every panelled door rendered black from step 3.3 onwards. The furniture materials read vertex colours, and the door geometry had none. `src/door-visual.js` now adds a white colour attribute. Check `git log` to see whether the fix is committed.
-- `npm test`: 223 passing on 2026-11-12, about 4 seconds.
+- `npm test`: 232 passing on 2026-11-12, about 4 seconds.
 
 ## Waiting on the owner
 

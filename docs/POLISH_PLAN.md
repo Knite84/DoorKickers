@@ -21,7 +21,7 @@ Read [HANDOFF.md](HANDOFF.md) first for the state of the repo and the working ag
   - When you finish building a step, mark it ◐ and list its open checks in the table. Never mark ☑ yourself.
   - A ◐ step does not block the next step. Checks that need the owner's machine, such as frame timing, are collected in the handoff.
 - Steps marked **Propose first** are open-ended. Show the owner a short proposal, with a preview page or screenshot where possible, and wait for a go-ahead before building.
-- Keep `npm test` green (223 passing on 2026-11-12). Add tests for anything that is pure data or geometry. Change layout tests only on purpose, and say why in the step's notes.
+- Keep `npm test` green (232 passing on 2026-11-12). Add tests for anything that is pure data or geometry. Change layout tests only on purpose, and say why in the step's notes.
 - **Verify every visual step in the browser** on the Martelli map. Follow **Verification** below.
 - When a step lands, record it in two places:
   - **This plan:** update its row in the status table and add a short **Built** note under the step: what changed, what was seen, what is open, and before and after screenshot links.
@@ -94,11 +94,11 @@ These are traps that have already cost time. Follow them on every rendering chan
 | 3.3 | Doors, ceilings, glass, exterior | ◐ | Interior walkthrough (door colour fixed 2026-11-12) |  |
 | 3.4 | Baked contact shading and softened edges | ◐ | Owner review of shading strength; timing |  |
 | 4.1 | Baseboards, casings and door frames | ◐ | Owner look at trim contrast and the casing-versus-window-frame decision; passage openings still show raw timber ends; timing |  |
-| 4.2 | Stairs, railings and fireplaces | ☐ |  | Sonnet |
+| 4.2 | Stairs, railings and fireplaces | ◐ | Owner look at railing, carpet colour, fireplace and arch shapes against photos; special views and timing not checked |  |
 | 4.3 | Roof, deck and site | ☐ |  | Opus to propose terrain, then Sonnet |
 | 4.4 | Known map gaps | ☐ |  | Sonnet, with owner answers |
 | 5.1 | Skinned guard bodies | ☐ |  | Opus |
-| 5.2 | First-person weapon and hands | ☐ |  | Sonnet |
+| 5.2 | First-person weapon and hands | ◐ | Owner look at the four firearm models; separate view layer (no wall clipping), melee and thrown-item hands, and minigun not done | Sonnet |
 | 5.3 | Weapon handling feel | ☐ |  | Opus |
 | 6.1 | Impact effects and decals | ☐ |  | Opus |
 | 6.2 | Loose physics: casings, debris, doors, chairs | ☐ |  | Opus |
@@ -388,12 +388,20 @@ Goal: tall white baseboards along interior wall faces, wide white casings around
 - Baseboards sit on the bottom row of drywall skins and, on exterior walls, on the inside face of the masonry pieces. Rails (height 1) and walls above a floor level, such as the strip over a window, are skipped. Runs are clipped where a wall ends inside a door leaf.
 - Door casings are floor-to-ceiling jambs, because doors are full wall height. Windows get jambs, a head and a sill apron. Each door also gets a thin lining over the wall ends beside the opening. Exterior walls are trimmed on the inside face only.
 - `src/scene.js` draws one `InstancedMesh` per kind (3 extra draws) and hides each box with the wall-piece rule, so trim goes with its piece and follows the overhead and tactical floor rules. Trim does not cast shadows. `scene.setTrim(on)` and a **Trim** checkbox on `scripts/interior-preview.html` give the on/off comparison.
-- Seen on the interior preview in Chrome (Medium): the primary bedroom window casing, a baseboard under the lake window, and baseboards disappearing when their pieces are set to `hp = 0`. No console errors. `npm test`: 223 passing.
+- Seen on the interior preview in Chrome (Medium): the primary bedroom window casing, a baseboard under the lake window, and baseboards disappearing when their pieces are set to `hp = 0`. No console errors. `npm test`: 232 passing.
 - **Not seen or open:** Low and High, night vision, thermal and the overhead and tactical views were not re-checked for trim. Frame time is unmeasured. No before and after screenshot files were saved. Contact shading dims the base of walls, so baseboards read as soft grey rather than bright white at the floor line.
 - **Existing window frames kept.** The grey frames in `windowFrames` stay inside the reveal, behind the new casings. Say if the casings should replace them.
 - **Known gap:** wall openings that are plain passages (`gap()`, such as the hall and kitchen openings) are not in `map.doors`, so they get no casing and show raw timber ends. Giving them casings needs a small data change to record passages; propose it before doing so.
 
 ### 4.2 Stairs, railings and fireplaces
+
+**Built (2026-11-12).**
+- **Railing** (`src/stair-dress.js`, tested in `test/stair-dress.test.js`): wood handrail and newels with black iron balusters over the three `rail()` walls. The scene stops drawing the rails' drywall slabs (`hiddenRails` in `src/scene.js`) so the railing shows through. The rail walls stay in `map.walls`, so collision and sight are untouched. Each box hides with the nearest rail piece.
+- **Carpet:** a flat beige slab on each of the 16 lower-flight treads (plain colour, not the carpet texture).
+- **Fireplaces** (`src/furniture.js`): both variants gained a hearth cap, dark surround, logs, lintel and corbelled mantel, all inside the old footprint. Collision height is unchanged at 2.35 m.
+- **Arches:** a new drawn-only kit kind `arch` (stepped brick header) over the wet-bar gap and the alcove gap, placed through `map.decor`.
+- **Preview:** four new views on `scripts/interior-preview.html` (stair head, lower flight, corner fireplace, wet-bar arch). Seen in Chrome at Medium, no console errors. The stone-wall fireplace and the alcove arch were not looked at. `npm test`: 232 passing.
+- **Open:** Low and High, night vision, thermal, overhead and tactical views, and frame time were not checked. Upper flight is not carpeted (the photos only show the lower one).
 
 **Data:**
 - The stair guard rails are `rail()` walls. In `src/maps/martelli.js` they are on z 565 and z 620, from 510 to 590, and on x 510 from 510 to 565.
@@ -459,6 +467,12 @@ Start from: the placeholder weapon boxes built with `weaponBox()` in `src/scene.
 - Melee and thrown items after firearms.
 
 Done when: every carried item has a visible first-person model.
+
+**Built (2026-11-12, firearms only).**
+- `src/weapon-models.js` (pure, tested in `test/weapon-models.test.js`) holds the rifle, pistol, shotgun and sniper as box and cylinder parts, each with a suppressor part and gloved hands with sleeves. `src/scene.js` builds one group per weapon and shows the equipped one. The suppressor toggles with the loadout, and the muzzle flash follows the muzzle.
+- `scripts/interior-preview.html` has a Weapon picker and a Suppressor checkbox (the weapon is hidden by default there).
+- Seen in Chrome at Medium: rifle, shotgun, sniper with suppressor and pistol, no console errors. `npm test`: 232 passing.
+- **Not done:** the separate view layer, so long barrels can still clip into walls (it needs a second render pass that works with the post-processing stack, Opus-sized); hands on melee and thrown items, which keep their old box models; the minigun, unchanged. The old weapon bobbing and recoil are unchanged, so Step 5.3 is untouched. Models are dark and small at the bottom right; tune their position and colours against the owner's taste.
 
 ### 5.3 Weapon handling feel
 
