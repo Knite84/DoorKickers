@@ -17,6 +17,7 @@ import { createSurfaceShading } from './surface-materials.js';
 import { exposureRange, graphicsPresets } from './graphics.js';
 import { createSceneSky } from './scene-sky.js';
 import { createPaneledDoor } from './door-visual.js';
+import { trimFor, trimKinds } from './trim.js';
 import { createScenePost } from './scene-post.js';
 import { fitSunShadow, tuneSunShadow } from './scene-shadows.js';
 
@@ -93,6 +94,21 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     surfaceShading?.dress(mesh, kind, indices.map(index => structure[index]), baseColor, lighting.decorate);
     mesh.castShadow = mesh.receiveShadow = true; mesh.frustumCulled = false; scene.add(mesh);
     wallBatches.push({ mesh, indices });
+  }
+  // Painted trim (src/trim.js): one instanced mesh per kind, each box following
+  // the visibility of the wall piece it hangs on (convention 3 in POLISH_PLAN.md).
+  const trimBatches = [], trimDisplay = new Map();
+  if (map.surfaces) {
+    const boxes = trimFor(map, structure);
+    const trimPaint = lighting.decorate(new THREE.MeshStandardMaterial({ color: 0xf3f0e8, roughness: 0.5 }));
+    for (const kind of trimKinds) {
+      const items = boxes.filter(item => item.kind === kind);
+      if (!items.length) continue;
+      const mesh = new THREE.InstancedMesh(unitBox, trimPaint, items.length);
+      mesh.castShadow = false; mesh.receiveShadow = true; mesh.frustumCulled = false; scene.add(mesh);
+      trimDisplay.set(mesh, new Uint8Array(items.length).fill(2));
+      trimBatches.push({ mesh, items });
+    }
   }
   const windowGlass = lighting.decorate(new THREE.MeshStandardMaterial(map.surfaces
     ? { color: 0xb8d8db, transparent: true, opacity: 0.24, roughness: 0.065, metalness: 0.28, side: THREE.DoubleSide, depthWrite: false }
@@ -452,6 +468,16 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
       });
       if (changed) mesh.instanceMatrix.needsUpdate = true;
     }
+    for (const { mesh, items } of trimBatches) {
+      const shown = trimDisplay.get(mesh); let changed = false;
+      items.forEach((item, instance) => {
+        const piece = state.wallPieces[item.piece], visible = Number(piece.hp > 0 && (!overview || !piece.ceiling && (piece.stair || (piece.level ?? 0) === selectedLevel)));
+        if (shown[instance] === visible) return;
+        shown[instance] = visible; instanceTransform.position.set(...item.center); instanceTransform.scale.set(...(visible ? item.size : [0, 0, 0]));
+        instanceTransform.updateMatrix(); mesh.setMatrixAt(instance, instanceTransform.matrix); changed = true;
+      });
+      if (changed) mesh.instanceMatrix.needsUpdate = true;
+    }
     windowMeshes.forEach((mesh, i) => { mesh.visible = state.windowHealth[i] > 0 && onLevel(map.windows[i]); windowFrames[i].forEach(frame => { frame.visible = onLevel(map.windows[i]); }); });
     propMeshes.forEach((meshes, i) => meshes.forEach(mesh => { mesh.visible = onLevel(map.props[i]) && !(overview && mesh.userData.overhead); }));
     furnitureRender.forEach(({ prop, mesh }) => { mesh.visible = onLevel(prop) && !(overview && mesh.userData.overhead); });
@@ -553,6 +579,8 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     draw, shotEffect, eventEffect, setGraphics,
     // For preview pages: 0 turns the baked contact shading off.
     setContactShading: strength => lighting.setContactStrength(strength),
+    // Preview switch for before/after comparisons of baseboards and casings.
+    setTrim: on => trimBatches.forEach(({ mesh }) => { mesh.visible = !!on; }),
     capturingLight: lighting.capturing,
     renderStats: () => ({
       calls: renderer.info.render.calls,

@@ -21,7 +21,7 @@ Read [HANDOFF.md](HANDOFF.md) first for the state of the repo and the working ag
   - When you finish building a step, mark it ◐ and list its open checks in the table. Never mark ☑ yourself.
   - A ◐ step does not block the next step. Checks that need the owner's machine, such as frame timing, are collected in the handoff.
 - Steps marked **Propose first** are open-ended. Show the owner a short proposal, with a preview page or screenshot where possible, and wait for a go-ahead before building.
-- Keep `npm test` green (217 passing on 2026-11-12). Add tests for anything that is pure data or geometry. Change layout tests only on purpose, and say why in the step's notes.
+- Keep `npm test` green (223 passing on 2026-11-12). Add tests for anything that is pure data or geometry. Change layout tests only on purpose, and say why in the step's notes.
 - **Verify every visual step in the browser** on the Martelli map. Follow **Verification** below.
 - When a step lands, record it in two places:
   - **This plan:** update its row in the status table and add a short **Built** note under the step: what changed, what was seen, what is open, and before and after screenshot links.
@@ -93,7 +93,7 @@ These are traps that have already cost time. Follow them on every rendering chan
 | 3.2 | Furniture materials | ◐ | Frame time within budget |  |
 | 3.3 | Doors, ceilings, glass, exterior | ◐ | Interior walkthrough (door colour fixed 2026-11-12) |  |
 | 3.4 | Baked contact shading and softened edges | ◐ | Owner review of shading strength; timing |  |
-| 4.1 | Baseboards, casings and door frames | ☐ |  | Sonnet (brief below) |
+| 4.1 | Baseboards, casings and door frames | ◐ | Owner look at trim contrast and the casing-versus-window-frame decision; passage openings still show raw timber ends; timing |  |
 | 4.2 | Stairs, railings and fireplaces | ☐ |  | Sonnet |
 | 4.3 | Roof, deck and site | ☐ |  | Opus to propose terrain, then Sonnet |
 | 4.4 | Known map gaps | ☐ |  | Sonnet, with owner answers |
@@ -382,6 +382,16 @@ Goal: tall white baseboards along interior wall faces, wide white casings around
 - Destroying a wall piece removes its trim, checked on the interior preview page by setting pieces' `hp` to 0 as the 3.4 check did.
 - Draw calls rise by no more than 4.
 - There are before and after interior screenshots.
+
+**Built (2026-11-12).**
+- `src/trim.js` (pure, tested in `test/trim.test.js`) returns 874 boxes for Martelli: 669 baseboards, 147 casings and 58 door-frame linings. Maps without `map.surfaces` get none.
+- Baseboards sit on the bottom row of drywall skins and, on exterior walls, on the inside face of the masonry pieces. Rails (height 1) and walls above a floor level, such as the strip over a window, are skipped. Runs are clipped where a wall ends inside a door leaf.
+- Door casings are floor-to-ceiling jambs, because doors are full wall height. Windows get jambs, a head and a sill apron. Each door also gets a thin lining over the wall ends beside the opening. Exterior walls are trimmed on the inside face only.
+- `src/scene.js` draws one `InstancedMesh` per kind (3 extra draws) and hides each box with the wall-piece rule, so trim goes with its piece and follows the overhead and tactical floor rules. Trim does not cast shadows. `scene.setTrim(on)` and a **Trim** checkbox on `scripts/interior-preview.html` give the on/off comparison.
+- Seen on the interior preview in Chrome (Medium): the primary bedroom window casing, a baseboard under the lake window, and baseboards disappearing when their pieces are set to `hp = 0`. No console errors. `npm test`: 223 passing.
+- **Not seen or open:** Low and High, night vision, thermal and the overhead and tactical views were not re-checked for trim. Frame time is unmeasured. No before and after screenshot files were saved. Contact shading dims the base of walls, so baseboards read as soft grey rather than bright white at the floor line.
+- **Existing window frames kept.** The grey frames in `windowFrames` stay inside the reveal, behind the new casings. Say if the casings should replace them.
+- **Known gap:** wall openings that are plain passages (`gap()`, such as the hall and kitchen openings) are not in `map.doors`, so they get no casing and show raw timber ends. Giving them casings needs a small data change to record passages; propose it before doing so.
 
 ### 4.2 Stairs, railings and fireplaces
 
