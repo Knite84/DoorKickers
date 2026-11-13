@@ -39,6 +39,8 @@ export function createSceneLighting(map, pieces = []) {
     lightLevels:{value:levels.length},lightDay:{value:1},lightSunny:{value:1},lightPower:{value:1},lightVision:{value:0},lightTactical:{value:0},
     lightSlices:{value:heights.length},lightSliceDepth:{value:depth},
     lightSolar:{value:1},lightWeather:{value:1},
+    // Brief muzzle-flash light (step 5.3): xyz world position, w strength (0 = off).
+    muzzleLight:{value:new THREE.Vector4(0,0,0,0)},
   };
   // Baked contact shading (src/contact-shading.js): soft darkening where floors
   // meet walls and furniture and where walls meet the ceiling. It dims ambient
@@ -77,6 +79,7 @@ export function createSceneLighting(map, pieces = []) {
         uniform sampler2D lightField;uniform vec4 lightBounds;
         uniform float lightLevels,lightDay,lightSunny,lightPower,lightVision,lightTactical,bodyHeat,lightSlices,lightSliceDepth,lightSolar,lightWeather,indoorSpecular,forceOutdoor;
         uniform sampler2D contactField;uniform vec4 contactBounds,contactCeilings;uniform float contactLevels,contactDepth,contactRange,contactStrength;
+        uniform vec4 muzzleLight;
         float contactShade(vec3 world,vec3 worldNormal,float indoor){
           vec3 p=world+worldNormal*0.08;
           float level=clamp(floor((p.y+0.03)/3.2),0.0,contactLevels-1.0);
@@ -111,6 +114,12 @@ export function createSceneLighting(map, pieces = []) {
           float direct=mix(1.0,field.g*lightSunny*lightSolar,indoor);
           outgoingLight=reflectedLight.directDiffuse*direct+reflectedLight.indirectDiffuse*ambient+totalSpecular*mix(1.0,indoorSpecular,indoor)+totalEmissiveRadiance;
           outgoingLight+=diffuseColor.rgb*field.b*lightPower*0.8*contact;
+          if(muzzleLight.w>0.0){
+            vec3 toFlash=muzzleLight.xyz-vLightWorld;float flashDistance=length(toFlash);
+            float reach=max(0.0,1.0-flashDistance/4.5);reach*=reach;
+            float facing=max(dot(inverseTransformDirection(normal,viewMatrix),toFlash/max(flashDistance,0.001)),0.0);
+            outgoingLight+=diffuseColor.rgb*vec3(1.0,0.68,0.36)*muzzleLight.w*reach*(0.25+0.75*facing)*2.2;
+          }
           if(lightVision>0.5&&lightVision<1.5){
             float amplified=dot(outgoingLight,vec3(.2126,.7152,.0722))*5.5+dot(diffuseColor.rgb,vec3(.333))*0.055;
             outgoingLight=vec3(.12,.95,.25)*amplified;
@@ -192,6 +201,7 @@ export function createSceneLighting(map, pieces = []) {
     decorate, update, fixtures: model.fixtures, sunDirection,
     capturing: () => Boolean(map.fixtures && pending && published?.state !== pending.state),
     setContactStrength: strength => { uniforms.contactStrength.value = strength; },
+    setMuzzleLight: (position, strength) => { if (position) uniforms.muzzleLight.value.set(position.x, position.y, position.z, strength); else uniforms.muzzleLight.value.w = 0; },
     dispose: () => { texture.dispose(); contactTexture.dispose(); },
   };
 }

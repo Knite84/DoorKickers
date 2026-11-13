@@ -5,6 +5,7 @@ import { maps, resolveMap } from './maps/index.js';
 import { createMission, stepMission, interact, distance, movementGait, toggleCrouch, jump } from './simulation.js';
 import { createScene } from './scene.js';
 import { fireWeapon, reload } from './weapons.js';
+import { weaponReady } from './weapon-handling.js';
 import { createGunAudio } from './audio.js';
 import { createMotion, resetMotion, shapeInput, observeMotion } from './player-motion.js';
 import { weapons, items, ammoTypes, defaultLoadout, validateLoadout, equip, toggleHolster, restockEquipment, slotOrder, cycleEquipped } from './kit.js';
@@ -351,11 +352,14 @@ function detonate() {
 function shoot(now = performance.now()) {
   if (mapOpen || menuVisible || !scene) return;
   if (state.inventory.equipped === 'unarmed') return message('Hands empty. H draws your last weapon; Tab opens inventory.');
+  // A switch must finish before the new item fires or throws (rule "Weapon switch takes time").
+  if (!weaponReady(state, rules)) return;
   const aim = scene.aim(state);
   if (items[state.inventory.equipped]) { const result = useEquipment(state, map, rules, aim.origin, aim.direction); if (result) message(result); return; }
   const shot = fireWeapon(state, map, rules, aim.origin, aim.direction);
   if (shot) {
     for (const pellet of shot.pellets) scene.shotEffect(pellet);
+    scene.fired(state.inventory.equipped, { aimed: aimed && view === 'first', crouched: !!state.crouched, climb: rules.muzzleClimb !== false, suppressed: !!shot.suppressed });
     audio.play(rules.gunVolume * (shot.suppressed ? 0.25 : 1));
     if (shot.kind === 'guard') hitUntil = now + 150;
     if (shot.headshot) message('Headshot. Guard down.');
@@ -492,7 +496,7 @@ window.addEventListener('keydown', event => {
   }
   if (action === 'peek' && state.status === 'active' && !mapOpen) setPlayerPeek(state, map, true);
   if (action === 'crouch' && state.status === 'active' && !mapOpen) message(toggleCrouch(state, map));
-  if (action === 'reload' && reload(state)) message('Reloading…');
+  if (action === 'reload' && weaponReady(state, rules) && reload(state)) message('Reloading…');
   if (action === 'aim') toggleAim();
   if (action === 'detonate') detonate();
   if (action?.startsWith('weapon')) equipSlot(Number(action.slice(6)));
@@ -544,8 +548,9 @@ function frame(now) {
   const facing = scene?.aim(state).direction; if (facing) state.facing = [facing[0], facing[2]];
   if (state.status === 'active') scene?.face(movement[0], movement[1]);
   const exposed=!state.playerCover||state.playerCover.peeking;
-  const scoped = exposed && aimed && state.inventory.equipped === 'sniper' && view === 'first' && !mapOpen && !menuVisible;
   scene?.draw(state, rules, dt, { moving: shaped.pace > 0.05 && state.status === 'active', feel: state.status === 'active' ? feel.view : null, running: gait === 'run', firing: firing && state.status === 'active' && exposed, aimed:aimed&&exposed, scopeZoom, menuVisible, exposure: graphics.exposure });
+  // The scope overlay waits until the scope has come up to the eye (src/weapon-handling.js).
+  const scoped = exposed && !menuVisible && !!scene?.scoped();
   captureStatus.hidden = !scene?.capturingLight();
   if (scene && graphics.showStats) {
     if (statsSince === null) statsSince = now;
@@ -592,7 +597,7 @@ function frame(now) {
   if (arrowOpacity > 0) $('#damage-arrow').style.setProperty('--bearing', `${damageBearing(state.player, state.facing, state.lastHit.from)}deg`);
   $('#damage-arrow').style.opacity = String(arrowOpacity);
   if (state.status === 'active') observeMission(timelineHolder.current, state);
-  $('#ammo').textContent = equipped === 'unarmed' ? 'H · DRAW WEAPON' : items[equipped] ? `${items[equipped].action} · ${state.inventory.items[equipped]} left` : state.reloadUntil > state.elapsed ? 'RELOADING' : rules.unlimitedAmmo ? '∞ / ∞' : `${String(state.ammo).padStart(2, '0')} / ∞`;
+  $('#ammo').textContent = equipped === 'unarmed' ? 'H · DRAW WEAPON' : items[equipped] ? `${items[equipped].action} · ${state.inventory.items[equipped]} left` : state.reloadUntil > state.elapsed ? 'RELOADING' : !weaponReady(state, rules) ? 'DRAWING' : rules.unlimitedAmmo ? '∞ / ∞' : `${String(state.ammo).padStart(2, '0')} / ∞`;
   const detaining = state.detainingGuardId !== null && state.detainingGuardId !== undefined;
   $('#detainment-banner').hidden = !detaining || mapOpen || menuVisible;
   const detentionText = detaining ? `GUARD ${state.detainingGuardId + 1} IS DETAINING YOU · Backup is approaching. You can still move and use inventory.` : '';
@@ -606,7 +611,8 @@ function frame(now) {
   $('#cover-status').hidden=!cover||mapOpen||menuVisible;
   const coverText=cover?.peeking?'PEEKING · Release X to duck back':cover?.blocked?'NO CLEAR PEEK · Move closer to an edge · Q / WASD leaves cover':`IN ${cover?.concealment?'CONCEALMENT':'COVER'} · Hold X to pop out · Q / WASD leaves cover`;
   if($('#cover-status').textContent!==coverText) $('#cover-status').textContent=coverText;
-  $('#crosshair').hidden = view !== 'first' || mapOpen || menuVisible || scoped || state.status !== 'active';
+  // Aiming down the sights uses the gun's own sights, so the crosshair steps aside.
+  $('#crosshair').hidden = view !== 'first' || mapOpen || menuVisible || scoped || (aimed && exposed && !!weapons[equipped] && equipped !== 'minigun') || state.status !== 'active';
   $('#hit-marker').hidden = now > hitUntil;
   $('#capture-mouse').hidden = !!screens.current() || view !== 'first' || mapOpen || menuVisible || scoped || !['active', 'paused'].includes(state.status) || document.pointerLockElement === canvas;
   const exposure = Math.max(0, ...state.guards.map(g => g.suspicion));

@@ -77,6 +77,8 @@ export function equip(state, id) {
   if (id !== 'unarmed' && !state.inventory.weapons[id]?.carried && !(state.inventory.items[id] > 0)) return false;
   if (weapons[state.inventory.equipped]) state.inventory.magazines[state.inventory.equipped] = state.ammo;
   if (weapons[state.inventory.equipped]) state.inventory.lastWeapon = state.inventory.equipped;
+  // A switch starts the lower-and-raise; weapon-handling.js decides when the new item is ready.
+  if (id !== state.inventory.equipped) { state.drawFrom = state.inventory.equipped; state.drawStart = state.elapsed ?? 0; }
   state.inventory.equipped = id; state.reloadUntil = 0;
   state.ammo = state.inventory.magazines[id] ?? 0;
   return true;

@@ -20,6 +20,7 @@ import { createSceneSky } from './scene-sky.js';
 import { createPaneledDoor } from './door-visual.js';
 import { trimFor, trimKinds } from './trim.js';
 import { weaponModels, suppressorLength } from './weapon-models.js';
+import { handling, createHandling, resetHandling, fireKick, stepHandling, weaponPose, shownItem, drawDrop, cycleProgress, ejectsBetween, scopeUp, fieldOfView, weaponReady, hipPosition } from './weapon-handling.js';
 import { stairDressFor, dressKinds, railWalls } from './stair-dress.js';
 import { createScenePost } from './scene-post.js';
 import { createRoofMesh } from './roof-mesh.js';
@@ -46,7 +47,10 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   const mapCamera = new THREE.OrthographicCamera(-17, 17, 14, -14, 0.1, 100);
   mapCamera.position.set(0, 45, 0); mapCamera.up.set(0, 0, -1); mapCamera.lookAt(0, 0, 0);
   let lookSensitivity = 1, lookInvert = 1, roofShown = true;
-  let view = 'first', mapOpen = false, yaw = -0.55, pitch = 0, recoil = 0, selectedLevel = 0;
+  let view = 'first', mapOpen = false, yaw = -0.55, pitch = 0, selectedLevel = 0;
+  // Weapon handling (src/weapon-handling.js): springs, aim blend, sway and muzzle climb.
+  const hand = createHandling();
+  let lastYaw = yaw, lastPitch = pitch, scopedNow = false, ejectQueued = null, lastCycle = null, flashSize = 1, puffQueued = 0;
   let currentCamera = firstPerson;
   const pointer = new THREE.Vector2();
   const raycaster = new THREE.Raycaster();
@@ -166,57 +170,150 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     const mesh = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: 0x281d14, transparent: true })); scene.add(mesh); return mesh;
   });
   const weapon = new THREE.Group();
-  function weaponBox(position, size, color) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material(color));
-    mesh.position.set(...position); weapon.add(mesh); return mesh;
-  }
+  // First-person items are drawn in front of everything else, so a barrel never
+  // pokes through a wall (POLISH_PLAN 5.3). Their depth is squeezed into the front
+  // 2% of the range, which keeps the order within the weapon. Wraps any earlier patch.
+  const inFront = mat => {
+    const previous = mat.onBeforeCompile, previousKey = mat.customProgramCacheKey?.bind(mat);
+    mat.onBeforeCompile = (shader, renderer) => {
+      previous?.call(mat, shader, renderer);
+      shader.vertexShader = shader.vertexShader.replace('#include <logdepthbuf_vertex>', 'gl_Position.z = mix(-gl_Position.w, gl_Position.z, 0.02);\n#include <logdepthbuf_vertex>');
+    };
+    mat.customProgramCacheKey = () => `${previousKey ? previousKey() : ''}-in-front`;
+    return mat;
+  };
+  const viewMaterials = {};
+  const viewMaterial = (color, roughness = 0.7) => viewMaterials[color] ??= inFront(lighting.decorate(new THREE.MeshStandardMaterial({ color, roughness })));
   // Firearm models come from src/weapon-models.js: one group per weapon, shown when equipped.
+  // The group's origin is the rear of the grip, which is also the pivot for kick and sway.
   const cylinders = new Map();
   const cylinder = (radius, length) => { const key = radius + ',' + length; if (!cylinders.has(key)) cylinders.set(key, new THREE.CylinderGeometry(radius, radius, length, 12).rotateX(Math.PI / 2)); return cylinders.get(key); };
   const weaponModelGroups = {};
   for (const [id, model] of Object.entries(weaponModels)) {
-    const group = new THREE.Group(); group.position.set(0.17, -0.15, -0.45); group.visible = false; weapon.add(group);
-    const suppressorParts = [];
+    const group = new THREE.Group(); group.visible = false; weapon.add(group);
+    const suppressorParts = [], moving = { magazine: [], support: [], bolt: [], pump: [] };
     for (const part of model.parts) {
-      const mesh = new THREE.Mesh(part.shape === 'box' ? new THREE.BoxGeometry(...part.size) : cylinder(part.radius, part.length), material(part.color));
+      const mesh = new THREE.Mesh(part.shape === 'box' ? new THREE.BoxGeometry(...part.size) : cylinder(part.radius, part.length), viewMaterial(part.color));
       mesh.position.set(...part.position); if (part.rotation) mesh.rotation.set(...part.rotation);
       group.add(mesh); if (part.role === 'suppressor') suppressorParts.push(mesh);
+      if (part.moves) moving[part.moves].push({ mesh, base: mesh.position.clone() });
     }
-    weaponModelGroups[id] = { group, suppressorParts, muzzle: model.muzzle };
+    // A shell for the shotgun's loading animation.
+    let shell = null;
+    if (handling[id]?.reload === 'shells') { shell = new THREE.Mesh(cylinder(model.casing[0], model.casing[1]), viewMaterial(model.casing[2])); shell.visible = false; group.add(shell); }
+    weaponModelGroups[id] = { group, suppressorParts, moving, shell, muzzle: model.muzzle };
   }
-  const flash = new THREE.Mesh(new THREE.OctahedronGeometry(0.09), new THREE.MeshBasicMaterial({ color: 0xffd486 }));
-  flash.position.set(0.22, -0.19, -1.2); flash.visible = false; weapon.add(flash);
+  // Muzzle flash: a star facing the eye plus two crossed flame planes along the barrel,
+  // drawn additively with a random turn and size each shot.
+  const canvasTexture = (width, height, paint) => { const canvas = document.createElement('canvas'); canvas.width = width; canvas.height = height; paint(canvas.getContext('2d'), width, height); const texture = new THREE.CanvasTexture(canvas); texture.colorSpace = THREE.SRGBColorSpace; return texture; };
+  const starTexture = canvasTexture(128, 128, (g, w, h) => {
+    const glow = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2);
+    glow.addColorStop(0, 'rgba(255,255,240,1)'); glow.addColorStop(0.25, 'rgba(255,214,140,0.9)'); glow.addColorStop(0.6, 'rgba(255,140,40,0.25)'); glow.addColorStop(1, 'rgba(255,120,20,0)');
+    g.fillStyle = glow; g.fillRect(0, 0, w, h);
+    g.translate(w / 2, h / 2); g.fillStyle = 'rgba(255,225,160,0.85)';
+    for (let i = 0; i < 6; i++) { g.rotate(Math.PI / 3); g.beginPath(); g.moveTo(-5, 0); g.lineTo(0, -w * (i % 2 ? 0.34 : 0.48)); g.lineTo(5, 0); g.fill(); }
+  });
+  const flameTexture = canvasTexture(64, 128, (g, w, h) => {
+    g.translate(w / 2, h); g.scale(1, h / w * 1.4);
+    const glow = g.createRadialGradient(0, 0, 0, 0, 0, w / 2);
+    glow.addColorStop(0, 'rgba(255,250,225,1)'); glow.addColorStop(0.4, 'rgba(255,190,90,0.8)'); glow.addColorStop(1, 'rgba(255,110,20,0)');
+    g.fillStyle = glow; g.beginPath(); g.arc(0, 0, w / 2, 0, Math.PI * 2); g.fill();
+  });
+  const flashMaterials = [
+    inFront(new THREE.SpriteMaterial({ map: starTexture, color: 0xffe0b0, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, fog: false })),
+    inFront(new THREE.MeshBasicMaterial({ map: flameTexture, color: 0xffd2a0, blending: THREE.AdditiveBlending, depthWrite: false, transparent: true, side: THREE.DoubleSide, fog: false })),
+  ];
+  // Brighter than white, so the flash still reads against a sunlit room after tone mapping.
+  for (const mat of flashMaterials) mat.color.multiplyScalar(4);
+  const flamePlane = new THREE.PlaneGeometry(0.14, 0.42).rotateX(-Math.PI / 2).translate(0, 0, -0.2);
+  function makeFlash() {
+    const group = new THREE.Group(), star = new THREE.Sprite(flashMaterials[0]);
+    star.scale.setScalar(0.3); group.add(star);
+    for (const turn of [0, Math.PI / 2]) { const plane = new THREE.Mesh(flamePlane, flashMaterials[1]); plane.rotation.z = turn; group.add(plane); }
+    group.visible = false; return group;
+  }
+  const flash = makeFlash(); weapon.add(flash);
   firstPerson.add(weapon);
   const minigun = new THREE.Group(), rotor = new THREE.Group();
-  minigun.position.set(0.3, -0.35, -0.65); minigun.add(rotor); firstPerson.add(minigun);
-  const miniBody = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.28, 0.4), material(0x323b3d));
+  const minigunBase = [0.3, -0.35, -0.65];
+  minigun.position.set(...minigunBase); minigun.add(rotor); firstPerson.add(minigun);
+  const miniBody = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.28, 0.4), viewMaterial(0x323b3d));
   miniBody.position.z = 0.13; minigun.add(miniBody);
   for (let barrel = 0; barrel < 6; barrel++) {
     const angle = barrel * Math.PI / 3;
-    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.8, 10), material(0x172022));
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.8, 10), viewMaterial(0x172022));
     tube.rotation.x = Math.PI / 2; tube.position.set(Math.cos(angle) * 0.1, Math.sin(angle) * 0.1, -0.35); rotor.add(tube);
   }
   for (const z of [-0.05, -0.6]) {
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.025, 6, 18), material(0x56615d));
+    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.12, 0.025, 6, 18), viewMaterial(0x56615d));
     collar.position.z = z; rotor.add(collar);
   }
-  const miniHandle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.19, 0.12), material(0x172022));
+  const miniHandle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.19, 0.12), viewMaterial(0x172022));
   miniHandle.position.set(0, 0.2, 0.15); minigun.add(miniHandle);
-  const miniFlash = new THREE.Mesh(new THREE.OctahedronGeometry(0.14), flash.material);
-  miniFlash.position.z = -0.82; minigun.add(miniFlash);
+  const miniFlash = makeFlash(); miniFlash.position.z = -0.78; minigun.add(miniFlash);
+  // Spent casings: short-lived world-space brass that arcs out, bounces once and lies still.
+  const casingMaterials = {};
+  const casingMaterial = color => casingMaterials[color] ??= lighting.decorate(new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: color === 0x8e2a22 ? 0.1 : 0.8 }));
+  const casingPool = Array.from({ length: 16 }, () => { const mesh = new THREE.Mesh(cylinder(1, 1), casingMaterial(0xb58b3c)); mesh.visible = false; scene.add(mesh); return { mesh, life: 0, velocity: new THREE.Vector3(), spin: new THREE.Vector3(), floor: 0, bounced: false }; });
+  let nextCasing = 0;
+  const portWorld = new THREE.Vector3(), cameraRight = new THREE.Vector3(), cameraUp = new THREE.Vector3(), cameraBack = new THREE.Vector3();
+  function ejectCasing(id, state) {
+    const model = weaponModels[id], shown = weaponModelGroups[id];
+    if (!model || !shown) return;
+    shown.group.updateWorldMatrix(true, false);
+    portWorld.set(...model.port); shown.group.localToWorld(portWorld);
+    cameraRight.set(1, 0, 0).applyQuaternion(firstPerson.quaternion); cameraUp.set(0, 1, 0).applyQuaternion(firstPerson.quaternion); cameraBack.set(0, 0, 1).applyQuaternion(firstPerson.quaternion);
+    const casing = casingPool[nextCasing++ % casingPool.length];
+    casing.mesh.material = casingMaterial(model.casing[2]);
+    casing.mesh.scale.set(model.casing[0], model.casing[0], model.casing[1]);
+    casing.mesh.position.copy(portWorld); casing.mesh.quaternion.copy(firstPerson.quaternion);
+    casing.velocity.copy(cameraRight).multiplyScalar(1.1 + Math.random() * 0.5).addScaledVector(cameraUp, 1.3 + Math.random() * 0.5).addScaledVector(cameraBack, -0.5);
+    casing.spin.set((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 10);
+    casing.floor = (state.playerY ?? 0) + model.casing[0]; casing.life = 2; casing.bounced = false; casing.mesh.visible = true;
+  }
+  function stepCasings(dt) {
+    for (const casing of casingPool) {
+      if (!casing.mesh.visible) continue;
+      casing.life -= dt;
+      if (casing.life <= 0) { casing.mesh.visible = false; continue; }
+      if (casing.velocity.lengthSq() === 0) continue;
+      casing.velocity.y -= 9.8 * dt; casing.mesh.position.addScaledVector(casing.velocity, dt);
+      casing.mesh.rotation.x += casing.spin.x * dt; casing.mesh.rotation.y += casing.spin.y * dt; casing.mesh.rotation.z += casing.spin.z * dt;
+      if (casing.mesh.position.y <= casing.floor) {
+        casing.mesh.position.y = casing.floor;
+        if (!casing.bounced && casing.velocity.y < -1) { casing.bounced = true; casing.velocity.y *= -0.3; casing.velocity.x *= 0.4; casing.velocity.z *= 0.4; casing.spin.multiplyScalar(0.4); }
+        else { casing.velocity.set(0, 0, 0); casing.mesh.rotation.set(Math.PI / 2, 0, casing.mesh.rotation.y); }
+      }
+    }
+  }
+  // A small smoke puff left at the muzzle; dimmer at dusk and night so it never glows.
+  const puffTexture = canvasTexture(64, 64, (g, w, h) => { const glow = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2); glow.addColorStop(0, 'rgba(255,255,255,0.8)'); glow.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = glow; g.fillRect(0, 0, w, h); });
+  const puffPool = Array.from({ length: 8 }, () => { const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: puffTexture, color: 0x9a9890, transparent: true, depthWrite: false, opacity: 0 })); sprite.visible = false; scene.add(sprite); return { sprite, life: 0, strength: 0 }; });
+  let nextPuff = 0;
+  const flashWorld = new THREE.Vector3();
+  function stepPuffs(dt, shade) {
+    for (const puff of puffPool) {
+      if (!puff.sprite.visible) continue;
+      puff.life -= dt;
+      if (puff.life <= 0) { puff.sprite.visible = false; continue; }
+      const age = 1 - puff.life / 0.7;
+      puff.sprite.scale.setScalar(0.06 + 0.3 * age); puff.sprite.position.y += dt * 0.25;
+      puff.sprite.material.opacity = puff.strength * (1 - age); puff.sprite.material.color.setScalar(0.6 * shade);
+    }
+  }
   const heldItems = {};
   function heldBox(group, position, size, color) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), material(color)); mesh.position.set(...position); group.add(mesh); return mesh;
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(...size), viewMaterial(color)); mesh.position.set(...position); group.add(mesh); return mesh;
   }
   for (const id of Object.keys(items)) {
     const group = new THREE.Group(); group.position.set(0.32, -0.3, -0.65); firstPerson.add(group); heldItems[id] = group;
     if (id === 'axe') { heldBox(group, [0, -0.1, 0], [0.04, 0.65, 0.04], 0x956a43); heldBox(group, [0.04, 0.22, 0], [0.3, 0.14, 0.06], 0xb84836); }
     else if (id === 'crowbar') { heldBox(group, [0, 0, 0], [0.035, 0.6, 0.035], 0x858e87); heldBox(group, [0.05, 0.28, 0], [0.12, 0.04, 0.035], 0x858e87); }
     else if (id === 'pickgun') { heldBox(group, [0, 0, 0], [0.12, 0.12, 0.2], 0x65747c); heldBox(group, [0, -0.1, 0.04], [0.07, 0.18, 0.08], 0x283331); heldBox(group, [0, 0.02, -0.19], [0.015, 0.015, 0.2], 0xc4c9c2); }
-    else if (id === 'knife') { heldBox(group, [0, -0.12, 0], [0.05, 0.2, 0.07], 0x3a453a); heldBox(group, [0, 0.03, 0], [0.12, 0.025, 0.09], 0x7b8685); const blade = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.36, 3), material(0xc2cdca)); blade.position.y = 0.21; blade.scale.z = 0.3; group.add(blade); }
+    else if (id === 'knife') { heldBox(group, [0, -0.12, 0], [0.05, 0.2, 0.07], 0x3a453a); heldBox(group, [0, 0.03, 0], [0.12, 0.025, 0.09], 0x7b8685); const blade = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.36, 3), viewMaterial(0xc2cdca)); blade.position.y = 0.21; blade.scale.z = 0.3; group.add(blade); }
     else if (id === 'medkit') { heldBox(group, [0, 0, 0], [0.3, 0.22, 0.12], 0xb6c4ac); heldBox(group, [0, 0, 0.066], [0.14, 0.035, 0.015], 0xc55f49); heldBox(group, [0, 0, 0.066], [0.035, 0.14, 0.015], 0xc55f49); }
-    else if (id === 'molotov') { const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, 0.32, 10), material(0x805c35)); group.add(bottle); heldBox(group, [0, 0.2, 0], [0.04, 0.12, 0.04], 0xd4c9ab); }
-    else if (id === 'detcord') { const spool = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.035, 6, 18), material(0xc48e55)); group.add(spool); }
+    else if (id === 'molotov') { const bottle = new THREE.Mesh(new THREE.CylinderGeometry(0.055, 0.075, 0.32, 10), viewMaterial(0x805c35)); group.add(bottle); heldBox(group, [0, 0.2, 0], [0.04, 0.12, 0.04], 0xd4c9ab); }
+    else if (id === 'detcord') { const spool = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.035, 6, 18), viewMaterial(0xc48e55)); group.add(spool); }
     else heldBox(group, [0, 0, 0], id === 'claymore' ? [0.28, 0.18, 0.08] : [0.09, 0.18, 0.09], id === 'flashbang' ? 0xaab0a5 : 0x516344);
   }
   const dynamicMeshes = new Map();
@@ -241,7 +338,6 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   const effects = [];
   const chipGeometry = new THREE.BoxGeometry(0.065, 0.04, 0.06);
   function shotEffect(shot) {
-    recoil = 0.045;
     const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...shot.origin), new THREE.Vector3(...shot.position)]), new THREE.LineBasicMaterial({ color: 0xffdf9a, transparent: true, opacity: 0.85 }));
     scene.add(line); effects.push({ mesh: line, life: 0.075, disposable: true });
     // Show every entry/exit-layer impact, including those beyond the first wall.
@@ -493,34 +589,67 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
       if (fixture.id) mesh.material.emissiveIntensity = powered ? 1.5 + fixture.strength : 0;
       else mesh.material.color.setHex(powered ? 0xffd79a : 0x22252a);
     });
-    firstPerson.rotation.set(pitch + recoil * 0.4, yaw, feel ? -feel.roll : 0);
-    const equipped = state.inventory.equipped, spec = weapons[equipped], config = state.inventory.weapons[equipped];
-    const scoped = controls.aimed && equipped === 'sniper' && !mapOpen && view === 'first';
-    const fov = controls.aimed && spec ? (scoped ? 76 / controls.scopeZoom : 55) : 76;
-    if (firstPerson.fov !== fov) { firstPerson.fov = fov; firstPerson.updateProjectionMatrix(); }
-    if (spec) {
-      for (const [id, entry] of Object.entries(weaponModelGroups)) entry.group.visible = id === equipped;
-      const shown = weaponModelGroups[equipped];
-      if (shown) {
-        shown.suppressorParts.forEach(mesh => { mesh.visible = !!config.suppressor; });
-        flash.position.set(0.17 + shown.muzzle[0], -0.15 + shown.muzzle[1], -0.45 + shown.muzzle[2] - (config.suppressor ? suppressorLength[equipped] : 0) - 0.06);
-      }
-    }
+    // Weapon handling (src/weapon-handling.js). Mouse movement since the last frame
+    // drives the look lag; muzzle climb was already added to pitch and yaw by fired().
+    const firstView = view === 'first' && !mapOpen;
+    const equipped = state.inventory.equipped, shownId = shownItem(state, rules), spec = weapons[shownId], config = state.inventory.weapons[shownId];
+    const steadyHands = state.status === 'active' && weaponReady(state, rules) && !(state.reloadUntil > state.elapsed) && shownId === equipped;
+    const aimedNow = !!controls.aimed && firstView && !!spec && steadyHands;
+    const recovery = stepHandling(hand, dt, shownId, { aimed: aimedNow, look: firstView ? { yaw: yaw - lastYaw, pitch: pitch - lastPitch } : { yaw: 0, pitch: 0 } });
+    if (firstView) { yaw += recovery.yaw; pitch = THREE.MathUtils.clamp(pitch + recovery.pitch, -1.35, 1.35); }
+    lastYaw = yaw; lastPitch = pitch;
+    firstPerson.rotation.set(pitch, yaw, feel ? -feel.roll : 0);
+    scopedNow = aimedNow && shownId === 'sniper' && scopeUp(hand);
+    const fov = fieldOfView(hand, spec ? shownId : null, { scoped: scopedNow, zoom: controls.scopeZoom ?? 4 });
+    if (Math.abs(firstPerson.fov - fov) > 1e-4) { firstPerson.fov = fov; firstPerson.updateProjectionMatrix(); }
     const strike = state.status === 'active' ? Math.sin(Math.PI * Math.max(0, Math.min(1, ((state.meleeUntil ?? 0) - state.elapsed) / .65))) : 0;
-    weapon.position.set(-0.03 + strike * 0.12, -0.05 + (controls.feel ? controls.feel.weapon : Math.sin(state.elapsed * (controls.running ? 14 : 9)) * (controls.moving ? 0.008 : 0)), -0.2 + recoil);
-    weapon.rotation.z = -strike * 0.55;
-    weapon.rotation.x = state.playerCover&&!state.playerCover.peeking ? -0.7 : state.reloadUntil > state.elapsed ? -0.5 : recoil;
-    const weaponVisible = !!spec && view === 'first' && !mapOpen && !scoped && !controls.menuVisible;
-    weapon.visible = weaponVisible && equipped !== 'minigun';
-    minigun.visible = weaponVisible && equipped === 'minigun';
-    minigun.position.y = -0.35 + recoil * 0.1;
-    minigun.rotation.z = -strike * 0.4;
-    minigun.rotation.x = state.playerCover&&!state.playerCover.peeking ? -0.7 : state.reloadUntil > state.elapsed ? -0.4 : recoil * 0.3;
-    if (equipped === 'minigun' && controls.firing && state.reloadUntil <= state.elapsed && (state.ammo > 0 || rules.unlimitedAmmo)) rotor.rotation.z += dt * 35;
-    miniFlash.visible = recoil > 0.025 && state.status === 'active' && !config?.suppressor;
-    for (const [id, model] of Object.entries(heldItems)) { model.visible = id === equipped && view === 'first' && !mapOpen && !controls.menuVisible; model.rotation.x = recoil * 5; }
-    flash.visible = recoil > 0.025 && state.status === 'active' && !config?.suppressor;
-    recoil = Math.max(0, recoil - dt * 0.5);
+    const bob = controls.feel ? controls.feel.weapon : Math.sin(state.elapsed * (controls.running ? 14 : 9)) * (controls.moving ? 0.008 : 0);
+    const inCover = !!(state.playerCover && !state.playerCover.peeking);
+    const pose = weaponPose(hand, state, rules, shownId, { bob, cover: inCover, strike });
+    const shown = weaponModelGroups[shownId];
+    for (const [id, entry] of Object.entries(weaponModelGroups)) entry.group.visible = id === shownId;
+    weapon.position.set(...pose.position); weapon.rotation.set(...pose.rotation);
+    if (shown) {
+      shown.suppressorParts.forEach(mesh => { mesh.visible = !!config?.suppressor; });
+      const offsets = { magazine: pose.parts.magazine.offset, support: pose.parts.support, bolt: pose.parts.bolt, pump: pose.parts.pump };
+      for (const [kind, list] of Object.entries(shown.moving)) for (const { mesh, base } of list) {
+        mesh.position.set(base.x + offsets[kind][0], base.y + offsets[kind][1], base.z + offsets[kind][2]);
+        if (kind === 'magazine') mesh.visible = pose.parts.magazine.visible;
+      }
+      if (shown.shell) { shown.shell.visible = !!pose.parts.shell; if (pose.parts.shell) shown.shell.position.set(...pose.parts.shell); }
+      flash.position.set(shown.muzzle[0], shown.muzzle[1], shown.muzzle[2] - (config?.suppressor ? suppressorLength[shownId] : 0) - 0.02);
+    }
+    const weaponVisible = !!spec && firstView && !scopedNow && !controls.menuVisible;
+    weapon.visible = weaponVisible && shownId !== 'minigun';
+    minigun.visible = weaponVisible && shownId === 'minigun';
+    minigun.position.set(minigunBase[0] + pose.position[0] - hipPosition[0], minigunBase[1] + pose.position[1] - hipPosition[1], minigunBase[2] + pose.position[2] - hipPosition[2]);
+    minigun.rotation.set(pose.rotation[0] * 0.5, pose.rotation[1], pose.rotation[2] * 0.6);
+    if (shownId === 'minigun' && controls.firing && steadyHands && (state.ammo > 0 || rules.unlimitedAmmo)) rotor.rotation.z += dt * 35;
+    // Thrown items and tools only lower and rise with a switch.
+    const drop = drawDrop(state, rules);
+    for (const [id, model] of Object.entries(heldItems)) {
+      model.visible = id === shownId && firstView && !controls.menuVisible;
+      model.position.y = -0.3 - 0.3 * drop + bob; model.rotation.x = -0.9 * drop - (inCover ? 0.7 : 0);
+    }
+    // Casings leave on the shot (rifle, pistol) or partway through the bolt or pump.
+    const cycle = cycleProgress(state, shownId);
+    if (firstView && ejectsBetween(lastCycle, cycle)) ejectCasing(shownId, state);
+    lastCycle = cycle;
+    if (ejectQueued) { if (firstView && ejectQueued === shownId) ejectCasing(shownId, state); ejectQueued = null; }
+    // Flash, puff and the brief light on nearby walls.
+    const flashAge = hand.time - hand.lastShot, flashing = flashAge < 0.05 && state.status === 'active' && !config?.suppressor && hand.lastWeapon === shownId && firstView;
+    const activeFlash = shownId === 'minigun' ? miniFlash : flash;
+    flash.visible = flashing && activeFlash === flash && weapon.visible;
+    miniFlash.visible = flashing && activeFlash === miniFlash && minigun.visible;
+    if (puffQueued || flashing) { firstPerson.updateMatrixWorld(true); activeFlash.getWorldPosition(flashWorld); }
+    if (puffQueued && firstView) {
+      const puff = puffPool[nextPuff++ % puffPool.length];
+      puff.sprite.position.copy(flashWorld); puff.life = 0.7; puff.strength = puffQueued; puff.sprite.visible = true;
+    }
+    puffQueued = 0;
+    lighting.setMuzzleLight(flashing ? flashWorld : null, flashing ? flashSize * (1 - flashAge / 0.05) : 0);
+    stepCasings(dt);
+    stepPuffs(dt, Math.max(0.25, lightingProfile(state.timeOfDay ?? rules.timeOfDay ?? 'day').daylight ?? 1));
     for (let i = effects.length - 1; i >= 0; i--) {
       const effect = effects[i];
       effect.life -= dt;
@@ -650,6 +779,19 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   }
   return {
     draw, shotEffect, eventEffect, setGraphics,
+    // A shot left the gun (once per trigger pull, not per pellet). With climb on,
+    // the aim lifts; the weapon kicks, flashes and ejects either way.
+    fired: (id, { aimed = false, crouched = false, climb = true, suppressed = false } = {}) => {
+      const lift = fireKick(hand, id, { aimed, crouched, climb: climb && view === 'first' && !mapOpen });
+      yaw += lift.yaw; pitch = THREE.MathUtils.clamp(pitch + lift.pitch, -1.35, 1.35);
+      lastYaw = yaw; lastPitch = pitch;
+      flashSize = ({ shotgun: 1.4, sniper: 1.25, pistol: 0.75, minigun: 0.9 })[id] ?? 1;
+      for (const group of [flash, miniFlash]) { group.rotation.z = Math.random() * Math.PI; group.scale.setScalar(flashSize * (0.8 + Math.random() * 0.4)); }
+      if (!handling[id]?.cycle && id !== 'minigun') ejectQueued = id;
+      puffQueued = suppressed ? 0.1 : 0.22;
+    },
+    // True while the sniper scope overlay should show (the scope has reached the eye).
+    scoped: () => scopedNow,
     // For preview pages: 0 turns the baked contact shading off.
     setContactShading: strength => lighting.setContactStrength(strength),
     // Preview switch for before/after comparisons of baseboards and casings.
@@ -686,7 +828,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     // Mouse look scale and vertical inversion (src/settings.js).
     setLook: ({ sensitivity = 1, invertY = false } = {}) => { lookSensitivity = sensitivity; lookInvert = invertY ? -1 : 1; },
     look: (horizontal, vertical) => { if (view === 'first' && !mapOpen) { yaw -= horizontal; pitch = THREE.MathUtils.clamp(pitch + vertical, -1.35, 1.35); } },
-    reset: (heading = -0.55) => { yaw = heading; pitch = 0; recoil = 0; selectedLevel = 0; for (const effect of effects) { scene.remove(effect.mesh); if (effect.disposable) { effect.mesh.geometry.dispose(); effect.mesh.material.dispose(); } } effects.length = 0; },
+    reset: (heading = -0.55) => { yaw = lastYaw = heading; pitch = lastPitch = 0; resetHandling(hand); lastCycle = null; ejectQueued = null; puffQueued = 0; for (const casing of casingPool) casing.mesh.visible = false; for (const puff of puffPool) puff.sprite.visible = false; selectedLevel = 0; for (const effect of effects) { scene.remove(effect.mesh); if (effect.disposable) { effect.mesh.geometry.dispose(); effect.mesh.material.dispose(); } } effects.length = 0; },
     movement: (x, z) => view === 'first' ? [x * Math.cos(yaw) + z * Math.sin(yaw), -x * Math.sin(yaw) + z * Math.cos(yaw)] : [x, z],
     aim: state => {
       const origin = playerEye(state);

@@ -7,8 +7,13 @@
 // is { shape: 'box', position, size, color } or { shape: 'cylinder', position,
 // radius, length, color } (a cylinder runs along z). `rotation` is optional
 // [x, y, z] in radians. `role` marks parts the scene shows or hides:
-// 'suppressor' (only when fitted) and 'hand' (glove and sleeve).
-// `muzzle` is where the flash appears with no suppressor fitted.
+// 'suppressor' (only when fitted) and 'hand' (glove and sleeve). `moves` marks
+// parts that step 5.3 animates: 'magazine' (drops and returns on reload),
+// 'bolt' and 'pump' (cycle after a shot), 'support' (the front hand, which
+// follows the magazine or pump).
+// `muzzle` is where the flash appears with no suppressor fitted. `sight` is the
+// point that sits on the crosshair when aiming down the sights. `port` is where
+// spent casings leave the gun, and `casing` their [radius, length, colour].
 
 const metal = 0x1c2123, steel = 0x2d3436, glove = 0x22292b, sleeve = 0x39453a;
 const box = (position, size, color, extra = {}) => ({ shape: 'box', position, size, color, ...extra });
@@ -19,47 +24,53 @@ const tube = (position, radius, length, color, extra = {}) => ({ shape: 'cylinde
 const hands = (grip, support) => [
   box(grip, [0.075, 0.085, 0.09], glove, { role: 'hand' }),
   box([grip[0] + 0.01, grip[1] - 0.06, grip[2] + 0.25], [0.085, 0.085, 0.42], sleeve, { role: 'hand', rotation: [0.28, 0, 0] }),
-  box(support, [0.085, 0.07, 0.11], glove, { role: 'hand' }),
-  box([support[0] - 0.05, support[1] - 0.09, support[2] + 0.3], [0.085, 0.085, 0.5], sleeve, { role: 'hand', rotation: [0.32, 0.12, 0] }),
+  box(support, [0.085, 0.07, 0.11], glove, { role: 'hand', moves: 'support' }),
+  box([support[0] - 0.05, support[1] - 0.09, support[2] + 0.3], [0.085, 0.085, 0.5], sleeve, { role: 'hand', moves: 'support', rotation: [0.32, 0.12, 0] }),
 ];
+const brass = 0xb58b3c;
 
 export const weaponModels = {
   rifle: {
-    muzzle: [0, 0.03, -0.78],
+    muzzle: [0, 0.03, -0.78], sight: [0, 0.1025, -0.52], port: [0.03, 0.05, -0.08], casing: [0.0045, 0.045, brass],
     parts: [
       box([0, -0.01, -0.06], [0.06, 0.075, 0.32], metal),
       box([0, 0.045, -0.12], [0.056, 0.06, 0.44], steel),
       tube([0, 0.03, -0.42], 0.034, 0.3, 0x354438),
       tube([0, 0.03, -0.64], 0.011, 0.2, metal),
       tube([0, 0.03, -0.74], 0.02, 0.06, steel),
-      box([0, -0.12, -0.1], [0.036, 0.17, 0.065], metal, { rotation: [0.12, 0, 0] }),
+      box([0, -0.12, -0.1], [0.036, 0.17, 0.065], metal, { rotation: [0.12, 0, 0], moves: 'magazine' }),
       box([0, -0.085, 0.07], [0.042, 0.12, 0.05], metal, { rotation: [-0.3, 0, 0] }),
       box([0, 0.0, 0.3], [0.052, 0.085, 0.24], 0x2a3a30),
       box([0, 0.085, -0.52], [0.012, 0.035, 0.012], metal),
-      box([0, 0.085, 0.0], [0.03, 0.025, 0.04], metal),
+      // Rear sight: two ears with a gap, so the front post shows between them.
+      box([-0.011, 0.093, 0.0], [0.008, 0.03, 0.035], metal),
+      box([0.011, 0.093, 0.0], [0.008, 0.03, 0.035], metal),
       tube([0, 0.03, -0.84], 0.027, 0.2, 0x151a1c, { role: 'suppressor' }),
       ...hands([0, -0.095, 0.075], [0, -0.025, -0.42]),
     ],
   },
   pistol: {
-    muzzle: [0, 0.03, -0.2],
+    muzzle: [0, 0.03, -0.2], sight: [0, 0.064, -0.15], port: [0.018, 0.045, -0.05], casing: [0.0048, 0.02, brass],
     parts: [
       box([0, 0.03, -0.07], [0.032, 0.042, 0.22], steel),
       box([0, -0.005, -0.06], [0.034, 0.03, 0.18], metal),
       box([0, -0.07, 0.03], [0.034, 0.12, 0.05], 0x2b3130, { rotation: [-0.2, 0, 0] }),
       box([0, 0.058, -0.15], [0.008, 0.012, 0.01], metal),
+      box([-0.008, 0.0575, 0.025], [0.007, 0.013, 0.01], metal),
+      box([0.008, 0.0575, 0.025], [0.007, 0.013, 0.01], metal),
+      box([0, -0.1, 0.038], [0.026, 0.09, 0.036], metal, { rotation: [-0.2, 0, 0], moves: 'magazine' }),
       tube([0, 0.03, -0.215], 0.009, 0.04, 0x111517),
       tube([0, 0.03, -0.32], 0.024, 0.2, 0x151a1c, { role: 'suppressor' }),
       ...hands([0, -0.085, 0.04], [0.03, -0.065, 0.02]),
     ],
   },
   shotgun: {
-    muzzle: [0, 0.03, -0.9],
+    muzzle: [0, 0.03, -0.9], sight: [0, 0.065, -0.88], port: [0.03, 0.02, -0.12], casing: [0.0105, 0.065, 0x8e2a22],
     parts: [
       box([0, 0, -0.1], [0.056, 0.085, 0.32], 0x2a2f2e),
       tube([0, 0.03, -0.55], 0.017, 0.7, steel),
       tube([0, -0.012, -0.52], 0.015, 0.55, metal),
-      box([0, -0.015, -0.42], [0.058, 0.055, 0.2], 0x8b6746),
+      box([0, -0.015, -0.42], [0.058, 0.055, 0.2], 0x8b6746, { moves: 'pump' }),
       box([0, -0.06, 0.12], [0.04, 0.12, 0.05], 0x8b6746, { rotation: [-0.25, 0, 0] }),
       box([0, -0.01, 0.34], [0.05, 0.1, 0.3], 0x8b6746),
       box([0, 0.058, -0.88], [0.01, 0.014, 0.01], steel),
@@ -68,7 +79,7 @@ export const weaponModels = {
     ],
   },
   sniper: {
-    muzzle: [0, 0.035, -1.05],
+    muzzle: [0, 0.035, -1.05], sight: [0, 0.115, -0.33], port: [0.03, 0.04, -0.05], casing: [0.006, 0.07, brass],
     parts: [
       box([0, -0.005, -0.1], [0.06, 0.085, 0.4], 0x2b342b),
       tube([0, 0.035, -0.62], 0.014, 0.85, metal),
@@ -79,8 +90,8 @@ export const weaponModels = {
       tube([0, 0.115, 0.03], 0.036, 0.05, 0x151a1c),
       box([0, 0.075, -0.12], [0.02, 0.04, 0.03], metal),
       box([0, 0.075, -0.3], [0.02, 0.04, 0.03], metal),
-      box([0.05, 0.03, -0.02], [0.03, 0.02, 0.02], steel),
-      box([0, -0.12, -0.1], [0.036, 0.1, 0.06], metal),
+      box([0.05, 0.03, -0.02], [0.03, 0.02, 0.02], steel, { moves: 'bolt' }),
+      box([0, -0.12, -0.1], [0.036, 0.1, 0.06], metal, { moves: 'magazine' }),
       box([0, -0.07, 0.1], [0.042, 0.13, 0.05], 0x2a3a30, { rotation: [-0.3, 0, 0] }),
       box([0, 0.01, 0.34], [0.058, 0.12, 0.3], 0x52614a),
       tube([0, 0.035, -1.2], 0.03, 0.22, 0x151a1c, { role: 'suppressor' }),

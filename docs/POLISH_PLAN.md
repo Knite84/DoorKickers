@@ -99,8 +99,8 @@ These are traps that have already cost time. Follow them on every rendering chan
 | 4.3 | Roof, deck and site | ◐ | Owner look at the roof against the aerial, the level strips (keep or drop), the solid deck stairs, and the sun direction; Low/High, night vision, thermal and frame time not checked; fence, shrubs and driveway edge not built | Sonnet |
 | 4.4 | Known map gaps | ◐ | Built 2026-11-12 from the owner's answers: three great-room windows (two blocked by furniture), lowered garage with steps and ramps. Cubby stays closed. See the Built note |  Sonnet, with owner answers |
 | 5.1 | Skinned guard bodies | ☐ |  | Opus |
-| 5.2 | First-person weapon and hands | ◐ | Owner look at the four firearm models; separate view layer (no wall clipping), melee and thrown-item hands, and minigun not done | Sonnet |
-| 5.3 | Weapon handling feel | ☐ |  | Opus |
+| 5.2 | First-person weapon and hands | ◐ | Owner look at the four firearm models; wall clipping fixed in 5.3 by drawing first-person items in front; melee and thrown-item hands, and minigun not done | Sonnet |
+| 5.3 | Weapon handling feel | ◐ | Built 2026-11-12; owner to feel the climb, recovery, draw times, ADS and flash in play and tune the `handling` table. Not felt in play: any of the timing (automation browser runs at about one frame a second); frame time | Opus, then Sonnet for tuning |
 | 6.1 | Impact effects and decals | ☐ |  | Opus |
 | 6.2 | Loose physics: casings, debris, doors, chairs | ☐ |  | Opus |
 | 6.3 | Movement feel | ◐ | Built 2026-11-12; owner to feel it in play. Mantling stays out, as a separate proposal | Sonnet (mantling: Opus) |
@@ -515,12 +515,21 @@ Done when: every carried item has a visible first-person model.
 
 ### 5.3 Weapon handling feel
 
-Start from: the weapon group's recoil and bob in `draw()` in `src/scene.js`, and the reload and cadence timings in `src/weapons.js`. Do not change `src/weapons.js` behaviour; `test/gunplay.test.js` and the other weapon tests must pass untouched.
+Start from: the weapon group's recoil and bob in `draw()` in `src/scene.js`, and the reload and cadence timings in `src/weapons.js`. Do not change `src/weapons.js` behaviour; `test/gunplay.test.js` and the other weapon tests must pass untouched. (Owner, 2026-11-12: muzzle climb and the draw delay are real gameplay, each behind a rule; `weapons.js` is still untouched.)
 
 - Aim-down-sights with a real sight picture, visual recoil and recovery, sway, reload and equip animations driven by the existing timings, shell ejection, improved muzzle flash with a brief light.
 - These are presentation only. Hit rays, cadence, magazines and penetration in `src/weapons.js` do not change.
 
 Done when: firing, reloading and switching feel weighty, and all weapon tests pass untouched.
+
+**Built (2026-11-12), awaiting owner check.** The owner chose real muzzle climb and a real draw delay over drawn-only versions.
+- **Where it lives:** `src/weapon-handling.js` (pure, tested in `test/weapon-handling.test.js`). Every tuning number is in its `handling` table (per weapon) and `sway`. `src/scene.js` draws the pose and owns the flash, casings and puffs; `main.js` gates firing and reloading and calls `scene.fired()` once per trigger pull. `src/weapons.js` and all existing weapon tests are untouched.
+- **Muzzle climb (rule "Muzzle climb", on by default):** each shot lifts pitch and nudges yaw in a fixed, learnable pattern (the rifle drifts slightly right). Aiming and crouching each take 20% off. After you stop, about 60% (rifle) to 80% (pistol) settles back by itself; the rest you pull down. Rule off: the aim never moves, the weapon still kicks visibly. The crosshair always shows where the next shot goes: the old drawn camera tilt is gone.
+- **Draw delay (rule "Weapon switch takes time", on by default):** `equip()` in `src/kit.js` records the switch; the old item lowers for half its draw time, the new one rises for its draw time (pistol 0.3 s, rifle 0.45, shotgun 0.5, sniper 0.6, minigun 1.0, items 0.3). Firing, throwing and reloading wait; the HUD says DRAWING. Re-selecting the item in hand starts nothing. Rule off: the animation plays 2.5 times faster and never blocks.
+- **Drawn only:** spring kick per weapon, idle breathing sway, look lag on fast turns, aim-down-sights (the sight lands on the crosshair; the crosshair hides while aimed; the zoom eases in; the sniper overlay waits until the scope reaches the eye), magazine drop and insert (rifle, pistol, sniper), shell-by-shell loading (one per missing round) and pump on the shotgun, the sniper bolt and shotgun pump cycling after each shot, a star-and-flame muzzle flash with random turn and size, a smoke puff, and world-space casings that bounce once and lie for two seconds. The models gained rear sights, a pistol magazine, and `sight`, `port`, `casing` and `moves` data in `src/weapon-models.js`.
+- **Muzzle light:** a `muzzleLight` uniform in the lighting patch (`src/scene-lighting.js`) lights surfaces within 4.5 m for 50 ms. It ignores walls, so a little light reaches the room behind a thin partition.
+- **Wall clipping:** first-person materials squeeze their depth into the front 2% of the range (`inFront` in `src/scene.js`), so barrels no longer poke through walls. This replaces the separate view layer that 5.2 left open. GTAO still sees the weapon at its true depth (Rendering conventions 6).
+- **Seen in Chrome** on the interior preview page (with a test hook, since removed): rifle at the hip and aimed (post between the rear ears), pistol aimed with kick, shotgun shell-loading pose, rifle magazine-out pose, flash by day and the muzzle light at night with the power off, a casing arcing to the floor, night vision. In the game: the two rules in the panel, a mission with a shot and a switch, no console errors. **Not seen or felt:** any timing or feel in play (the automation browser runs at about one frame a second), the scope transition, the minigun, thermal beyond a glance (the weapon is as dark as before), frame time.
 
 ---
 

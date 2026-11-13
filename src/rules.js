@@ -20,6 +20,8 @@ export const schema = {
   doorDurability: { label: 'Door durability', group: 'Gunplay & destruction', min: 30, max: 300, step: 30, value: 120, setup: true },
   gunshotAlerts: { label: 'Guards react to gunfire', group: 'Gunplay & destruction', value: true },
   unlimitedAmmo: { label: 'Unlimited magazine', group: 'Gunplay & destruction', value: false },
+  muzzleClimb: { label: 'Muzzle climb (shots lift your aim)', group: 'Gunplay & destruction', value: true },
+  drawDelay: { label: 'Weapon switch takes time', group: 'Gunplay & destruction', value: true },
   gunVolume: { label: 'Gunfire volume', group: 'Gunplay & destruction', min: 0, max: 1, step: 0.1, value: 0.3 },
   guardDamage: { label: 'Incoming damage', group: 'Gunplay & destruction', min: 0, max: 50, step: 5, value: 35 },
   blastDamage: { label: 'Blast damage', group: 'Gunplay & destruction', min: 0, max: 2, step: 0.1, value: 1, unit: '×' },
