@@ -94,16 +94,16 @@ These are traps that have already cost time. Follow them on every rendering chan
 | 3.2 | Furniture materials | ◐ | Frame time within budget |  |
 | 3.3 | Doors, ceilings, glass, exterior | ◐ | Interior walkthrough (door colour fixed 2026-11-12) |  |
 | 3.4 | Baked contact shading and softened edges | ◐ | Owner review of shading strength; timing |  |
-| 4.1 | Baseboards, casings and door frames | ◐ | Owner look at trim contrast and the casing-versus-window-frame decision; passage openings still show raw timber ends; timing |  |
+| 4.1 | Baseboards, casings and door frames | ◐ | Owner look at trim contrast and the casing-versus-window-frame decision; passage returns built, some other raw timber ends remain in the hall (untraced); timing |  |
 | 4.2 | Stairs, railings and fireplaces | ◐ | Owner look at railing, carpet colour, fireplace and arch shapes against photos; special views and timing not checked |  |
 | 4.3 | Roof, deck and site | ◐ | Owner look at the roof against the aerial, the level strips (keep or drop), the solid deck stairs, and the sun direction; Low/High, night vision, thermal and frame time not checked; fence, shrubs and driveway edge not built | Sonnet |
-| 4.4 | Known map gaps | ☐ |  | Sonnet, with owner answers |
+| 4.4 | Known map gaps | ◐ | Built 2026-11-12 from the owner's answers: three great-room windows (two blocked by furniture), lowered garage with steps and ramps. Cubby stays closed. See the Built note |  Sonnet, with owner answers |
 | 5.1 | Skinned guard bodies | ☐ |  | Opus |
 | 5.2 | First-person weapon and hands | ◐ | Owner look at the four firearm models; separate view layer (no wall clipping), melee and thrown-item hands, and minigun not done | Sonnet |
 | 5.3 | Weapon handling feel | ☐ |  | Opus |
 | 6.1 | Impact effects and decals | ☐ |  | Opus |
 | 6.2 | Loose physics: casings, debris, doors, chairs | ☐ |  | Opus |
-| 6.3 | Movement feel | ☐ |  | Sonnet (mantling: Opus) |
+| 6.3 | Movement feel | ◐ | Built 2026-11-12; owner to feel it in play. Mantling stays out, as a separate proposal | Sonnet (mantling: Opus) |
 | 6.4 | Sound | ☐ |  | Opus brief, then Sonnet |
 | 6.5 | Destructible furniture | ◐ | Built 2026-11-12, awaiting owner check and tuning. See the **Built** note in the step. Not seen in play: the real firefight feel, frame time | Sonnet |
 | 7.1 | Interface foundation | ◐ | Not proposed first, by the owner's instruction to build 7.2 to 7.4. Only tokens and a window-relative scale exist (`src/ui.css`); the older `style.css` still carries the map banner and kit menu | Opus to propose |
@@ -393,7 +393,7 @@ Goal: tall white baseboards along interior wall faces, wide white casings around
 - Seen on the interior preview in Chrome (Medium): the primary bedroom window casing, a baseboard under the lake window, and baseboards disappearing when their pieces are set to `hp = 0`. No console errors. `npm test`: 246 passing.
 - **Not seen or open:** Low and High, night vision, thermal and the overhead and tactical views were not re-checked for trim. Frame time is unmeasured. No before and after screenshot files were saved. Contact shading dims the base of walls, so baseboards read as soft grey rather than bright white at the floor line.
 - **Existing window frames kept.** The grey frames in `windowFrames` stay inside the reveal, behind the new casings. Say if the casings should replace them.
-- **Known gap:** wall openings that are plain passages (`gap()`, such as the hall and kitchen openings) are not in `map.doors`, so they get no casing and show raw timber ends. Giving them casings needs a small data change to record passages; propose it before doing so.
+- **Passages (2026-11-12, owner's answers):** none of the six plain passages (`gap()`) has casings in the real house, and the great-room opening stays plain. So `segment()` in `src/maps/martelli.js` now records them in `map.passages` (same shape as a door, never collision), and `passageReturns` in `src/trim.js` covers each wall end with a thin white drywall return, one box per wall-piece row (`return` kind, 84 boxes). The top trim the real openings have is left out for now. Seen on the interior preview: the white returns at one passage. Orange timber ends are still visible further down that hall; their cause was not traced. Casing counts and collision are unchanged (`test/trim.test.js`).
 
 ### 4.2 Stairs, railings and fireplaces
 
@@ -454,8 +454,15 @@ Goal: tall white baseboards along interior wall faces, wide white casings around
 - **Seen in Chrome at Medium:** raised lake corner, lake side, both slopes from the lake lawn, and the roof from above. No console errors. **Not checked:** Low and High, night vision, thermal, frame time, and walking the slopes in the game itself.
 - **Open:**
   - The level strips leave a 2 to 2.4 m retaining face at each house corner, which the photos don't show. Setting `STRIP` to 0 puts the slope against the wall as photographed, but then the kitchen's two west windows can no longer be climbed in from outside.
-  - The deck stairs are solid blocks down to the ground, not open treads.
+  - ~~The deck stairs are solid blocks down to the ground~~: now open treads, see below.
   - The floor framing between storeys shows as a brown band on the outside walls, now easier to see from the side yards.
+
+**Leftovers built (2026-11-12), awaiting owner check.** All drawn only; collision, routes and guard paths are unchanged.
+- **Iron fence** (`map.fences`, `fenceFor` in `src/site.js`): black pickets, two rails and posts, 1.2 m, just inside the west, east and front edges, following the side-yard grades. Gaps at the driveway (plan x 14 to 514) and the front walk (635 to 710). None on the lake side. The layout is a guess; there are no photos of it in the repo.
+- **Shrubs** (`map.shrubs`): about 35 green clumps along the fence and either side of the front walk.
+- **Driveway and walk edging** (`map.curbs`): a 0.12 m concrete curb laid on the slab edges.
+- **Open-tread deck stairs:** both deck flights have `open: true`. The 32 solid steps stay as collision but the scene skips them (`piece.open`). `openTreadsFor` in `src/stair-dress.js` draws a tread and two stepped stringers per step. No handrail on the stairs yet.
+- Seen in Chrome at Medium: the lake-side view (open treads) and a front view (fence, shrubs). No console errors. Not checked: curbs close up, Low and High, night vision, thermal, frame time.
 
 **Done when:**
 - The exterior from the front walk and from the lake side shows a roof, a finished deck and shaped yards, with screenshots.
@@ -467,6 +474,13 @@ Work through "Known gaps" in [MARTELLI_REFERENCE.md](MARTELLI_REFERENCE.md#known
 - **Great-room window wall.** It needs more windows to match the near-continuous glass. The sectional now backs onto this wall, so ask the owner which new windows should be climbable. The 13-window count, the light field and the 0.2 audit all change.
 - **Garage.** The floor should be about four steps below Main, with a rear side door and two overhead doors. Build walls and stairs only.
 - **Under-stair cubby.** It stays closed unless the owner says otherwise.
+
+**Built (2026-11-12), awaiting owner check.** Owner's answers: three large great-room windows, all climbable; garage steps at the mudroom door; garage doors and side door already right.
+- **Great room:** `src/maps/martelli.js` has three lake windows. The sectional and the end table block the middle and east ones, so those two are `climbable: false` with a reason. Making all three climbable means moving that furniture, which the owner should decide. The 13 climbable-window test still holds.
+- **Garage:** floor 0.72 m below Main (a solid concrete slab in five overlapping rectangles that follow the garage outline), walls from that floor up to 6.0 m (new `raise` option on a door lifts its leaf off the wall base), two 4-step flights with flat landings (new `steps` field on `map.stairs`), and two paved driveway ramps (`paving: true` slopes, drawn as concrete by `src/site.js`). The old lower walls under the garage were removed, since they would poke through the new floor. The Main floor strips skip the garage outline.
+- **Routes changed on purpose:** the garage floor is now a half-level (like the deck landing), reached by the two flights and the two ramps. `test/martelli.test.js` walks driveway to garage to mudroom and out the side door. `test/clearance.test.js` still passes unchanged, with the GARAGE room's elevation set to the garage floor.
+- Seen in Chrome at Medium: the garage interior from its middle (steps up to the mudroom door) and the front from above (walls to the roof, ramp in front of the doors). **Not checked:** garage lighting at night, Low and High, thermal, frame time, the side-door steps, and guards walking through (the 'garage' post now stands on the lower floor).
+- Known small things: a 3 cm ledge where the Foundation family-room wall meets the garage wall at plan x 248; the driveway curbs now start past the ramps.
 
 Done when (phase): exterior and interior screenshots from the same angles as the reference photos are recognisably the same house.
 
@@ -532,6 +546,14 @@ Start from: `movePlayer` in `src/simulation.js` (do not change collision), the c
 
 - Acceleration and deceleration, subtle head bob and landing dip, lean, footstep timing tied to speed and surface.
 - Mantling over low cover is a gameplay change: **Propose first**.
+
+**Built (2026-11-12), awaiting owner check.** Owner chose a pronounced feel, strafe roll, and a placeholder footstep sound; mantling is a separate proposal.
+- **Where it lives:** `src/player-motion.js` (pure, tested in `test/player-motion.test.js`). All tuning numbers are in its `motion` table. `main.js` shapes the held movement through it before `stepMission`, then asks it for footstep events and the camera offset. The only change in the simulation is that `stepMission` multiplies speed by `input.pace` (default 1), so collision and every existing test are unchanged.
+- **Acceleration:** 0.15 s to full speed, 0.10 s to stop; direction is kept while slowing, a reversal passes through a stop, a wall zeroes the speed and a slide along it keeps part of it. Frozen (no motion) in cover and when not active.
+- **Camera** (drawn only, first person, never in cover): vertical bob per footfall (walk 2.5 cm, run 4 cm, crouch 1.2 cm, creep 0.6 cm), sideways sway, strafe roll of about 1.2 degrees, landing dip up to 12 cm over 0.25 s. Driven by distance, so it stops when you stop. The held weapon bobs on the same phase. Shots and aim still use the true eye position.
+- **Footsteps:** a `footstep` event per stride (walk 1.6 m, run 2.2 m, crouch and creep 1.0 m) with floor type (from `surfaceAt`, or `stairs`, `outdoor`, `floor`), gait and foot; landings add `landing: true`. Guards do not react to them yet (that would be a gameplay change). `scene.eventEffect` ignores them. `audio.step()` in `src/audio.js` plays a placeholder filtered-noise tick, a different tone per floor type; step 6.4 replaces it.
+- **Settings:** View bob (0 to 1.5, default 1), Movement smoothing (on), Footstep sounds (on).
+- Seen in Chrome: the game starts, walks and opens settings with no console errors, and the three settings show. **Not seen or felt:** the bob, roll and acceleration themselves (the automation browser runs at about one frame a second), the placeholder sound, and frame time.
 
 ### 6.4 Sound
 

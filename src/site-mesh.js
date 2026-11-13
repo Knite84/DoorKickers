@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { siteFor } from './site.js';
+import { siteFor, fenceFor, fenceKinds } from './site.js';
 
 // Three.js glue for src/site.js (lawn slopes, retaining walls, porch screens)
 // and the map's trees. Everything here is drawn only; collision lives in the
@@ -16,12 +16,13 @@ function geometryFor(triangles) {
 
 // Returns { group, update(overview, level) } or null when the map has no site dressing.
 export function createSiteMesh(map, decorate, grass) {
-  const triangles = siteFor(map), trees = map.trees ?? [];
-  if (!triangles.length && !trees.length) return null;
+  const triangles = siteFor(map), trees = map.trees ?? [], fences = fenceFor(map), shrubs = map.shrubs ?? [];
+  if (!triangles.length && !trees.length && !fences.length && !shrubs.length) return null;
   const group = new THREE.Group();
   const paint = (color, roughness, extra = {}) => decorate(new THREE.MeshStandardMaterial({ color, roughness, ...extra }));
   const materials = {
     lawn: grass ? grass(decorate(new THREE.MeshStandardMaterial())) : paint(0x55704a, 1),
+    paving: paint(0xaaa99d, 0.95),
     stucco: paint(0xe6e2d8, 0.9),
     brick: paint(0x9b4b36, 0.85),
     screen: paint(0x1c2124, 0.8, { transparent: true, opacity: 0.4, side: THREE.DoubleSide, depthWrite: false }),
@@ -33,6 +34,29 @@ export function createSiteMesh(map, decorate, grass) {
     const mesh = new THREE.Mesh(geometryFor(list), material);
     mesh.receiveShadow = true; mesh.castShadow = kind !== 'screen' && kind !== 'lawn';
     group.add(mesh); parts[kind] = mesh;
+  }
+  // Iron fence, posts and curbs: one instanced box mesh per kind.
+  const unit = new THREE.BoxGeometry(1, 1, 1), fenceMaterials = { post: paint(0x17191b, 0.45, { metalness: 0.5 }), rail: paint(0x17191b, 0.45, { metalness: 0.5 }), picket: paint(0x1c1e20, 0.5, { metalness: 0.5 }), curb: paint(0xb9b7ac, 0.9) };
+  const at0 = new THREE.Object3D();
+  for (const kind of fenceKinds) {
+    const list = fences.filter(box => box.kind === kind);
+    if (!list.length) continue;
+    const mesh = new THREE.InstancedMesh(unit, fenceMaterials[kind], list.length);
+    list.forEach((box, i) => { at0.position.set(...box.center); at0.scale.set(...box.size); at0.rotation.set(0, 0, 0); at0.updateMatrix(); mesh.setMatrixAt(i, at0.matrix); });
+    mesh.castShadow = kind !== 'picket'; mesh.receiveShadow = true; group.add(mesh);
+  }
+  // Shrubs: two squashed green clumps each, drawn only.
+  let bushes = null;
+  if (shrubs.length) {
+    bushes = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 1), paint(0x4a6a3a, 0.95), shrubs.length * 2);
+    shrubs.forEach((shrub, i) => {
+      const [x, z] = shrub.position, r = shrub.radius;
+      [[0, 0, 1], [0.55, 0.3, 0.7]].forEach(([dx, dz, size], j) => {
+        at0.position.set(x + dx * r, shrub.base + r * size * 0.55, z + dz * r); at0.scale.set(r * size, r * size * 0.75, r * size); at0.rotation.set(0, i * 2.3 + j, 0);
+        at0.updateMatrix(); bushes.setMatrixAt(i * 2 + j, at0.matrix);
+      });
+    });
+    bushes.castShadow = bushes.receiveShadow = true; group.add(bushes);
   }
   // Trees: a tapered trunk and three overlapping canopy clumps each.
   let trunks = null, canopy = null;
@@ -57,6 +81,7 @@ export function createSiteMesh(map, decorate, grass) {
     // Overhead and tactical views: no canopies, and screens only on Main.
     update(overview, level) {
       if (canopy) canopy.visible = !overview;
+      if (bushes) bushes.visible = !overview;
       if (parts.screen) parts.screen.visible = !overview || level === 1;
     },
   };

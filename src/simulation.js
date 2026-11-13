@@ -138,7 +138,8 @@ export function stepMission(state, map, rules, delta, input) {
   finishReload(state);
   stepPlayerCover(state,map,input);
   const gait = movementGait(state, input), slow = gait === 'creep' || gait === 'crouch'; state.gait = gait;
-  const speed = rules.playerSpeed * (slow ? rules.creepMultiplier : gait === 'run' ? rules.runMultiplier : 1);
+  // `input.pace` (0 to 1) is the fraction of full speed, set by the movement-feel layer (src/player-motion.js).
+  const speed = rules.playerSpeed * (slow ? rules.creepMultiplier : gait === 'run' ? rules.runMultiplier : 1) * (input.pace ?? 1);
   const length = Math.hypot(input.x, input.z) || 1;
   state.player = movePlayer(state.player, [input.x / length * speed * delta, input.z / length * speed * delta], map, state.doors, rules.ghost, state.wallPieces, { elevation: state.playerY, height: bodyHeight(state), windows: state.windowHealth, props: activeProps(state, map) });
   const stair = stairHeight(map, state.player);

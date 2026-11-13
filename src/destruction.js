@@ -63,10 +63,10 @@ export function buildWallPieces(map) {
     for(let x=0;x<columns;x++)for(let z=0;z<rows;z++)add(map.walls.length+(map.floors?.length??0)+index,[ceiling.center[0]-ceiling.size[0]/2+(x+.5)*width,ceiling.elevation+.08,ceiling.center[1]-ceiling.size[1]/2+(z+.5)*depth],[width,.16,depth],'ceiling',6,{floor:true,ceiling:true,level:ceiling.level??Math.floor(ceiling.elevation/3.2)});
   }
   for (const [index, stair] of (map.stairs ?? []).entries()) {
-    const count = 16, dx = stair.to[0] - stair.from[0], dz = stair.to[1] - stair.from[1];
+    const count = stair.steps ?? 16, dx = stair.to[0] - stair.from[0], dz = stair.to[1] - stair.from[1];
     for (let step = 0; step < count; step++) {
       const t = (step + 0.5) / count, height = stair.bottom + (step + 1) / count * (stair.top - stair.bottom);
-      add(map.walls.length + (map.floors?.length ?? 0) + (map.ceilings?.length??0) + index, [stair.from[0] + dx * t, height / 2, stair.from[1] + dz * t], [Math.abs(dx) / count || stair.size[0], height, Math.abs(dz) / count || stair.size[1]], stair.material ?? 'masonry', Infinity, { stair: true, level: 0 });
+      add(map.walls.length + (map.floors?.length ?? 0) + (map.ceilings?.length??0) + index, [stair.from[0] + dx * t, height / 2, stair.from[1] + dz * t], [Math.abs(dx) / count || stair.size[0], height, Math.abs(dz) / count || stair.size[1]], stair.material ?? 'masonry', Infinity, { stair: true, level: 0, ...(stair.open ? { open: true } : {}) });
     }
   }
   // Outdoor slopes: solid earth under the ramp, in 0.25 m steps whose tops stay

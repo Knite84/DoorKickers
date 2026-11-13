@@ -6,7 +6,7 @@
 // Each box hangs on a wall piece and hides with it, like src/trim.js. Only maps
 // that declare room finishes (map.surfaces) are dressed.
 
-export const dressKinds = ['handrail', 'newel', 'baluster', 'carpet'];
+export const dressKinds = ['handrail', 'newel', 'baluster', 'carpet', 'tread', 'stringer'];
 export const railing = { newelSize: 0.09, newelHeight: 1.02, handrailHeight: 0.06, handrailTop: 0.99, balusterSize: 0.02, balusterGap: 0.12, newelSpacing: 1.4 };
 
 export const railWalls = map => new Set(map.surfaces ? map.walls.flatMap((wall, index) => wall.height === 1 ? [index] : []) : []);
@@ -50,6 +50,28 @@ export function carpetFor(map, pieces) {
   }));
 }
 
+// Open treads: a stair marked `open` keeps its solid steps as collision, but the scene stops
+// drawing them. Each step gets a thin tread with a small nosing, under it a short stepped
+// stringer along each side, so you can see through the flight.
+export function openTreadsFor(map, pieces) {
+  if (!map.surfaces) return [];
+  const out = [], first = map.walls.length + (map.floors?.length ?? 0) + (map.ceilings?.length ?? 0);
+  (map.stairs ?? []).forEach((stair, index) => {
+    if (!stair.open) return;
+    const alongX = Math.abs(stair.to[0] - stair.from[0]) > Math.abs(stair.to[1] - stair.from[1]);
+    for (const p of pieces.filter(piece => piece.stair && piece.wall === first + index)) {
+      const top = p.center[1] + p.size[1] / 2, [sx, , sz] = p.size;
+      out.push({ kind: 'tread', center: [p.center[0], top - 0.025, p.center[2]], size: alongX ? [sx + 0.04, 0.05, sz] : [sx, 0.05, sz + 0.04], piece: p.id });
+      for (const side of [-1, 1]) {
+        const offset = (alongX ? sz : sx) / 2 - 0.03, center = [p.center[0], top - 0.15, p.center[2]];
+        center[alongX ? 2 : 0] += side * offset;
+        out.push({ kind: 'stringer', center, size: alongX ? [sx, 0.2, 0.05] : [0.05, 0.2, sz], piece: p.id });
+      }
+    }
+  });
+  return out;
+}
+
 export function stairDressFor(map, pieces) {
-  return map.surfaces ? [...railingFor(map, pieces), ...carpetFor(map, pieces)] : [];
+  return map.surfaces ? [...railingFor(map, pieces), ...carpetFor(map, pieces), ...openTreadsFor(map, pieces)] : [];
 }

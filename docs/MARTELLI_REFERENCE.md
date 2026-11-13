@@ -87,8 +87,8 @@ Things to respect when placing furniture:
 
 ## Known gaps
 
-- Great-room window wall is two small windows; the plan shows near-continuous glass. Changing the window count needs the 13-window test updated.
-- Garage floor should be about four steps below the main floor, with a rear side door and two separate overhead doors. Build walls and stairs only, from the new garage photos; no contents.
+- **Great-room window wall (built 2026-11-12).** Three windows (plan x 498, 586, 674, 1.5 m wide) replace the two small ones. Only the west one is climbable: the sectional and the end table stand against the other two, so there is no floor to land on inside (the owner asked for all three to be climbable; that needs the furniture moved).
+- **Garage (built 2026-11-12).** The floor is a solid slab 0.72 m (four steps) below Main. Its walls start at that floor and rise to the usual 6.0 m top. Two four-step flights, each with a flat landing against its door, lead up to the mudroom door and to the side door (both stay at Main level). Two paved ramps run from the front grade down to the two overhead doors (4 m each, `paving` slopes). The old lower walls under the garage are gone. Mudroom and side door positions are unchanged; the overhead doors and side door were already right.
 - The under-stair storage cubby is closed (owner's decision); the corner fireplace and bathroom fixtures are placed but squared off.
 - **Site (step 4.3).** Both side yards slope from the front grade to the lake grade (`slopes`). A level strip along each side wall is held by brick-capped retaining walls (`retainingWalls`). The deck has posts, rails, screens and a U-shaped stair to the patio. Three trees have solid trunks. These outdoor routes between floors were approved by the owner on 2026-11-12.
 - The pitched roof (`roof` in the map) is drawn only and approximates the aerial photo's ridges. Ceilings inside are still flat.

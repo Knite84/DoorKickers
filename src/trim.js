@@ -10,7 +10,7 @@ import { piecesInArea } from './spatial.js';
 import { exteriorFaces } from './surface-plan.js';
 import { doorCenter, doorSize, windowCenter, windowSize } from './world.js';
 
-export const trimKinds = ['baseboard', 'casing', 'doorFrame'];
+export const trimKinds = ['baseboard', 'casing', 'doorFrame', 'return'];
 export const trimSize = { baseboardHeight: 0.11, baseboardProud: 0.012, casingWidth: 0.07, casingProud: 0.015, headProud: 0.02, frameLining: 0.03 };
 
 const SKIN_OFFSET = 0.085;                      // drywall skin centre from the wall centre (destruction.js)
@@ -112,6 +112,34 @@ function openings(map, pieces, out) {
   }
 }
 
+// Plain passages (map.passages) have no casings, so each wall end gets a thin white drywall
+// return instead of showing raw studs. One box per row of wall pieces, so each hides with its
+// own piece. (The photos' top trim along these openings is left out.)
+function passageReturns(map, pieces, out) {
+  for (const passage of map.passages ?? []) {
+    const horizontal = passage.size[0] > passage.size[1], along = horizontal ? 0 : 2, across = horizontal ? 2 : 0;
+    const half = passage.size[horizontal ? 0 : 1] / 2, base = passage.elevation ?? 0, lining = trimSize.frameLining;
+    for (const end of [-1, 1]) {
+      // The return lies against the wall end, inside the clear opening; the piece it hangs on is just beyond.
+      const a = passage.position[along === 0 ? 0 : 1] + end * (half - lining / 2), beyond = passage.position[along === 0 ? 0 : 1] + end * (half + 0.03);
+      // Probe the drywall skins on either side first, then the centre line (studs and plates).
+      const probe = y => [SKIN_OFFSET, -SKIN_OFFSET, 0].map(offset => { const p = [0, y, 0]; p[along] = beyond; p[across] = passage.position[across === 0 ? 0 : 1] + offset; return pieceAt(pieces, p[0], p[1], p[2]); }).find(Boolean);
+      // Walk up the wall end one piece at a time.
+      for (let y = base + 0.01; y < base + passage.height - 0.01;) {
+        const hit = probe(y + 0.05);
+        if (!hit) { y += 0.1; continue; }
+        const top = Math.min(hit.center[1] + hit.size[1] / 2, base + passage.height), bottom = Math.max(y, hit.center[1] - hit.size[1] / 2);
+        if (top - bottom > 0.02) {
+          const c = [0, (top + bottom) / 2, 0], s = [0, top - bottom, 0];
+          c[along] = a; s[along] = lining; c[across] = passage.position[across === 0 ? 0 : 1]; s[across] = 0.23;
+          out.push({ kind: 'return', center: c, size: s, piece: hit.id });
+        }
+        y = top + 0.001;
+      }
+    }
+  }
+}
+
 // A baseboard on a wall that ends inside a door's leaf would poke through it.
 // Cut each run back to the door's edge along the run.
 function clipToDoors(map, out) {
@@ -144,5 +172,6 @@ export function trimFor(map, pieces) {
   const out = [];
   baseboards(map, pieces, out);
   openings(map, pieces, out);
+  passageReturns(map, pieces, out);
   return clipToDoors(map, out);
 }

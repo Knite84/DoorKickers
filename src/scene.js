@@ -108,8 +108,8 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   if (map.surfaces) {
     const boxes = [...trimFor(map, structure), ...stairDressFor(map, structure)];
     const paint = (color, roughness) => lighting.decorate(new THREE.MeshStandardMaterial({ color, roughness }));
-    const finishes = { baseboard: paint(0xf3f0e8, 0.5), casing: paint(0xf3f0e8, 0.5), doorFrame: paint(0xf3f0e8, 0.5),
-      handrail: paint(0x6b4a30, 0.55), newel: paint(0x6b4a30, 0.55), baluster: paint(0x17191b, 0.4), carpet: paint(0xb7a68c, 1) };
+    const finishes = { baseboard: paint(0xf3f0e8, 0.5), casing: paint(0xf3f0e8, 0.5), doorFrame: paint(0xf3f0e8, 0.5), return: paint(0xf3f0e8, 0.55),
+      handrail: paint(0x6b4a30, 0.55), newel: paint(0x6b4a30, 0.55), baluster: paint(0x17191b, 0.4), carpet: paint(0xb7a68c, 1), tread: paint(0x8c7253, 0.8), stringer: paint(0x4e4034, 0.85) };
     for (const kind of [...trimKinds, ...dressKinds]) {
       const items = boxes.filter(item => item.kind === kind);
       if (!items.length) continue;
@@ -257,6 +257,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }
   }
   function eventEffect(event) {
+    if (event.type === 'footstep') return;   // heard, not drawn
     if (event.type === 'door-break' || event.type === 'glass-break' || event.type === 'furniture-break') {
       for (let i = 0; i < 18; i++) {
         const chip = new THREE.Mesh(chipGeometry, material(event.type === 'glass-break' ? 0x9edce7 : event.type === 'furniture-break' ? 0x7a5636 : 0xa57946)); chip.position.set(...event.position);
@@ -473,10 +474,14 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     camera.updateProjectionMatrix();
   };
   canvas.addEventListener('wheel', zoomWheel, { passive: false });
+  const feelOffset = new THREE.Vector3();
   function draw(state, rules, dt, controls = {}) {
     lighting.update(state,rules,mapOpen);
     currentCamera = mapOpen ? mapCamera : view === 'first' ? firstPerson : camera;
     firstPerson.position.set(...playerEye(state));
+    // Movement feel (src/player-motion.js): drawn only, in first person, never in cover.
+    const feel = view === 'first' && !mapOpen && !(state.playerCover && !state.playerCover.peeking) ? controls.feel : null;
+    if (feel) firstPerson.position.add(feelOffset.set(Math.cos(yaw) * feel.side, feel.up, -Math.sin(yaw) * feel.side));
     if (view === 'first' && !mapOpen) selectedLevel = Math.max(0, Math.round((state.playerY ?? 0) / 3.2));
     const overview = view !== 'first' || mapOpen;
     const onLevel = object => !overview || Math.round(elevation(object) / 3.2) === selectedLevel;
@@ -488,7 +493,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
       if (fixture.id) mesh.material.emissiveIntensity = powered ? 1.5 + fixture.strength : 0;
       else mesh.material.color.setHex(powered ? 0xffd79a : 0x22252a);
     });
-    firstPerson.rotation.set(pitch + recoil * 0.4, yaw, 0);
+    firstPerson.rotation.set(pitch + recoil * 0.4, yaw, feel ? -feel.roll : 0);
     const equipped = state.inventory.equipped, spec = weapons[equipped], config = state.inventory.weapons[equipped];
     const scoped = controls.aimed && equipped === 'sniper' && !mapOpen && view === 'first';
     const fov = controls.aimed && spec ? (scoped ? 76 / controls.scopeZoom : 55) : 76;
@@ -502,7 +507,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
       }
     }
     const strike = state.status === 'active' ? Math.sin(Math.PI * Math.max(0, Math.min(1, ((state.meleeUntil ?? 0) - state.elapsed) / .65))) : 0;
-    weapon.position.set(-0.03 + strike * 0.12, -0.05 + Math.sin(state.elapsed * (controls.running ? 14 : 9)) * (controls.moving ? 0.008 : 0), -0.2 + recoil);
+    weapon.position.set(-0.03 + strike * 0.12, -0.05 + (controls.feel ? controls.feel.weapon : Math.sin(state.elapsed * (controls.running ? 14 : 9)) * (controls.moving ? 0.008 : 0)), -0.2 + recoil);
     weapon.rotation.z = -strike * 0.55;
     weapon.rotation.x = state.playerCover&&!state.playerCover.peeking ? -0.7 : state.reloadUntil > state.elapsed ? -0.5 : recoil;
     const weaponVisible = !!spec && view === 'first' && !mapOpen && !scoped && !controls.menuVisible;
@@ -525,7 +530,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     for (const { mesh, indices } of wallBatches) {
       let changed = false;
       indices.forEach((index, instance) => {
-        const piece = state.wallPieces[index], visible = Number(piece.hp > 0 && !hiddenRails.has(piece.wall) && !piece.slope && !piece.tree && (!overview || !piece.ceiling&&(piece.stair || (piece.level ?? 0) === selectedLevel)));
+        const piece = state.wallPieces[index], visible = Number(piece.hp > 0 && !hiddenRails.has(piece.wall) && !piece.slope && !piece.tree && !piece.open && (!overview || !piece.ceiling&&(piece.stair || (piece.level ?? 0) === selectedLevel)));
         if (wallDisplay[index] === visible) return;
         wallDisplay[index] = visible; instanceTransform.position.set(...piece.center); instanceTransform.scale.set(...(visible ? piece.size : [0, 0, 0]));
         instanceTransform.updateMatrix(); mesh.setMatrixAt(instance, instanceTransform.matrix); changed = true;

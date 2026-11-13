@@ -5,8 +5,12 @@ import { defaultRoomLights } from '../lighting.js';
 // north-up aerial photograph). Door annotations imply roughly 2 cm per pixel.
 // Foundation is engine datum 0; the main floor and front approach are at 3.2 m.
 const scale = 0.02, main = 3.2;
+// The garage floor is four steps (0.72 m) below Main (owner, 2026-11-12). Its walls start there
+// and rise to the usual wall top; steps lead up at the mudroom and side doors, and the driveway
+// ramps down to the overhead doors.
+const garageFloor = main - 0.72;
 const point = (x, z) => [(x - 600) * scale, (z - 500) * scale];
-const walls = [], doors = [], windows = [], rooms = [], floors = [], props = [], decor = [], surfaces = [];
+const walls = [], doors = [], windows = [], passages = [], rooms = [], floors = [], props = [], decor = [], surfaces = [];
 function segment(axis, fixed, lo, hi, openings = [], elevation = main, exterior = false, tall = 2.8) {
   const horizontal = axis === 'x', thickness = exterior ? 0.28 : 0.16;
   function panel(a, b, base = 0, height = tall) {
@@ -23,18 +27,23 @@ function segment(axis, fixed, lo, hi, openings = [], elevation = main, exterior 
     if (opening.window) {
       panel(a, b, 0, 0.8); panel(a, b, 2.3, 0.5);
       windows.push({ position, size: horizontal ? [half * 2 * scale, 0.08] : [0.08, half * 2 * scale], elevation, sill: 0.8, height: 1.5 });
-    } else if (!opening.passage) {
+    } else if (opening.passage) {
+      // Plain cased-less openings: recorded for trim only (src/trim.js), never for collision.
+      passages.push({ position, size: horizontal ? [half * 2 * scale, 0.16] : [0.16, half * 2 * scale], elevation, height: tall });
+    } else {
       // Standard 2.03 m doors (2.13 m garage doors) under a wall header, not ceiling-high slabs.
-      const leaf = opening.garage ? 2.13 : 2.03;
-      if (tall - leaf > 0.05) panel(a, b, leaf, tall - leaf);
-      doors.push({ position, size: horizontal ? [half * 2 * scale, 0.16] : [0.16, half * 2 * scale], elevation, height: leaf, locked: false, ...(opening.garage ? { garage: true } : {}) });
+      const leaf = opening.garage ? 2.13 : 2.03, lift = opening.raise ?? 0;
+      // `raise` lifts the leaf off the wall's base (a door above the garage floor): solid wall below it.
+      if (lift) panel(a, b, 0, lift);
+      if (tall - lift - leaf > 0.05) panel(a, b, lift + leaf, tall - lift - leaf);
+      doors.push({ position, size: horizontal ? [half * 2 * scale, 0.16] : [0.16, half * 2 * scale], elevation: elevation + lift, height: leaf, locked: false, ...(opening.garage ? { garage: true } : {}) });
     }
     cursor = b;
   }
   panel(cursor, hi);
 }
-const h = (z, a, b, gaps = [], y = main, exterior = false) => segment('x', z, a, b, gaps, y, exterior);
-const v = (x, a, b, gaps = [], y = main, exterior = false) => segment('z', x, a, b, gaps, y, exterior);
+const h = (z, a, b, gaps = [], y = main, exterior = false, tall) => segment('x', z, a, b, gaps, y, exterior, tall);
+const v = (x, a, b, gaps = [], y = main, exterior = false, tall) => segment('z', x, a, b, gaps, y, exterior, tall);
 const win = (at, width = 80) => ({ at, width, window: true });
 // Garage doors are overhead doors: drawn without a lever.
 const door = (at, width = 48, extra = {}) => ({ at, width, ...extra });
@@ -86,13 +95,17 @@ const westGrade = z => main * Math.max(0, Math.min(1, (z - LAKE_EDGE) / (476 - L
 const eastGrade = z => main * Math.max(0, Math.min(1, (z - LAKE_EDGE) / (646 - LAKE_EDGE)));
 const slopes = [], retainingWalls = [];
 // A ramp rising toward +z across a plan rectangle, with foot support like a stair.
-function slope(x1, z1, x2, z2, grade) {
+function slope(x1, z1, x2, z2, grade, extra = {}) {
   const [a, b] = point(x1, z1), [c, d] = point(x2, z2);
-  slopes.push({ center: [(a + c) / 2, (b + d) / 2], size: [c - a, d - b], from: [(a + c) / 2, b], to: [(a + c) / 2, d], bottom: grade(z1), top: grade(z2) });
+  slopes.push({ center: [(a + c) / 2, (b + d) / 2], size: [c - a, d - b], from: [(a + c) / 2, b], to: [(a + c) / 2, d], bottom: grade(z1), top: grade(z2), ...extra });
 }
 slope(-200, LAKE_EDGE, 248 - STRIP, 476, westGrade); slope(248 - STRIP, LAKE_EDGE, 248, 140, westGrade);
 slope(1133 + STRIP, LAKE_EDGE, 1188 + STRIP, 452, eastGrade); slope(1188 + STRIP, LAKE_EDGE, 1400, 646, eastGrade);
 slope(1133, LAKE_EDGE, 1133 + STRIP, 140, eastGrade);
+// Driveway ramps (paved) from the garage floor up to the front grade, 4 m long, one per bay.
+const driveGrade = start => z => garageFloor + (main - garageFloor) * Math.max(0, Math.min(1, (z - start) / 200));
+slope(14, 900, 208, 1100, driveGrade(900), { paving: true }); slope(208, 930, 514, 1130, driveGrade(930), { paving: true });
+const garagePolygon = [[14,476],[248,476],[248,530],[312,530],[312,518],[420,518],[420,590],[514,590],[514,930],[208,930],[208,900],[14,900]];
 const inSlope = (x, z) => slopes.some(({ center, size }) => {
   const [px, pz] = point(x, z);
   return Math.abs(px - center[0]) < size[0] / 2 && Math.abs(pz - center[1]) < size[1] / 2;
@@ -110,8 +123,8 @@ retaining(1133 + STRIP, 140, 1133 + STRIP, 452, flat(main), eastGrade); retainin
 retaining(1188 + STRIP, 452, 1188 + STRIP, 646, flat(main), eastGrade); retaining(1133 + STRIP, 452, 1188 + STRIP, 452, flat(main), eastGrade);
 
 // Merge each scan strip into rectangles, excluding the complete return stairwell.
-const xs = [...new Set([-200, 1400, 510, 620, 248 - STRIP, 1133 + STRIP, 1188 + STRIP, ...outline.map(p => p[0])])].sort((a,b) => a-b);
-const zs = [...new Set([140, 198, 510, 640, 1200, ...outline.map(p => p[1])])].sort((a,b) => a-b);
+const xs = [...new Set([-200, 1400, 510, 620, 248 - STRIP, 1133 + STRIP, 1188 + STRIP, ...outline.map(p => p[0]), ...garagePolygon.map(p => p[0])])].sort((a,b) => a-b);
+const zs = [...new Set([140, 198, 510, 640, 1100, 1130, 1200, ...outline.map(p => p[1]), ...garagePolygon.map(p => p[1])])].sort((a,b) => a-b);
 for (let j = 0; j < zs.length - 1; j++) {
   for (const outdoor of [false, true]) {
     let start = null;
@@ -120,7 +133,7 @@ for (let j = 0; j < zs.length - 1; j++) {
       // Front grade: outside the house, south of the lake wall, clear of the
       // deck notch (452-720, 140-198) and the side-yard slopes.
       const yard = z >= 140 && !contains(x, z) && !(x > 452 && x < 720 && z < 198) && !inSlope(x, z);
-      const include = i < xs.length - 1 && (outdoor ? yard : contains(x, z) && !(x > 510 && x < 620 && z > 510 && z < 640));
+      const include = i < xs.length - 1 && (outdoor ? yard : contains(x, z) && !contains(x, z, garagePolygon) && !(x > 510 && x < 620 && z > 510 && z < 640));
       if (include && start === null) start = xs[i];
       if (!include && start !== null) {
         floor(start, zs[j], xs[i], zs[j + 1], main, outdoor ? { solid: true, depth: main, material: 'earth' } : {});
@@ -150,7 +163,29 @@ const trees = [[-11, 264, 0.42, 7.5], [912, 1045, 0.36, 6.5], [603, 905, 0.2, 3.
   const base = inSlope(x, z) ? westGrade(z) : main;
   return { position: point(x, z), base, trunk: trunk, trunkHeight: Math.min(2.6, height * 0.4), height, canopy: height * 0.32 };
 });
-floor(14, 930, 514, 1195, main + 0.01, { solid: true, depth: 0.1, material: 'concrete' });
+// Boundary dressing (drawn only, step 4.3 leftovers). An iron fence runs just inside the
+// west, east and front edges, following the side-yard grades, with gaps for the driveway and
+// the front walk. Shrubs line it and the walk; a low curb edges the driveway and the walk.
+const fenceRun = (x1, z1, x2, z2, a, b) => ({ from: point(x1, z1), to: point(x2, z2), bottom: [a, b] });
+const fences = [
+  fenceRun(-195, LAKE_EDGE, -195, 476, 0, main), fenceRun(-195, 476, -195, 1195, main, main),
+  fenceRun(1395, LAKE_EDGE, 1395, 646, 0, main), fenceRun(1395, 646, 1395, 1195, main, main),
+  fenceRun(-195, 1195, 14, 1195, main, main), fenceRun(514, 1195, 635, 1195, main, main), fenceRun(710, 1195, 1395, 1195, main, main),
+];
+const shrubs = [];
+const shrub = (x, z, radius) => shrubs.push({ position: point(x, z), base: main, radius });
+for (let z = 700; z < 1170; z += 90) { shrub(-165, z, 0.6); shrub(1365, z + 30, 0.6); }
+for (let x = -150; x < 0; x += 80) shrub(x, 1165, 0.55);
+for (let x = 540; x < 1380; x += 100) if (x < 600 || x > 740) shrub(x, 1165, 0.55);
+for (const z of [800, 960, 1090]) { shrub(618, z, 0.5); shrub(727, z, 0.5); }
+const curbs = [[14, 1100, 14, 1195], [514, 1130, 514, 1195], [14, 1195, 514, 1195], [635, 590, 635, 1120], [710, 590, 710, 1120], [635, 1120, 710, 1120]]
+  .map(([x1, z1, x2, z2]) => ({ from: point(x1, z1), to: point(x2, z2), y: main + 0.01 }));
+// Garage slab on grade, in rectangles that follow the garage outline (its floor is solid, not framed).
+// The rectangles overlap by 0.1 m or more so the walking grid finds no seam between them.
+for (const [x1, z1, x2, z2] of [[14,476,214,900],[208,476,254,930],[248,530,318,930],[312,518,426,930],[420,590,514,930]]) floor(x1, z1, x2, z2, garageFloor, { solid: true, depth: garageFloor, material: 'concrete' });
+// Driveway paving beyond the ramps.
+floor(14, 1100, 208, 1195, main + 0.01, { solid: true, depth: 0.1, material: 'concrete' });
+floor(208, 1130, 514, 1195, main + 0.01, { solid: true, depth: 0.1, material: 'concrete' });
 floor(635, 590, 710, 1120, main + 0.01, { solid: true, depth: 0.1, material: 'concrete' });
 const foundationOutline = [[248,140],[452,140],[452,198],[720,198],[720,90],[965,90],[965,140],[1133,140],[1133,452],[1188,452],[1188,646],[1005,646],[1005,780],[945,780],[945,792],[806,792],[806,780],[740,780],[740,590],[620,590],[620,646],[510,646],[510,590],[425,590],[425,518],[248,518]];
 const lowerX = [...new Set(foundationOutline.map(p=>p[0]))].sort((a,b)=>a-b);
@@ -169,7 +204,7 @@ for (let j=0; j<lowerRows.length-1; j++) {
 
 // Main exterior. Openings are actual gaps in the collision geometry.
 h(140,248,452,[win(350,120)],main,true); v(248,140,476,[win(195,65),win(270,65)],main,true);
-v(452,140,198,[door(168,48)],main,true); h(198,452,720,[win(520,70),win(610,65)],main,true);
+v(452,140,198,[door(168,48)],main,true); h(198,452,720,[win(498,76),win(586,76),win(674,76)],main,true);
 v(720,90,198,[door(122,44)],main,true); h(90,720,760,[],main,true); v(760,76,90,[],main,true);
 h(76,760,920,[win(840,125)],main,true); v(920,76,90,[],main,true); h(90,920,965,[],main,true);
 v(965,90,140,[],main,true); h(140,965,1133,[win(1015,78)],main,true);
@@ -178,13 +213,15 @@ h(646,1005,1188,[win(1060,70),win(1150,55)],main,true); v(1005,646,780,[],main,t
 h(780,945,1005,[],main,true); v(945,780,792,[],main,true); h(792,806,945,[win(875,100)],main,true);
 v(806,780,792,[],main,true); h(780,740,806,[],main,true); v(740,590,780,[],main,true);
 h(590,620,740,[door(677,58)],main,true); v(620,590,646,[],main,true); h(646,514,620,[win(565,65)],main,true);
-v(514,646,930,[],main,true); h(930,208,514,[door(365,245,{garage:true})],main,true); v(208,900,930,[],main,true);
-h(900,14,208,[door(110,150,{garage:true})],main,true); v(14,476,900,[],main,true); h(476,14,248,[door(149,48)],main,true);
+// Garage walls (floor 0.72 m below Main). The side and mudroom doors stay at Main level.
+const GT = main + 2.8 - garageFloor;
+v(514,646,930,[],garageFloor,true,GT); h(930,208,514,[door(365,245,{garage:true})],garageFloor,true,GT); v(208,900,930,[],garageFloor,true,GT);
+h(900,14,208,[door(110,150,{garage:true})],garageFloor,true,GT); v(14,476,900,[],garageFloor,true,GT); h(476,14,248,[door(149,48,{raise: main - garageFloor})],garageFloor,true,GT);
 // Interior. Kitchen and dining are one open space; only short returns flank
 // the cased opening to the great room (the plan's other lines are soffits).
 v(452,198,510,[gap(352,260)]);
 // Garage/kitchen boundary and the mudroom: one door, at the head of the garage steps.
-v(248,476,530); h(530,248,312); v(312,518,530); h(518,312,420); v(420,518,590); h(590,420,510,[door(480,44)]);
+v(248,476,530,[],garageFloor,false,GT); h(530,248,312,[],garageFloor,false,GT); v(312,518,530,[],garageFloor,false,GT); h(518,312,420,[],garageFloor,false,GT); v(420,518,590,[],garageFloor,false,GT); h(590,420,510,[door(480,44,{raise: main - garageFloor})],garageFloor,false,GT);
 // Fireplace wall is solid past the powder room; the hall opening sits south of it,
 // and the entry is walled off from the Bedroom 2 closet.
 v(720,198,590,[gap(482,46)]);
@@ -217,8 +254,8 @@ v(1133,140,452,[],0,true); h(452,1133,1188,[],0,true); v(1188,452,646,[],0,true)
 h(646,1005,1188,[],0,true); v(1005,646,780,[],0,true); h(780,945,1005,[],0,true);
 h(792,806,945,[],0,true); v(945,780,792,[],0,true); v(806,780,792,[],0,true); h(780,740,806,[],0,true);
 v(740,590,780,[],0,true); h(590,620,740,[],0,true); v(620,590,646,[],0,true);
-h(646,510,620,[],0,true); v(510,646,930,[],0,true); h(930,208,510,[],0,true);
-v(208,900,930,[],0,true); h(900,14,208,[],0,true); v(14,550,900,[],0,true); h(550,14,248,[],0,true);
+h(646,510,620,[],0,true);
+// (The old lower walls under the garage are gone: its floor is now a solid slab on grade, 0.72 m below Main.)
 v(248,140,550,[],0,true); h(518,248,425,[],0,true); v(425,518,590,[],0,true); h(590,425,510,[],0,true);
 // Lower room lines. The foundation drawing is about 4% smaller than the main
 // one, so its pixels are rescaled onto the shared facade (x 262 -> 248,
@@ -264,7 +301,7 @@ room('POWDER',720,320,775,455); room('LAUNDRY',832,320,920,455); room('PRIMARY C
 room('CLOSET',1045,370,1133,455); room('CLOSET',720,510,860,590);
 room('BEDROOM 2',740,590,915,780); room('BEDROOM 3',1005,455,1188,646);
 room('SHARED BATH',915,510,1005,780); room('BEDROOM HALL',775,455,1005,510);
-room('GARAGE',14,550,510,900); room('REAR DECK',452,10,720,198);
+room('GARAGE',14,550,510,900,garageFloor); room('REAR DECK',452,10,720,198);
 room('FAMILY ROOM',248,198,720,510,0); room('BAR',248,fz(440),fx(440),518,0);
 room('BEDROOM 5',720,90,fx(932),fz(350),0); room('BEDROOM 4',fx(932),140,1133,fz(422),0);
 room('CLOSET',720,fz(350),fx(800),fz(488),0); room('BATH',fx(800),fz(350),fx(880),fz(488),0);
@@ -429,9 +466,13 @@ stairWindow.climbable=false;stairWindow.climbReason='The stairwell window has no
 // The primary bath window sits over the tub deck, which leaves no floor to land on.
 const bathWindow=windows.find(w=>w.elevation===main&&Math.abs(w.position[0]-point(1015,140)[0])<.01&&Math.abs(w.position[1]-point(1015,140)[1])<.01);
 bathWindow.climbable=false;bathWindow.climbReason='The tub deck fills the floor under the bath window. Use another opening.';
-// The great-room sectional is backed against the east lake window.
-const sofaWindow=windows.find(w=>w.elevation===main&&Math.abs(w.position[0]-point(610,198)[0])<.01&&Math.abs(w.position[1]-point(610,198)[1])<.01);
-sofaWindow.climbable=false;sofaWindow.climbReason='The sectional is pushed against this window. Use the other great-room window or the deck door.';
+// Three great-room windows. The sectional's end and the end table stand against the middle
+// and east ones, so there is nothing to land on inside (the owner asked for all three to be
+// climbable; move the furniture to allow that).
+for (const [at, reason] of [[586, 'The sectional is pushed against this window. Use the west great-room window or the deck door.'], [674, 'The end table and sectional stand against this window. Use the west great-room window or the deck door.']]) {
+  const blocked = windows.find(w => w.elevation === main && Math.abs(w.position[0] - point(at, 198)[0]) < .01 && Math.abs(w.position[1] - point(at, 198)[1]) < .01);
+  blocked.climbable = false; blocked.climbReason = reason;
+}
 
 export const martelli = {
   version: 2, id: 'martelli-01', name: 'Martelli House', stamp: 'MARTELLI HOUSE · MAIN + FOUNDATION · LAKE ↑',
@@ -445,7 +486,7 @@ export const martelli = {
   spawn: point(677,1010),
   entries: {
     courtyard: { position: point(677,1010), elevation: main, yaw: 0, label: 'Front walk · enter Main' },
-    'west gallery': { position: point(145,1010), elevation: main, yaw: 0, label: 'Driveway · outside garage' },
+    'west gallery': { position: point(145,1150), elevation: main, yaw: 0, label: 'Driveway · outside garage' },
   },
   extraction: { position: point(677,1010), elevation: main, radius: 1.2 },
   objective: { position: point(1150,590), elevation: 0, radius: 1.2, label: 'Utility room archive' },
@@ -486,10 +527,17 @@ export const martelli = {
     { center: point(537.5,550), size: [1.1,1.6], from: point(537.5,510), to: point(537.5,590), bottom: 0, top: 1.6 },
     { center: point(592.5,550), size: [1.1,1.6], from: point(592.5,590), to: point(592.5,510), bottom: 1.6, top: main },
     // Deck stairs: down from the deck to the landing, then back toward the house.
-    { center: point(695,-40), size: [1.0,2.0], from: point(695,-90), to: point(695,10), bottom: main / 2, top: main, material: 'deck' },
-    { center: point(645,-40), size: [1.0,2.0], from: point(645,10), to: point(645,-90), bottom: 0, top: main / 2, material: 'deck' },
+    { center: point(695,-40), size: [1.0,2.0], from: point(695,-90), to: point(695,10), bottom: main / 2, top: main, material: 'deck', open: true },
+    { center: point(645,-40), size: [1.0,2.0], from: point(645,10), to: point(645,-90), bottom: 0, top: main / 2, material: 'deck', open: true },
+    // Garage steps (four, 0.18 m each) down from the mudroom door and the side door. A short flat
+    // landing sits against each door: the wall under the door's sill would otherwise catch a
+    // player stepping down while they are still within a body-width of it.
+    { center: point(480,601), size: [0.88,0.36], from: point(480,592), to: point(480,610), bottom: main, top: main, material: 'concrete', steps: 1 },
+    { center: point(480,650), size: [0.88,1.6], from: point(480,690), to: point(480,610), bottom: garageFloor, top: main, material: 'concrete', steps: 4 },
+    { center: point(149,491.5), size: [0.96,0.34], from: point(149,483), to: point(149,500), bottom: main, top: main, material: 'concrete', steps: 1 },
+    { center: point(149,540), size: [0.96,1.6], from: point(149,580), to: point(149,500), bottom: garageFloor, top: main, material: 'concrete', steps: 4 },
   ],
-  slopes, retainingWalls, screens, trees,
+  slopes, retainingWalls, screens, trees, fences, shrubs, curbs, passages,
   scenery: [{ center: [0,-12.5], size: [32,3], elevation: 0.03, color: 0x4c8798 }],
   patrols: [
     [point(480,470),point(600,470)], [point(795,485),point(965,485)],
@@ -505,7 +553,7 @@ export const martelli = {
     ['entry', 670, 545, main, 2.5, 1.3], ['stair head', 592, 488, main, 2], ['great room', 470, 460, main, 1.5],
     ['deck windows', 495, 235, main, 1], ['kitchen', 312, 450, main, 1], ['dining', 290, 190, main, 0.6],
     ['bedroom hall', 890, 483, main, 2], ['primary bedroom', 770, 280, main, 1], ['primary bath', 1050, 230, main, 0.4],
-    ['bedroom 3', 1100, 620, main, 0.8], ['bedroom 2', 880, 700, main, 0.8], ['garage', 300, 720, main, 1],
+    ['bedroom 3', 1100, 620, main, 0.8], ['bedroom 2', 880, 700, main, 0.8], ['garage', 300, 720, garageFloor, 1],
     ['mudroom', 480, 555, main, 0.8], ['rear deck', 478, 145, main, 1, 1.5],
     ['family room', 440, 300, 0, 1.5], ['stair foot', 537, 470, 0, 2], ['bar', 340, 440, 0, 1, 1.5],
     ['lower hall', 830, 465, 0, 2], ['archive', 1150, 590, 0, 3, 1.6], ['storage east', 1100, 550, 0, 1.5],

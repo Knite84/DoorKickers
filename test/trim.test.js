@@ -71,3 +71,26 @@ test('rails and exterior faces get no baseboard, and other maps get no trim', ()
   for (const box of trim) if (box.kind === 'baseboard') assert.ok(!rails.has(pieces[box.piece].wall));
   for (const [id, map] of Object.entries(maps)) if (map !== martelli) assert.deepEqual(trimFor(map, buildWallPieces(map)), [], id);
 });
+
+test('plain passages are recorded apart from doors and get drywall returns, never casings', () => {
+  assert.equal(martelli.passages.length, 6);
+  for (const passage of martelli.passages) {
+    assert.ok(!martelli.doors.some(door => door.position[0] === passage.position[0] && door.position[1] === passage.position[1]), 'a passage is not a door');
+  }
+  const returns = trim.filter(box => box.kind === 'return');
+  assert.equal(returns.length, 6 * 2 * 7, 'two ends, seven wall rows, per passage');
+  for (const box of returns) assert.ok(pieces[box.piece], 'hangs on a real piece');
+  // No return stands in the clear opening of a passage.
+  for (const passage of martelli.passages) {
+    const horizontal = passage.size[0] > passage.size[1], along = horizontal ? 0 : 2, across = 2 - along;
+    const clear = passage.size[horizontal ? 0 : 1], bottom = passage.elevation ?? 0;
+    for (const box of returns) {
+      const inside = Math.abs(box.center[along] - passage.position[horizontal ? 0 : 1]) < clear / 2 - trimSize.frameLining - 0.001
+        && Math.abs(box.center[across] - passage.position[horizontal ? 1 : 0]) < 0.12 && box.center[1] > bottom && box.center[1] < bottom + passage.height;
+      assert.ok(!inside, 'a return stands inside a clear passage');
+    }
+  }
+  const without = trimFor({ ...martelli, passages: [] }, pieces);
+  assert.equal(trim.length - without.length, returns.length, 'passages add returns and nothing else');
+  for (const map of Object.values(maps)) if (map !== martelli) assert.equal(trimFor(map, buildWallPieces(map)).filter(box => box.kind === 'return').length, 0);
+});

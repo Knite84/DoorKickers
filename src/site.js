@@ -10,7 +10,7 @@
 // Triangles are { kind, points: [[x, y, z] x3] }, wound so the front face points
 // outward. Kinds: lawn, stucco, brick, screen.
 
-export const siteKinds = ['lawn', 'stucco', 'brick', 'screen'];
+export const siteKinds = ['lawn', 'paving', 'stucco', 'brick', 'screen'];
 
 const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
 const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
@@ -22,6 +22,52 @@ export function rampHeight(ramp, [x, z]) {
   const dx = ramp.to[0] - ramp.from[0], dz = ramp.to[1] - ramp.from[1];
   const t = Math.max(0, Math.min(1, ((x - ramp.from[0]) * dx + (z - ramp.from[1]) * dz) / (dx * dx + dz * dz)));
   return ramp.bottom + t * (ramp.top - ramp.bottom);
+}
+
+// Iron fences and edging (drawn only), as axis-aligned boxes:
+//   map.fences  { from, to, bottom: [a, b], height? }  plan points in metres; `bottom` is the
+//               ground height at each end. Posts every 2.4 m, two rails, one picket per 0.12 m.
+//   map.curbs   { from, to, y, width? }                a low concrete edging laid on a slab.
+// Boxes are { kind: 'post' | 'rail' | 'picket' | 'curb', center, size }.
+export const fenceKinds = ['post', 'rail', 'picket', 'curb'];
+export const fence = { height: 1.2, postSpacing: 2.4, post: 0.07, rail: 0.03, picket: 0.02, picketGap: 0.1, curbWidth: 0.12, curbHeight: 0.05 };
+
+export function fenceFor(map) {
+  const out = [], f = fence;
+  const add = (kind, from, to, y0, y1, across) => {
+    // A box from `from` to `to` (axis-aligned), between heights y0 and y1, `across` thick.
+    const x = Math.abs(to[0] - from[0]) >= Math.abs(to[1] - from[1]);
+    const length = Math.max(x ? Math.abs(to[0] - from[0]) : Math.abs(to[1] - from[1]), across);
+    out.push({ kind, center: [(from[0] + to[0]) / 2, (y0 + y1) / 2, (from[1] + to[1]) / 2], size: x ? [length, y1 - y0, across] : [across, y1 - y0, length] });
+  };
+  for (const run of map.fences ?? []) {
+    const [ax, az] = run.from, [bx, bz] = run.to, length = Math.hypot(bx - ax, bz - az);
+    if (length < 1e-6) continue;
+    const height = run.height ?? f.height, ground = t => run.bottom[0] + t * (run.bottom[1] - run.bottom[0]);
+    const at = t => [ax + (bx - ax) * t, az + (bz - az) * t];
+    const bays = Math.max(1, Math.round(length / f.postSpacing));
+    for (let i = 0; i < bays; i++) {
+      const t0 = i / bays, t1 = (i + 1) / bays, low = Math.min(ground(t0), ground(t1)), top = low + height;
+      for (const y of [low + 0.18, top - 0.14]) add('rail', at(t0), at(t1), y - f.rail / 2, y + f.rail / 2, f.rail);
+      const count = Math.max(1, Math.floor(length / bays / (f.picket + f.picketGap)));
+      for (let j = 0; j < count; j++) {
+        const t = t0 + (j + 0.5) / count * (t1 - t0), p = at(t), g = ground(t);
+        add('picket', p, p, g, top + 0.06, f.picket);
+      }
+    }
+    for (let i = 0; i <= bays; i++) {
+      const t = i / bays, p = at(t), top = Math.max(ground(Math.max(0, t - 1 / bays)), ground(Math.min(1, t + 1 / bays)), ground(t)) + height;
+      add('post', p, p, ground(t), top + 0.1, f.post);
+    }
+  }
+  for (const curb of map.curbs ?? []) {
+    const width = curb.width ?? f.curbWidth;
+    add('curb', curb.from, curb.to, curb.y, curb.y + f.curbHeight, width);
+    // lengthen so corners meet
+    const box = out[out.length - 1], x = box.size[0] > box.size[2];
+    box.size[x ? 0 : 2] += width;
+  }
+  return out;
 }
 
 export function siteFor(map) {
@@ -41,11 +87,12 @@ export function siteFor(map) {
     const [cx, cz] = ramp.center, [w, d] = ramp.size;
     const corners = [[cx - w / 2, cz - d / 2], [cx + w / 2, cz - d / 2], [cx + w / 2, cz + d / 2], [cx - w / 2, cz + d / 2]];
     const top = corners.map(c => [c[0], rampHeight(ramp, c), c[1]]);
-    face('lawn', top, [0, 1, 0]);
+    const surface = ramp.paving ? 'paving' : 'lawn';
+    face(surface, top, [0, 1, 0]);
     corners.forEach((a, i) => {
       const b = corners[(i + 1) % 4], ta = top[i], tb = top[(i + 1) % 4];
       if (ta[1] < 0.01 && tb[1] < 0.01) return;
-      face('lawn', [[a[0], 0, a[1]], [b[0], 0, b[1]], tb, ta], [b[1] - a[1], 0, -(b[0] - a[0])]);
+      face(surface, [[a[0], 0, a[1]], [b[0], 0, b[1]], tb, ta], [b[1] - a[1], 0, -(b[0] - a[0])]);
     });
   }
   // Retaining walls: a 0.2 m stucco wall from the low grade to the high grade,

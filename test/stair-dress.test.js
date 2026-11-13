@@ -16,7 +16,8 @@ test('the stair and deck guard rails get newels, a handrail and balusters', () =
     assert.ok(dressKinds.includes(box.kind));
     const piece = pieces[box.piece];
     assert.ok(piece, 'hangs on a real piece');
-    if (box.kind !== 'carpet') assert.ok(railWalls(martelli).has(piece.wall), `${box.kind} hangs on a rail piece`);
+    // Carpet and open treads hang on stair steps; everything else hangs on a rail.
+    if (!['carpet', 'tread', 'stringer'].includes(box.kind)) assert.ok(railWalls(martelli).has(piece.wall), `${box.kind} hangs on a rail piece`);
   }
 });
 

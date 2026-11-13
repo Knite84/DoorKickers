@@ -166,3 +166,43 @@ test('Martelli doors stop short of the ceiling under a wall header', () => {
     assert.ok(header, `no header over the door at ${door.position}`);
   }
 });
+
+// --- Step 4.4: great-room windows and the garage (owner's answers, 2026-11-12)
+const FLOOR = 3.2 - 0.72;
+test('the great room has three lake windows; only the one with clear floor behind it is climbable', () => {
+  const lake = martelli.windows.filter(w => w.elevation === 3.2 && Math.abs(w.position[1] - point(0, 198)[1]) < 0.01);
+  assert.equal(lake.length, 3);
+  assert.deepEqual(lake.map(w => w.climbable !== false), [true, false, false]);
+  assert.ok(lake.filter(w => w.climbable === false).every(w => /sectional|table/.test(w.climbReason)));
+});
+
+test('the garage floor is four steps (0.72 m) below Main, with Main-level doors on steps', () => {
+  const floorTops = martelli.floors.filter(f => f.material === 'concrete' && Math.abs(f.elevation - FLOOR) < 1e-9);
+  assert.equal(floorTops.length, 5);
+  const overhead = martelli.doors.filter(d => d.garage), others = martelli.doors.filter(d => !d.garage && d.elevation > 2 && d.elevation < 3.3 && d.position[0] < point(260, 0)[0] + 0.1);
+  assert.equal(overhead.length, 2);
+  assert.ok(overhead.every(d => Math.abs(d.elevation - FLOOR) < 1e-9), 'overhead doors stand on the garage floor');
+  const sill = martelli.doors.filter(d => d.elevation === 3.2 && d.position[0] < point(520, 0)[0] && d.position[1] > point(0, 470)[1] && d.position[1] < point(0, 600)[1]);
+  assert.equal(sill.length, 2, 'the side door and the mudroom door');
+  const garageStairs = martelli.stairs.filter(s => s.bottom === FLOOR && s.top === 3.2);
+  assert.equal(garageStairs.length, 2);
+  assert.ok(garageStairs.every(s => s.steps === 4 && (s.top - s.bottom) / s.steps < 0.2));
+  assert.ok(martelli.slopes.filter(s => s.paving).length === 2 && martelli.slopes.filter(s => s.paving).every(s => s.bottom === FLOOR && s.top === 3.2));
+  assert.ok(others.length >= 0);
+  // Garage walls rise from the lowered floor to the same wall top as the rest of Main (6.0 m).
+  const garageWalls = martelli.walls.filter(w => Math.abs(w.elevation - FLOOR) < 1e-9 || (w.elevation > FLOOR && w.elevation < 3.2 + 1e-9 && w.elevation !== 3.2 && w.elevation !== 0));
+  assert.ok(garageWalls.length >= 12);
+  assert.ok(garageWalls.filter(w => Math.abs(w.elevation + w.height - 6.0) < 1e-6).length >= 12, 'garage wall tops reach 6.0 m');
+  assert.ok(garageWalls.every(w => w.elevation + w.height <= 6.0 + 1e-6));
+});
+
+test('the garage can be walked in from the driveway and out by the mudroom and side doors', () => {
+  const state = ready();
+  state.player = point(145, 1150); state.playerY = 3.2;
+  walk(state, 110, 1000); walk(state, 110, 850); walk(state, 300, 720);
+  assert.ok(Math.abs(state.playerY - FLOOR) < 0.05, 'standing on the garage floor');
+  walk(state, 480, 700); walk(state, 480, 550);              // up the mudroom steps
+  assert.ok(Math.abs(state.playerY - 3.2) < 0.05);
+  walk(state, 480, 700); walk(state, 300, 720); walk(state, 149, 560); walk(state, 149, 440); // up the side steps and out
+  assert.ok(Math.abs(state.playerY - 3.2) < 0.05);
+});

@@ -8,7 +8,9 @@ import { stairHeight, supportHeight } from '../src/world.js';
 import { segmentClear } from '../src/combat.js';
 import { detonateCharges } from '../src/equipment.js';
 import { navigationFor, reachableCells } from '../src/navigation.js';
-import { siteFor, siteKinds, rampHeight, triangleNormal } from '../src/site.js';
+import { siteFor, siteKinds, rampHeight, triangleNormal, fenceFor, fenceKinds, fence } from '../src/site.js';
+import { buildWallPieces } from '../src/destruction.js';
+import { openTreadsFor } from '../src/stair-dress.js';
 
 // Plan pixels as in src/maps/martelli.js.
 const point = (x, z) => [(x - 600) * 0.02, (z - 500) * 0.02];
@@ -78,4 +80,48 @@ test('retaining walls hold the higher grade and site geometry faces outward', ()
 
 test('maps without site dressing get none', () => {
   for (const [id, map] of Object.entries(maps)) if (map !== martelli) assert.deepEqual(siteFor(map), [], id);
+});
+
+// --- 4.3 leftovers: fence, shrubs, curbs and open-tread deck stairs (all drawn only)
+test('the iron fence follows the ground, has posts, rails and pickets, and leaves the driveway and walk open', () => {
+  const boxes = fenceFor(martelli);
+  for (const kind of ['post', 'rail', 'picket', 'curb']) assert.ok(boxes.some(box => box.kind === kind), kind);
+  assert.ok(boxes.every(box => fenceKinds.includes(box.kind) && box.size.every(v => v > 0)));
+  // pickets never float: each reaches down to the ground its fence stands on
+  const west = boxes.filter(box => box.kind === 'picket' && Math.abs(box.center[0] - (-195 - 600) * 0.02) < 0.01);
+  assert.ok(west.length > 100);
+  assert.ok(Math.min(...west.map(box => box.center[1] - box.size[1] / 2)) < 0.15, 'reaches the lake grade');
+  assert.ok(Math.max(...west.map(box => box.center[1] - box.size[1] / 2)) > 3, 'reaches the front grade');
+  assert.ok(boxes.filter(box => box.kind === 'picket').every(box => box.size[1] <= fence.height + 0.1 + 0.06 + 1e-9));
+  // no front-fence picket stands in the driveway (plan x 14 to 514) or on the walk (635 to 710)
+  const frontZ = (1195 - 500) * 0.02;
+  for (const box of boxes.filter(b => b.kind === 'picket' && Math.abs(b.center[2] - frontZ) < 0.01)) {
+    const x = box.center[0] / 0.02 + 600;
+    assert.ok(!(x > 14 && x < 514) && !(x > 635 && x < 710), 'gate gap at ' + x);
+  }
+});
+
+test('fence, shrubs and curbs are drawn only: no collision, no wall pieces', () => {
+  const plain = { ...martelli, fences: [], shrubs: [], curbs: [] };
+  assert.equal(buildWallPieces(martelli).length, buildWallPieces(plain).length);
+  assert.ok(martelli.shrubs.length > 10 && martelli.shrubs.every(shrub => shrub.radius > 0));
+  for (const map of Object.values(maps)) if (map !== martelli) assert.deepEqual(fenceFor(map), []);
+});
+
+test('the deck stairs draw open treads over unchanged solid steps', () => {
+  const open = martelli.stairs.filter(stair => stair.open);
+  assert.equal(open.length, 2);
+  const pieces = buildWallPieces(martelli), treads = openTreadsFor(martelli, pieces);
+  assert.equal(treads.filter(t => t.kind === 'tread').length, 32);
+  assert.equal(treads.filter(t => t.kind === 'stringer').length, 64);
+  // The steps still collide (they are the same pieces as before) and are flagged so the scene skips them.
+  assert.equal(pieces.filter(p => p.stair && p.open).length, 32);
+  for (const tread of treads) assert.ok(pieces[tread.piece].open && pieces[tread.piece].stair);
+  // Foot support is untouched: the flights still end at the deck and the patio.
+  const state = createMission(martelli, defaults);
+  for (const stair of open) {
+    const middle = [(stair.from[0] + stair.to[0]) / 2, (stair.from[1] + stair.to[1]) / 2];
+    assert.ok(Math.abs(stairHeight(martelli, middle) - (stair.bottom + stair.top) / 2) < 1e-9);
+  }
+  assert.ok(state.wallPieces.filter(p => p.open).every(p => p.hp === Infinity));
 });

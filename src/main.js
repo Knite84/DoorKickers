@@ -6,6 +6,7 @@ import { createMission, stepMission, interact, distance, movementGait, toggleCro
 import { createScene } from './scene.js';
 import { fireWeapon, reload } from './weapons.js';
 import { createGunAudio } from './audio.js';
+import { createMotion, resetMotion, shapeInput, observeMotion } from './player-motion.js';
 import { weapons, items, ammoTypes, defaultLoadout, validateLoadout, equip, toggleHolster, restockEquipment, slotOrder, cycleEquipped } from './kit.js';
 import { useEquipment, detonateCharges, weaponStrike } from './equipment.js';
 import { createKitMenu } from './menus.js';
@@ -199,6 +200,7 @@ $('#preset').addEventListener('change', event => {
 function message(text) { $('#message').textContent = text; }
 const held = new Set();
 const audio = createGunAudio();
+const feelState = createMotion();   // movement feel: acceleration, bob and footsteps (src/player-motion.js)
 function applySettings() {
   document.documentElement.style.setProperty('--hud-user', String(playerSettings.hudScale));
   document.body.classList.toggle('hud-minimal', playerSettings.minimalHud);
@@ -524,16 +526,26 @@ function frame(now) {
   };
   if (!menuVisible) scene?.look((Number(held.has('KeyL')) - Number(held.has('KeyJ'))) * dt * 1.5, (Number(held.has('KeyI')) - Number(held.has('KeyK'))) * dt * 1.2);
   const movement = scene?.movement(localInput.x, localInput.z) ?? [localInput.x, localInput.z];
-  const input = { ...localInput, x: movement[0], z: movement[1] };
-  const gait = movementGait(state, input);
+  const gait = movementGait(state, localInput);
+  // Acceleration and deceleration: shape the held direction into a direction plus a fraction of full speed.
+  const frozen = state.status !== 'active' || !!state.playerCover;
+  const shaped = shapeInput(feelState, { x: movement[0], z: movement[1] }, dt, { smoothing: playerSettings.moveSmoothing, frozen });
+  const input = { ...localInput, x: shaped.x, z: shaped.z, pace: shaped.pace };
+  const before = [...state.player];
   stepMission(state, map, rules, dt, input);
+  const topSpeed = rules.playerSpeed * (gait === 'creep' || gait === 'crouch' ? rules.creepMultiplier : gait === 'run' ? rules.runMultiplier : 1);
+  const feel = observeMotion(feelState, state, map, before, gait, topSpeed, dt, { localX: localInput.x, bobScale: playerSettings.viewBob });
+  if (state.status === 'active') for (const step of feel.events) { state.events.push(step); }
   if (firing && weapons[state.inventory.equipped]?.automatic) shoot(now);
-  for (const effect of state.events.splice(0)) scene?.eventEffect(effect);
+  for (const effect of state.events.splice(0)) {
+    if (effect.type === 'footstep') { if (playerSettings.footstepSounds) audio.step(effect.surface, effect.gait, effect.landing); continue; }
+    scene?.eventEffect(effect);
+  }
   const facing = scene?.aim(state).direction; if (facing) state.facing = [facing[0], facing[2]];
-  if (state.status === 'active') scene?.face(input.x, input.z);
+  if (state.status === 'active') scene?.face(movement[0], movement[1]);
   const exposed=!state.playerCover||state.playerCover.peeking;
   const scoped = exposed && aimed && state.inventory.equipped === 'sniper' && view === 'first' && !mapOpen && !menuVisible;
-  scene?.draw(state, rules, dt, { moving: !!(input.x || input.z) && state.status === 'active', running: gait === 'run', firing: firing && state.status === 'active' && exposed, aimed:aimed&&exposed, scopeZoom, menuVisible, exposure: graphics.exposure });
+  scene?.draw(state, rules, dt, { moving: shaped.pace > 0.05 && state.status === 'active', feel: state.status === 'active' ? feel.view : null, running: gait === 'run', firing: firing && state.status === 'active' && exposed, aimed:aimed&&exposed, scopeZoom, menuVisible, exposure: graphics.exposure });
   captureStatus.hidden = !scene?.capturingLight();
   if (scene && graphics.showStats) {
     if (statsSince === null) statsSince = now;
