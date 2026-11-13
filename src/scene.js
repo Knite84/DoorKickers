@@ -24,6 +24,7 @@ import { handling, createHandling, resetHandling, fireKick, stepHandling, weapon
 import { stairDressFor, dressKinds, railWalls } from './stair-dress.js';
 import { createScenePost } from './scene-post.js';
 import { createSceneEffects } from './scene-effects.js';
+import { doorFrame, chooseSwing, swingAngle, stepSwing, easeSwing } from './door-swing.js';
 import { createRoofMesh } from './roof-mesh.js';
 import { createSiteMesh } from './site-mesh.js';
 import { fitSunShadow, tuneSunShadow } from './scene-shadows.js';
@@ -173,6 +174,43 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }
     const mesh = new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({ color: 0x281d14, transparent: true })); scene.add(mesh); return mesh;
   });
+  // Swinging doors, drawn only (src/door-swing.js, step 6.2). Each leaf and its cracks
+  // hang from a pivot at the hinge end; the simulation still sees open or closed.
+  const doorSwings = map.doors.map(() => { const pivot = new THREE.Group(); scene.add(pivot); return { pivot, hinge: 0, side: 1, t: 0, open: false }; });
+  let swingState = null;
+  function hangDoor(i, hinge) {
+    const swingInfo = doorSwings[i], [hx, hz] = doorFrame(map.doors[i]).end(hinge);
+    for (const object of [doors[i], doorCracks[i]]) { object.updateWorldMatrix(true, false); scene.attach(object); }
+    swingInfo.pivot.rotation.y = 0; swingInfo.pivot.position.set(hx, 0, hz); swingInfo.pivot.updateMatrixWorld(true);
+    for (const object of [doors[i], doorCracks[i]]) swingInfo.pivot.attach(object);
+    swingInfo.hinge = hinge;
+  }
+  // Whoever is nearest the door on its floor when it opens: the player or a guard.
+  function doorOpener(state, door) {
+    const level = Math.round(elevation(door) / 3.2);
+    let best = null, nearest = Infinity;
+    const consider = (x, z, y) => { if (Math.round((y ?? 0) / 3.2) !== level) return; const d = Math.hypot(x - door.position[0], z - door.position[1]); if (d < nearest) { nearest = d; best = [x, z]; } };
+    consider(state.player[0], state.player[1], state.playerY);
+    for (const guard of state.guards) if (guard.health > 0) consider(guard.position[0], guard.position[1], guard.elevation);
+    return nearest < 3 ? best : null;
+  }
+  function swingDoors(state, dt) {
+    const fresh = swingState !== state;
+    swingState = state;
+    doorSwings.forEach((swingInfo, i) => {
+      const door = map.doors[i], open = !!state.doors[i];
+      if (fresh || (open && !swingInfo.open && swingInfo.t === 0)) {
+        // A new mission snaps every door; otherwise a door picks its hinge as it starts to open.
+        const pick = chooseSwing(state, map, door, fresh ? null : doorOpener(state, door));
+        if (pick.hinge !== swingInfo.hinge) hangDoor(i, pick.hinge);
+        swingInfo.side = pick.side;
+        if (fresh) swingInfo.t = open ? 1 : 0;
+      }
+      swingInfo.open = open;
+      swingInfo.t = stepSwing(swingInfo.t, open, dt);
+      swingInfo.pivot.rotation.y = swingAngle(door, swingInfo.hinge, swingInfo.side) * easeSwing(swingInfo.t);
+    });
+  }
   const weapon = new THREE.Group();
   // First-person items are drawn in front of everything else, so a barrel never
   // pokes through a wall (POLISH_PLAN 5.3). Their depth is squeezed into the front
@@ -255,40 +293,17 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   const miniHandle = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.19, 0.12), viewMaterial(0x172022));
   miniHandle.position.set(0, 0.2, 0.15); minigun.add(miniHandle);
   const miniFlash = makeFlash(); miniFlash.position.z = -0.78; minigun.add(miniFlash);
-  // Spent casings: short-lived world-space brass that arcs out, bounces once and lies still.
-  const casingMaterials = {};
-  const casingMaterial = color => casingMaterials[color] ??= lighting.decorate(new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: color === 0x8e2a22 ? 0.1 : 0.8 }));
-  const casingPool = Array.from({ length: 16 }, () => { const mesh = new THREE.Mesh(cylinder(1, 1), casingMaterial(0xb58b3c)); mesh.visible = false; scene.add(mesh); return { mesh, life: 0, velocity: new THREE.Vector3(), spin: new THREE.Vector3(), floor: 0, bounced: false }; });
-  let nextCasing = 0;
-  const portWorld = new THREE.Vector3(), cameraRight = new THREE.Vector3(), cameraUp = new THREE.Vector3(), cameraBack = new THREE.Vector3();
-  function ejectCasing(id, state) {
+  // Spent casings leave the ejection port in world space and are handed to the loose
+  // bits in src/scene-effects.js, which bounce them off the house and let them lie (step 6.2).
+  const portWorld = new THREE.Vector3(), cameraRight = new THREE.Vector3(), cameraUp = new THREE.Vector3(), cameraBack = new THREE.Vector3(), casingVelocity = new THREE.Vector3();
+  function ejectCasing(id) {
     const model = weaponModels[id], shown = weaponModelGroups[id];
     if (!model || !shown) return;
     shown.group.updateWorldMatrix(true, false);
     portWorld.set(...model.port); shown.group.localToWorld(portWorld);
     cameraRight.set(1, 0, 0).applyQuaternion(firstPerson.quaternion); cameraUp.set(0, 1, 0).applyQuaternion(firstPerson.quaternion); cameraBack.set(0, 0, 1).applyQuaternion(firstPerson.quaternion);
-    const casing = casingPool[nextCasing++ % casingPool.length];
-    casing.mesh.material = casingMaterial(model.casing[2]);
-    casing.mesh.scale.set(model.casing[0], model.casing[0], model.casing[1]);
-    casing.mesh.position.copy(portWorld); casing.mesh.quaternion.copy(firstPerson.quaternion);
-    casing.velocity.copy(cameraRight).multiplyScalar(1.1 + Math.random() * 0.5).addScaledVector(cameraUp, 1.3 + Math.random() * 0.5).addScaledVector(cameraBack, -0.5);
-    casing.spin.set((Math.random() - 0.5) * 30, (Math.random() - 0.5) * 30, (Math.random() - 0.5) * 10);
-    casing.floor = (state.playerY ?? 0) + model.casing[0]; casing.life = 2; casing.bounced = false; casing.mesh.visible = true;
-  }
-  function stepCasings(dt) {
-    for (const casing of casingPool) {
-      if (!casing.mesh.visible) continue;
-      casing.life -= dt;
-      if (casing.life <= 0) { casing.mesh.visible = false; continue; }
-      if (casing.velocity.lengthSq() === 0) continue;
-      casing.velocity.y -= 9.8 * dt; casing.mesh.position.addScaledVector(casing.velocity, dt);
-      casing.mesh.rotation.x += casing.spin.x * dt; casing.mesh.rotation.y += casing.spin.y * dt; casing.mesh.rotation.z += casing.spin.z * dt;
-      if (casing.mesh.position.y <= casing.floor) {
-        casing.mesh.position.y = casing.floor;
-        if (!casing.bounced && casing.velocity.y < -1) { casing.bounced = true; casing.velocity.y *= -0.3; casing.velocity.x *= 0.4; casing.velocity.z *= 0.4; casing.spin.multiplyScalar(0.4); }
-        else { casing.velocity.set(0, 0, 0); casing.mesh.rotation.set(Math.PI / 2, 0, casing.mesh.rotation.y); }
-      }
-    }
+    casingVelocity.copy(cameraRight).multiplyScalar(1.1 + Math.random() * 0.5).addScaledVector(cameraUp, 1.3 + Math.random() * 0.5).addScaledVector(cameraBack, -0.5);
+    impactEffects.casing(portWorld, casingVelocity, model.casing[0], model.casing[1], model.casing[2]);
   }
   // A small smoke puff left at the muzzle; dimmer at dusk and night so it never glows.
   const puffTexture = canvasTexture(64, 64, (g, w, h) => { const glow = g.createRadialGradient(w / 2, h / 2, 0, w / 2, h / 2, w / 2); glow.addColorStop(0, 'rgba(255,255,255,0.8)'); glow.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = glow; g.fillRect(0, 0, w, h); });
@@ -433,7 +448,22 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
         });
         if (moved) mesh.instanceMatrix.needsUpdate = true;
         if (tinted && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-      } else if (mesh.userData.owner) mesh.userData.broken = health(mesh.userData.owner)[0] <= 0;
+      } else if (mesh.userData.owner) {
+        // Pieces drawn as single meshes (glass, fixtures, lamps) share materials, so the first
+        // time one is damaged it gets its own copy, which darkens like the batched pieces do.
+        const [now, max] = health(mesh.userData.owner), alive = !(now <= 0);
+        mesh.userData.broken = !alive;
+        const tint = alive && Number.isFinite(max) ? 1 - 0.5 * (1 - now / max) : 1;
+        if (Math.abs((mesh.userData.tint ?? 1) - tint) > 0.04 && mesh.material?.color) {
+          if (!mesh.userData.ownMaterial) {
+            const shared = mesh.material, own = shared.clone();
+            // clone() leaves out the shader patches (lighting, rounded edges); keep them.
+            own.onBeforeCompile = shared.onBeforeCompile; own.customProgramCacheKey = shared.customProgramCacheKey;
+            mesh.material = own; mesh.userData.ownMaterial = true; mesh.userData.baseColor = shared.color.clone();
+          }
+          mesh.material.color.copy(mesh.userData.baseColor).multiplyScalar(tint); mesh.userData.tint = tint;
+        }
+      }
     }
     map.props.forEach((prop, index) => { if (propBroken(state, index) && !debrisPiles.has(index) && isFurniture(prop)) debrisPile(prop, index); });
   }
@@ -622,9 +652,9 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }
     // Casings leave on the shot (rifle, pistol) or partway through the bolt or pump.
     const cycle = cycleProgress(state, shownId);
-    if (firstView && ejectsBetween(lastCycle, cycle)) ejectCasing(shownId, state);
+    if (firstView && ejectsBetween(lastCycle, cycle)) ejectCasing(shownId);
     lastCycle = cycle;
-    if (ejectQueued) { if (firstView && ejectQueued === shownId) ejectCasing(shownId, state); ejectQueued = null; }
+    if (ejectQueued) { if (firstView && ejectQueued === shownId) ejectCasing(shownId); ejectQueued = null; }
     // Flash, puff and the brief light on nearby walls.
     const flashAge = hand.time - hand.lastShot, flashing = flashAge < 0.05 && state.status === 'active' && !config?.suppressor && hand.lastWeapon === shownId && firstView;
     const activeFlash = shownId === 'minigun' ? miniFlash : flash;
@@ -637,7 +667,6 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }
     puffQueued = 0;
     muzzleLight = flashing ? { position: flashWorld.toArray(), color: [1, 0.68, 0.36], strength: flashSize * (1 - flashAge / 0.05), radius: 4.5 } : null;
-    stepCasings(dt);
     stepPuffs(dt, Math.max(0.25, lightingProfile(state.timeOfDay ?? rules.timeOfDay ?? 'day').daylight ?? 1));
     for (let i = effects.length - 1; i >= 0; i--) {
       const effect = effects[i];
@@ -661,10 +690,13 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
         const piece = state.wallPieces[item.piece], visible = Number(piece.hp > 0 && (!overview || !piece.ceiling && (piece.stair || (piece.level ?? 0) === selectedLevel)));
         if (shown[instance] === visible) return;
         shown[instance] = visible; instanceTransform.position.set(...item.center); instanceTransform.scale.set(...(visible ? item.size : [0, 0, 0]));
+        // Sloped stair rails carry a rotation (src/stair-dress.js); everything else is axis-aligned.
+        instanceTransform.rotation.set(...(item.rotation ?? [0, 0, 0]));
         instanceTransform.updateMatrix(); mesh.setMatrixAt(instance, instanceTransform.matrix); changed = true;
       });
       if (changed) mesh.instanceMatrix.needsUpdate = true;
     }
+    instanceTransform.rotation.set(0, 0, 0);
     windowMeshes.forEach((mesh, i) => { mesh.visible = state.windowHealth[i] > 0 && onLevel(map.windows[i]); windowFrames[i].forEach(frame => { frame.visible = onLevel(map.windows[i]); }); });
     propMeshes.forEach((meshes, i) => meshes.forEach(mesh => { mesh.visible = onLevel(map.props[i]) && !(overview && mesh.userData.overhead); }));
     syncFurniture(state);
@@ -679,8 +711,10 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     player.children[1].position.set(playerLean.x,1.65,playerLean.z);
     player.children[2].position.set(.27+playerLean.x*.6,1.15,playerLean.z*.6);
     player.visible = overview && Math.round((state.playerY ?? 0) / 3.2) === selectedLevel;
+    swingDoors(state, dt);
     doors.forEach((mesh, i) => {
-      mesh.visible = !state.doors[i] && onLevel(map.doors[i]);
+      // An open door stays drawn, swung against the wall; only a broken one is gone.
+      mesh.visible = state.doorHealth[i] > 0 && onLevel(map.doors[i]);
       const damage = 1 - state.doorHealth[i] / state.doorMaxHealth[i];
       mesh.material.color.copy(doorColor).lerp(damagedDoorColor, damage);
       doorCracks[i].visible = mesh.visible && damage > 0;
@@ -692,7 +726,8 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     impactEffects.update(dt, currentCamera, state, owner => {
       switch (owner.kind) {
         case 'piece': return wallDisplay[owner.index] === 1;
-        case 'door': return doors[owner.index]?.visible;
+        // Bullet holes on a door are drawn where it hangs closed, so they wait for it to shut.
+        case 'door': return doors[owner.index]?.visible && doorSwings[owner.index].t === 0;
         case 'prop': return !propBroken(state, owner.index) && onLevel(map.props[owner.index]);
         case 'decor': return !decorBroken(state, owner.index) && onLevel(map.decor[owner.index]);
         case 'world': return !overview || owner.level === undefined || owner.level === selectedLevel;
@@ -792,6 +827,9 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
       if (!handling[id]?.cycle && id !== 'minigun') ejectQueued = id;
       puffQueued = suppressed ? 0.1 : 0.22;
     },
+    // For sound (step 6.4): casing and debris landings and bullet impacts since the last call.
+    takeLandings: () => impactEffects.takeLandings(),
+    takeImpacts: () => impactEffects.takeImpacts(),
     // For preview pages: how many marks and chips are alive.
     effectCounts: () => impactEffects.count(),
     // True while the sniper scope overlay should show (the scope has reached the eye).
@@ -832,7 +870,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     // Mouse look scale and vertical inversion (src/settings.js).
     setLook: ({ sensitivity = 1, invertY = false } = {}) => { lookSensitivity = sensitivity; lookInvert = invertY ? -1 : 1; },
     look: (horizontal, vertical) => { if (view === 'first' && !mapOpen) { yaw -= horizontal; pitch = THREE.MathUtils.clamp(pitch + vertical, -1.35, 1.35); } },
-    reset: (heading = -0.55) => { impactEffects.reset(); yaw = lastYaw = heading; pitch = lastPitch = 0; resetHandling(hand); lastCycle = null; ejectQueued = null; puffQueued = 0; for (const casing of casingPool) casing.mesh.visible = false; for (const puff of puffPool) puff.sprite.visible = false; selectedLevel = 0; for (const effect of effects) { scene.remove(effect.mesh); if (effect.disposable) { effect.mesh.geometry.dispose(); effect.mesh.material.dispose(); } } effects.length = 0; },
+    reset: (heading = -0.55) => { impactEffects.reset(); yaw = lastYaw = heading; pitch = lastPitch = 0; resetHandling(hand); lastCycle = null; ejectQueued = null; puffQueued = 0; for (const puff of puffPool) puff.sprite.visible = false; selectedLevel = 0; for (const effect of effects) { scene.remove(effect.mesh); if (effect.disposable) { effect.mesh.geometry.dispose(); effect.mesh.material.dispose(); } } effects.length = 0; },
     movement: (x, z) => view === 'first' ? [x * Math.cos(yaw) + z * Math.sin(yaw), -x * Math.sin(yaw) + z * Math.cos(yaw)] : [x, z],
     aim: state => {
       const origin = playerEye(state);

@@ -4,6 +4,7 @@ import { reactToHit, guardDisabled } from './npc-body.js';
 import { woundResponse, afterHit } from './guard-wounds.js';
 import { sendGuardReport } from './guard-radio.js';
 import { piecesAlong } from './spatial.js';
+import { guardHears, footstepNotice } from './sound-plan.js';
 export { sendGuardReport };
 export function shatterWindow(state, map, index) {
   if (!(state.windowHealth?.[index] > 0)) return false;
@@ -37,14 +38,35 @@ export function damagePlayer(state, rules, damage, source) {
   if (source) state.lastHit = { time: state.elapsed, from: [source[0], source[1]] }; // drives the HUD damage arrow
   if (state.health === 0) state.status = 'captured';
 }
-export function alertGuards(state, rules, origin, radius = 18) {
+// A noise at `origin` that carries `radius` metres in open air. With a map and the
+// "Guards hear through walls" rule on, walls, doors, glass and floors in between cut
+// it (src/sound-plan.js, the same model the player's speakers use).
+export function alertGuards(state, rules, origin, radius = 18, map = null) {
   if (!rules.gunshotAlerts) return;
   for (const guard of state.guards) {
-    if (guardDisabled(guard) || Math.hypot(guard.position[0] - origin[0], guard.position[1] - origin[2]) > radius) continue;
+    if (guardDisabled(guard) || !guardHears(state, map, rules, guard, origin, radius)) continue;
     guard.alertUntil = state.elapsed + 5;
     guard.noiseTarget = { position: [origin[0], origin[2]], elevation: origin[1] > 3.2 ? 3.2 : 0, time: state.elapsed };
     guard.heading = Math.atan2(origin[2] - guard.position[1], origin[0] - guard.position[0]);
   }
+}
+// The player's footstep at `position` (feet), at pace `gait` on `surface`. With the rule
+// "Guards hear footsteps" above zero, a guard who hears it (the shared hearing model)
+// turns toward it and goes to look, at most once per cooldown. Returns how many heard.
+export function hearFootstep(state, map, rules, position, gait, surface) {
+  const scale = rules.footstepHearing ?? 1;
+  if (!(scale > 0) || state.status !== 'active') return 0;
+  const reach = (footstepNotice.reach[gait] ?? footstepNotice.reach.walk) * (footstepNotice.surface[surface] ?? 1) * scale;
+  const source = [position[0], position[1] + 0.1, position[2]];
+  let heard = 0;
+  for (const guard of state.guards) {
+    if (guardDisabled(guard) || state.elapsed - (guard.heardStepAt ?? -Infinity) < footstepNotice.cooldown) continue;
+    if (!guardHears(state, map, rules, guard, source, reach)) continue;
+    guard.heardStepAt = state.elapsed; heard++;
+    guard.noiseTarget = { position: [position[0], position[2]], elevation: position[1] > 3.2 ? 3.2 : 0, time: state.elapsed };
+    guard.heading = Math.atan2(position[2] - guard.position[1], position[0] - guard.position[0]);
+  }
+  return heard;
 }
 export function segmentClear(state, map, a, b, ignoreWall = -1, { glass = true } = {}) {
   const distance = Math.hypot(...b.map((v, i) => v - a[i]));

@@ -77,7 +77,8 @@ test('plain passages are recorded apart from doors and get drywall returns, neve
   for (const passage of martelli.passages) {
     assert.ok(!martelli.doors.some(door => door.position[0] === passage.position[0] && door.position[1] === passage.position[1]), 'a passage is not a door');
   }
-  const returns = trim.filter(box => box.kind === 'return');
+  // Free wall ends get returns too (see the next test); this counts the passage ones.
+  const returns = trim.filter(box => box.kind === 'return' && !box.freeEnd);
   assert.equal(returns.length, 6 * 2 * 7, 'two ends, seven wall rows, per passage');
   for (const box of returns) assert.ok(pieces[box.piece], 'hangs on a real piece');
   // No return stands in the clear opening of a passage.
@@ -91,6 +92,42 @@ test('plain passages are recorded apart from doors and get drywall returns, neve
     }
   }
   const without = trimFor({ ...martelli, passages: [] }, pieces);
-  assert.equal(trim.length - without.length, returns.length, 'passages add returns and nothing else');
+  // Without passages their wall ends count as free ends instead, so compare the rest of the trim.
+  const rest = boxes => boxes.filter(box => !box.freeEnd).length;
+  assert.equal(rest(trim) - rest(without), returns.length, 'passages add returns and nothing else');
   for (const map of Object.values(maps)) if (map !== martelli) assert.equal(trimFor(map, buildWallPieces(map)).filter(box => box.kind === 'return').length, 0);
+});
+
+test('interior wall ends that stop in open space get drywall returns; ends at walls, doors, windows and passages do not', () => {
+  const free = trim.filter(box => box.freeEnd);
+  const walls = new Set(free.map(box => pieces[box.piece].wall));
+  // The stair divider (plan x 565, both ends open) is one of them.
+  const divider = martelli.walls.findIndex(w => w.axis === 'z' && Math.abs(w.center[0] - (565 - 600) * 0.02) < 0.01 && (w.elevation ?? 0) === 0);
+  assert.ok(walls.has(divider), 'the stair divider ends are covered');
+  for (const index of walls) assert.ok(martelli.walls[index].destructible && martelli.walls[index].height !== 1);
+  // Door headers end against the walls beside the door, so none of them is free.
+  for (const index of walls) assert.ok(martelli.walls[index].height > 1, 'no header strip counts as a free end');
+  // Stubs, the stair divider, and corners where one wall overshoots or meets a taller one.
+  assert.ok(walls.size <= 40, `${walls.size} walls with free ends`);
+});
+
+test('no raw timber end is left showing anywhere in Martelli', async () => {
+  const { railWalls } = await import('../src/stair-dress.js');
+  const rails = railWalls(martelli);
+  const inside = (b, p) => [0, 1, 2].every(i => Math.abs(p[i] - b.center[i]) <= b.size[i] / 2 + 0.002);
+  const box3 = w => ({ center: [w.center[0], (w.elevation ?? 0) + (w.height ?? 2.8) / 2, w.center[1]], size: [w.size[0], w.height ?? 2.8, w.size[1]] });
+  const wallBoxes = martelli.walls.map(box3), doorBoxes = martelli.doors.map(d => box3({ ...d, center: d.position }));
+  const covers = [...pieces.filter(p => !rails.has(p.wall)), ...trim];
+  const exposed = [];
+  for (const piece of pieces) {
+    if (piece.material !== 'timber' || piece.floor || rails.has(piece.wall)) continue;
+    for (const axis of [0, 2]) for (const side of [-1, 1]) for (const slide of [-0.4, 0, 0.4]) {
+      // Three points across the face, so a sliver past a corner is caught too.
+      const p = [...piece.center], other = 2 - axis; p[axis] += side * (piece.size[axis] / 2 + 0.006); p[other] += slide * piece.size[other];
+      // Faces into a wall cavity or a door's frame lining are not seen.
+      if (wallBoxes.some(b => inside(b, p)) || doorBoxes.some(b => inside(b, p))) continue;
+      if (!covers.some(b => b !== piece && inside(b, p))) exposed.push(`wall ${piece.wall} at plan ${Math.round(p[0] / 0.02 + 600)},${Math.round(p[2] / 0.02 + 500)}`);
+    }
+  }
+  assert.deepEqual([...new Set(exposed)], []);
 });

@@ -128,6 +128,6 @@ export function fireWeapon(state, map, rules, origin, rawDirection) {
     pellets.push(traceShot(state, map, rules, origin, ray, damage, rules.wallDamage * ammo.wall, penetration));
   }
   const radius = (config.suppressor ? 6 : 18) * (config.velocity === 'subsonic' ? 0.5 : 1);
-  alertGuards(state, rules, origin, radius);
+  alertGuards(state, rules, origin, radius, map);
   return { ...pellets[0], kind: pellets.some(p => p.kind === 'guard') ? 'guard' : pellets[0].kind, removed: pellets.flatMap(p => p.removed), killed: pellets.some(p => p.killed), headshot: pellets.some(p => p.headshot), doorDestroyed: pellets.some(p => p.doorDestroyed), doorHit: pellets.find(p => p.doorHit !== null)?.doorHit ?? null, pellets, suppressed: config.suppressor };
 }

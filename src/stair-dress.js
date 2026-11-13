@@ -72,6 +72,49 @@ export function openTreadsFor(map, pieces) {
   return out;
 }
 
+// Handrails on outdoor and garage steps (owner follow-up, 2026-11-12): a post at each end
+// of every open side and a sloped top rail, plus a lower rail on open deck stairs. A side
+// that runs along a wall gets none. Deck stairs use the wooden railing kinds; concrete
+// garage steps use the dark baluster kind, like a painted steel pipe rail.
+// A sloped rail carries `rotation` [x, y, z] in radians, which the scene applies.
+export const stepRail = { height: 0.9, post: 0.06, rail: 0.05, inset: 0.04, maxPostGap: 1.4, wallGap: 0.2 };
+export function stepRailsFor(map, pieces) {
+  if (!map.surfaces) return [];
+  const out = [], first = map.walls.length + (map.floors?.length ?? 0) + (map.ceilings?.length ?? 0), r = stepRail;
+  (map.stairs ?? []).forEach((stair, index) => {
+    const outdoor = stair.material === 'deck', garage = stair.material === 'concrete' && (stair.steps ?? 0) >= 2;
+    if (!outdoor && !garage) return;
+    const steps = pieces.filter(p => p.stair && p.wall === first + index);
+    if (!steps.length) return;
+    const dx = stair.to[0] - stair.from[0], dz = stair.to[1] - stair.from[1], alongX = Math.abs(dx) > Math.abs(dz);
+    const run = Math.hypot(dx, dz), rise = stair.top - stair.bottom, width = alongX ? stair.size[1] : stair.size[0];
+    const hang = (x, z) => steps.reduce((best, p) => Math.hypot(p.center[0] - x, p.center[2] - z) < Math.hypot(best.center[0] - x, best.center[2] - z) ? p : best).id;
+    const kinds = outdoor ? { post: 'newel', rail: 'handrail' } : { post: 'baluster', rail: 'baluster' };
+    for (const side of [-1, 1]) {
+      const offset = width / 2 - r.inset;
+      const sideAt = t => { const x = stair.from[0] + dx * t, z = stair.from[1] + dz * t; return alongX ? [x, z + side * offset] : [x + side * offset, z]; };
+      // Skip a side that runs along a wall: probe just outside it at mid run, waist height.
+      const [mx, mz] = sideAt(0.5), out1 = alongX ? [mx, mz + side * r.wallGap] : [mx + side * r.wallGap, mz], y = stair.bottom + rise / 2 + 0.9;
+      const walled = pieces.some(p => !p.stair && !p.floor && p.hp > 0 && Math.abs(p.center[0] - out1[0]) <= p.size[0] / 2 && Math.abs(p.center[2] - out1[1]) <= p.size[2] / 2 && Math.abs(p.center[1] - y) <= p.size[1] / 2);
+      // Nor a side with another flight right beside it (the U-shaped deck stair shares one).
+      const besideFlight = (map.stairs ?? []).some((other, j) => j !== index && Math.abs(out1[0] - other.center[0]) <= other.size[0] / 2 && Math.abs(out1[1] - other.center[1]) <= other.size[1] / 2);
+      if (walled || (besideFlight && side > 0)) continue;
+      const posts = Math.max(2, Math.ceil(run / r.maxPostGap) + 1);
+      for (let i = 0; i < posts; i++) {
+        const t = i / (posts - 1), [x, z] = sideAt(t), ground = stair.bottom + rise * t;
+        out.push({ kind: kinds.post, center: [x, ground + r.height / 2, z], size: [r.post, r.height, r.post], piece: hang(x, z), stepRail: true });
+      }
+      const length = Math.hypot(run, rise), angle = Math.atan2(rise, run);
+      const rotation = alongX ? [0, 0, angle * Math.sign(dx)] : [-angle * Math.sign(dz), 0, 0];
+      for (const lift of outdoor ? [r.height, r.height * 0.45] : [r.height]) {
+        const [x, z] = sideAt(0.5);
+        out.push({ kind: kinds.rail, center: [x, stair.bottom + rise / 2 + lift - r.rail / 2, z], size: alongX ? [length + r.post, r.rail, r.rail] : [r.rail, r.rail, length + r.post], rotation, piece: hang(x, z), stepRail: true });
+      }
+    }
+  });
+  return out;
+}
+
 export function stairDressFor(map, pieces) {
-  return map.surfaces ? [...railingFor(map, pieces), ...carpetFor(map, pieces), ...openTreadsFor(map, pieces)] : [];
+  return map.surfaces ? [...railingFor(map, pieces), ...carpetFor(map, pieces), ...openTreadsFor(map, pieces), ...stepRailsFor(map, pieces)] : [];
 }

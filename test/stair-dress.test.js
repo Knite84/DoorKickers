@@ -17,7 +17,8 @@ test('the stair and deck guard rails get newels, a handrail and balusters', () =
     const piece = pieces[box.piece];
     assert.ok(piece, 'hangs on a real piece');
     // Carpet and open treads hang on stair steps; everything else hangs on a rail.
-    if (!['carpet', 'tread', 'stringer'].includes(box.kind)) assert.ok(railWalls(martelli).has(piece.wall), `${box.kind} hangs on a rail piece`);
+    // Step handrails (deck and garage steps) hang on the steps themselves.
+    if (!['carpet', 'tread', 'stringer'].includes(box.kind) && !box.stepRail) assert.ok(railWalls(martelli).has(piece.wall), `${box.kind} hangs on a rail piece`);
   }
 });
 
@@ -52,4 +53,18 @@ test('Martelli draws brick arch headers over the wet-bar and alcove openings wit
   const arches = martelli.decor.filter(d => d.kind === 'arch');
   assert.equal(arches.length, 2);
   assert.ok(!martelli.props.some(p => p.kind === 'arch'));
+});
+
+test('deck stairs and garage steps get handrails on their open sides only, sloped with the flight', async () => {
+  const { stepRailsFor } = await import('../src/stair-dress.js');
+  const { martelli: map } = await import('../src/maps/martelli.js');
+  const { buildWallPieces } = await import('../src/destruction.js');
+  const pieces = buildWallPieces(map), rails = stepRailsFor(map, pieces);
+  assert.ok(rails.length > 0);
+  for (const box of rails) assert.ok(pieces[box.piece]?.stair, 'hangs on a step, hides with it');
+  const sloped = rails.filter(box => box.rotation);
+  assert.ok(sloped.length >= 4 && sloped.every(box => box.rotation.some(v => Math.abs(v) > 0.2)));
+  // The mudroom garage steps (plan x 480) run beside the stairwell wall: a rail on the open side only.
+  const mudroom = rails.filter(box => Math.abs(box.center[2] - (650 - 500) * 0.02) < 0.9 && Math.abs(box.center[0] - (480 - 600) * 0.02) < 0.6);
+  assert.ok(mudroom.length > 0 && mudroom.every(box => box.center[0] < (480 - 600) * 0.02), 'only the side away from the wall');
 });

@@ -32,6 +32,8 @@ export const schema = {
   guardVariation: { label: 'Guard variety & realism (posts, temperament, wounds)', group: 'Guards', value: true, setup: true },
   guardAccuracy: { label: 'Guard marksmanship', group: 'Guards', min: 0.25, max: 2, step: 0.25, value: 1, unit: '×' },
   awareness: { label: 'Suspicion gain', group: 'Guards', min: 0, max: 3, step: 0.1, value: 1, unit: '×' },
+  footstepHearing: { label: 'Guards hear footsteps (0 = off)', group: 'Guards', min: 0, max: 2, step: 0.25, value: 1, unit: '×' },
+  sharedHearing: { label: 'Guards hear through walls realistically (walls, doors and floors muffle noise)', group: 'Guards', value: true },
   fullIntel: { label: 'Live guard tracking', group: 'Intel & freedom', value: false },
   floorPlan: { label: 'Floor grid & room labels', group: 'Intel & freedom', value: true },
   showVision: { label: 'Show guard sight cones', group: 'Intel & freedom', value: true },

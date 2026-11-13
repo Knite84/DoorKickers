@@ -4,6 +4,8 @@
 // Everything is pooled and drawn in a few batches, so a minigun burst costs no
 // more draw calls than a single shot:
 // - chips: one InstancedMesh of small lit boxes (bits, splinters, shards, debris)
+// - casings: one InstancedMesh of small cylinders (spent brass and shotgun hulls)
+// Chips and casings bounce off the house and come to rest (src/loose-bits.js, step 6.2).
 // - puffs: one Points cloud, normal blending (dust, smoke, fluff, blood mist)
 // - glows: one Points cloud, additive (fire, fireballs, flashes, sparks)
 // - marks: one InstancedMesh of lit quads from a painted atlas (holes, blood, scorch)
@@ -11,8 +13,10 @@
 import * as THREE from 'three';
 import { recipes, shotMarks, blastMarks, breakEffect, markCells, fraction } from './impacts.js';
 import { supportHeight } from './world.js';
+import { looseBits, stepBits, wakeBits } from './loose-bits.js';
+import { damageCount } from './spatial.js';
 
-export const effectLimits = { chips: 500, puffs: 500, glows: 400, marks: 400 };
+export const effectLimits = { chips: 500, casings: looseBits.limit.casing, puffs: 500, glows: 400, marks: 400 };
 
 const rand = (lo, hi) => lo + Math.random() * (hi - lo);
 const pick = list => list[Math.floor(Math.random() * list.length)];
@@ -21,25 +25,45 @@ export function createSceneEffects({ scene, renderer, lighting, map }) {
   const color = new THREE.Color(), dummy = new THREE.Object3D(), zero = new THREE.Matrix4().makeScale(0, 0, 0);
   const disposables = [];
 
-  // ---- chips -------------------------------------------------------------
-  const chipMaterial = lighting.decorate(new THREE.MeshStandardMaterial({ roughness: 0.8 }));
-  const chipGeometry = new THREE.BoxGeometry(1, 1, 1);
-  const chipMesh = new THREE.InstancedMesh(chipGeometry, chipMaterial, effectLimits.chips);
-  chipMesh.frustumCulled = false; chipMesh.castShadow = false; chipMesh.receiveShadow = false;
-  for (let i = 0; i < effectLimits.chips; i++) { chipMesh.setMatrixAt(i, zero); chipMesh.setColorAt(i, color.set(0xffffff)); }
-  scene.add(chipMesh); disposables.push(chipMaterial, chipGeometry);
-  const chips = Array.from({ length: effectLimits.chips }, () => ({ life: 0, max: 1, position: new THREE.Vector3(), velocity: new THREE.Vector3(), rotation: new THREE.Euler(), spin: new THREE.Vector3(), scale: new THREE.Vector3(), floor: 0, resting: false }));
-  let nextChip = 0;
-  function spawnChip(position, velocity, size, tint, life, floor, shape) {
-    const chip = chips[nextChip], index = nextChip; nextChip = (nextChip + 1) % chips.length;
-    chip.life = chip.max = life; chip.position.copy(position); chip.velocity.copy(velocity); chip.floor = floor; chip.resting = false;
-    chip.rotation.set(rand(0, 6.3), rand(0, 6.3), rand(0, 6.3)); chip.spin.set(rand(-14, 14), rand(-14, 14), rand(-14, 14));
-    const s = size * rand(0.6, 1.4);
-    if (shape === 'splinter') chip.scale.set(s * 0.45, s * 0.45, s * 3.2);
-    else if (shape === 'flat') chip.scale.set(s * 1.6, s * 0.15, s * 1.2);
-    else chip.scale.set(s, s * rand(0.6, 1), s * rand(0.7, 1.2));
-    chipMesh.setColorAt(index, color.set(tint)); chipMesh.instanceColor.needsUpdate = true;
+  // ---- chips and casings (loose bits) ----------------------------------------
+  // Each item wraps a loose bit (position, velocity, radius, life) with how it is drawn.
+  function bitPool(geometry, count, roughness, metalness = 0) {
+    const material = lighting.decorate(new THREE.MeshStandardMaterial({ roughness, metalness }));
+    const mesh = new THREE.InstancedMesh(geometry, material, count);
+    mesh.frustumCulled = false; mesh.castShadow = false; mesh.receiveShadow = true;
+    for (let i = 0; i < count; i++) { mesh.setMatrixAt(i, zero); mesh.setColorAt(i, color.set(0xffffff)); }
+    scene.add(mesh); disposables.push(material, geometry);
+    const items = Array.from({ length: count }, () => ({ bit: { position: [0, 0, 0], velocity: [0, 0, 0], radius: 0.01, life: 0, kind: 'debris', resting: false }, max: 1, rotation: new THREE.Euler(), spin: new THREE.Vector3(), scale: new THREE.Vector3(), laid: false, cleared: true }));
+    return { mesh, items, next: 0 };
   }
+  const chipPool = bitPool(new THREE.BoxGeometry(1, 1, 1), effectLimits.chips, 0.8);
+  // Casings: a unit cylinder along z, scaled to radius and length per casing.
+  const casingPool = bitPool(new THREE.CylinderGeometry(1, 1, 1, 8).rotateX(Math.PI / 2), effectLimits.casings, 0.35, 0.7);
+  function spawnBit(pool, position, velocity, scale, tint, life, kind, radius) {
+    const index = pool.next, item = pool.items[index]; pool.next = (pool.next + 1) % pool.items.length;
+    const bit = item.bit;
+    bit.position[0] = position.x; bit.position[1] = position.y; bit.position[2] = position.z;
+    bit.velocity[0] = velocity.x; bit.velocity[1] = velocity.y; bit.velocity[2] = velocity.z;
+    bit.radius = radius; bit.life = item.max = life; bit.kind = kind; bit.resting = false; bit.still = 0;
+    item.rotation.set(rand(0, 6.3), rand(0, 6.3), rand(0, 6.3)); item.spin.set(rand(-14, 14), rand(-14, 14), rand(-14, 14));
+    item.scale.copy(scale); item.laid = false;
+    pool.mesh.setColorAt(index, color.set(tint)); pool.mesh.instanceColor.needsUpdate = true;
+  }
+  const chipScale = new THREE.Vector3();
+  // `life` is how long the bit lasts in all; most debris lies a while before fading (looseBits.life).
+  function spawnChip(position, velocity, size, tint, life, shape) {
+    const s = size * rand(0.6, 1.4);
+    if (shape === 'splinter') chipScale.set(s * 0.45, s * 0.45, s * 3.2);
+    else if (shape === 'flat') chipScale.set(s * 1.6, s * 0.15, s * 1.2);
+    else chipScale.set(s, s * rand(0.6, 1), s * rand(0.7, 1.2));
+    spawnBit(chipPool, position, velocity, chipScale, tint, life, 'debris', Math.max(0.005, Math.min(chipScale.x, chipScale.y, chipScale.z) / 2));
+  }
+  // A spent casing in world space: position and velocity as Vector3, radius and length in metres.
+  function casing(position, velocity, radius, length, tint) {
+    spawnBit(casingPool, position, velocity, chipScale.set(radius, radius, length), tint, looseBits.life.casing * rand(0.85, 1), tint === 0x8e2a22 ? 'hull' : 'casing', radius + 0.002);
+  }
+  let structureKey = null;
+  const landings = [], impacts = [];
 
   // ---- puffs and glows (point clouds) -------------------------------------
   const pointShader = additive => new THREE.ShaderMaterial({
@@ -133,7 +157,7 @@ export function createSceneEffects({ scene, renderer, lighting, map }) {
         outward().add(normalSpray.set(rand(-0.6, 0.6), rand(-0.2, 0.8), rand(-0.6, 0.6))).multiplyScalar(speed * rand(0.5, 1));
         if (n) normalSpray.set(...normal);
         point.set(...at);
-        spawnChip(point, velocity, size, pick(colors), life * rand(0.7, 1.2), floor, splinter ? 'splinter' : flat ? 'flat' : 'chunk');
+        spawnChip(point, velocity, size, pick(colors), effect === 'flesh' ? life * rand(0.7, 1.2) : looseBits.life.debris * rand(0.5, 1), splinter ? 'splinter' : flat ? 'flat' : 'chunk');
       }
     }
     if (recipe.puff) {
@@ -158,6 +182,9 @@ export function createSceneEffects({ scene, renderer, lighting, map }) {
   function shot(pellet, state) {
     const { bursts, marks: newMarks } = shotMarks(state, map, pellet);
     for (const b of bursts) burst(b.effect, b.point, b.normal, state, b.small ? 0.5 : 1);
+    // The first impact of each pellet is heard (step 6.4); exit holes and later layers are not.
+    const first = bursts.find(b => !b.small);
+    if (first) { impacts.push({ effect: first.effect, position: [...first.point] }); if (impacts.length > 24) impacts.shift(); }
     for (const m of newMarks) addMark(m);
   }
   // Wall pieces a shot knocked out throw bigger chunks and dust.
@@ -181,7 +208,7 @@ export function createSceneEffects({ scene, renderer, lighting, map }) {
     }
     for (let i = 0; i < 30; i++) {
       point.set(...at); velocity.set(rand(-1, 1), rand(0.2, 1.2), rand(-1, 1)).normalize().multiplyScalar(rand(3, 8));
-      spawnChip(point, velocity, 0.045, pick([0x5d5a55, 0x8a8478, 0x6e4e33, 0x2b2927]), rand(1.5, 3), floor, Math.random() < 0.3 ? 'splinter' : 'chunk');
+      spawnChip(point, velocity, 0.045, pick([0x5d5a55, 0x8a8478, 0x6e4e33, 0x2b2927]), looseBits.life.debris * rand(0.7, 1), Math.random() < 0.3 ? 'splinter' : 'chunk');
     }
     for (let i = 0; i < 30; i++) {
       point.set(...at); velocity.set(rand(-1, 1), rand(-0.2, 1), rand(-1, 1)).normalize().multiplyScalar(rand(4, 10));
@@ -207,7 +234,7 @@ export function createSceneEffects({ scene, renderer, lighting, map }) {
       case 'door-break': shatter('wood', e.position, state, 4); burst('drywall', e.position, null, state, 1); return true;
       case 'furniture-break': { const effect = breakEffect(map, e); shatter(effect, e.position, state, 4); if (effect !== 'fabric') burst('drywall', e.position, null, state, 0.6); else burst('fabric', e.position, null, state, 2); return true; }
       case 'strike': burst('drywall', e.position, null, state, 0.6); return true;
-      case 'surrender': return true;
+      case 'surrender': case 'guard-reload': case 'guard-jam': return true;   // heard, not drawn (step 6.4)
       default: return false;
     }
   }
@@ -233,26 +260,34 @@ export function createSceneEffects({ scene, renderer, lighting, map }) {
       const flicker = 1.4 + 0.35 * Math.sin(flameClock * 23 + fire.position[0]) + 0.25 * Math.sin(flameClock * 37);
       fireLights.push({ position: [fire.position[0], floor + 0.6, fire.position[2]], color: [1, 0.55, 0.22], strength: flicker, radius: 6 });
     }
-    // Chips: gravity, a bounce, then they lie still and fade out by shrinking.
-    let moved = false;
-    chips.forEach((chip, i) => {
-      if (chip.life <= 0) return;
-      chip.life -= dt; moved = true;
-      if (chip.life <= 0) { chipMesh.setMatrixAt(i, zero); return; }
-      if (!chip.resting) {
-        chip.velocity.y -= 9.8 * dt; chip.position.addScaledVector(chip.velocity, dt);
-        chip.rotation.x += chip.spin.x * dt; chip.rotation.y += chip.spin.y * dt; chip.rotation.z += chip.spin.z * dt;
-        if (chip.position.y <= chip.floor + chip.scale.y / 2) {
-          chip.position.y = chip.floor + chip.scale.y / 2;
-          if (chip.velocity.y < -1.2) { chip.velocity.y *= -0.3; chip.velocity.x *= 0.5; chip.velocity.z *= 0.5; chip.spin.multiplyScalar(0.5); }
-          else { chip.resting = true; chip.rotation.x = chip.rotation.z = 0; }
-        }
-      }
-      const fade = Math.min(1, chip.life / Math.min(0.4, chip.max * 0.3));
-      dummy.position.copy(chip.position); dummy.rotation.copy(chip.rotation); dummy.scale.copy(chip.scale).multiplyScalar(fade); dummy.updateMatrix();
-      chipMesh.setMatrixAt(i, dummy.matrix);
-    });
-    if (moved) chipMesh.instanceMatrix.needsUpdate = true;
+    // Chips and casings: swept contacts against the house (src/loose-bits.js), then they
+    // lie still and shrink away at the end of their life. A change to the structure or doors wakes them.
+    const key = state?.wallPieces ? damageCount(state) + ':' + state.doors.join('') + ':' + (state.propBroken ?? 0) : structureKey;
+    if (key !== structureKey) { structureKey = key; wakeBits(chipPool.items.map(i => i.bit)); wakeBits(casingPool.items.map(i => i.bit)); }
+    for (const pool of [chipPool, casingPool]) {
+      const bits = [];
+      for (const item of pool.items) if (item.bit.life > 0) { item.bit.life -= dt; if (item.bit.life > 0) bits.push(item.bit); }
+      landings.push(...stepBits(bits, state, map, dt));
+      let moved = false;
+      pool.items.forEach((item, i) => {
+        const bit = item.bit;
+        if (bit.life <= 0) { if (!item.cleared) { pool.mesh.setMatrixAt(i, zero); item.cleared = true; moved = true; } return; }
+        item.cleared = false;
+        if (bit.resting) {
+          // Lie flat: casings on their side, chips on a broad face, both at a random turn.
+          if (!item.laid) { item.laid = true; item.rotation.set(0, item.rotation.y, 0); }
+          else if (bit.life > looseBits.fade) return;   // nothing changes until it starts to fade
+        } else { item.rotation.x += item.spin.x * dt; item.rotation.y += item.spin.y * dt; item.rotation.z += item.spin.z * dt; }
+        const fade = Math.min(1, bit.life / Math.min(looseBits.fade, item.max * 0.3));
+        // At rest the bit sits on its lowest face; in flight its centre is the bit's centre.
+        const lift = bit.resting ? item.scale.y / 2 - bit.radius : 0;
+        dummy.position.set(bit.position[0], bit.position[1] + lift, bit.position[2]);
+        dummy.rotation.copy(item.rotation); dummy.scale.copy(item.scale).multiplyScalar(fade); dummy.updateMatrix();
+        pool.mesh.setMatrixAt(i, dummy.matrix); moved = true;
+      });
+      if (moved) pool.mesh.instanceMatrix.needsUpdate = true;
+    }
+    if (landings.length > 64) landings.splice(0, landings.length - 64);
     // Point clouds.
     const scale = renderer.domElement.height * camera.projectionMatrix.elements[5] / 2;
     for (const cloud of [puffs, glows]) {
@@ -294,17 +329,27 @@ export function createSceneEffects({ scene, renderer, lighting, map }) {
     return [...list, ...fireLights].sort((a, b) => b.strength - a.strength);
   }
   function reset() {
-    for (const chip of chips) chip.life = 0;
-    for (let i = 0; i < chips.length; i++) chipMesh.setMatrixAt(i, zero);
-    chipMesh.instanceMatrix.needsUpdate = true;
+    for (const pool of [chipPool, casingPool]) {
+      pool.items.forEach((item, i) => { item.bit.life = 0; item.cleared = true; pool.mesh.setMatrixAt(i, zero); });
+      pool.mesh.instanceMatrix.needsUpdate = true; pool.next = 0;
+    }
+    landings.length = 0;
     for (const cloud of [puffs, glows]) { for (const item of cloud.items) item.life = 0; cloud.attrs.size.fill(0); cloud.geometry.attributes.size.needsUpdate = true; }
     for (const mark of marks) { mark.used = false; mark.owner = null; }
     for (let i = 0; i < marks.length; i++) markMesh.setMatrixAt(i, zero);
     markMesh.instanceMatrix.needsUpdate = true;
-    flashes.length = 0; nextMark = nextChip = 0;
+    flashes.length = 0; nextMark = 0;
   }
   function dispose() { for (const item of disposables) item.dispose(); }
-  return { shot, breach, event, update, lights, reset, dispose, count: () => ({ marks: marks.filter(m => m.used).length, chips: chips.filter(c => c.life > 0).length }) };
+  return {
+    shot, breach, event, update, lights, reset, dispose, casing,
+    // Bits that hit a floor hard enough to hear since the last call: [{ position, speed, kind }] (for step 6.4).
+    takeLandings: () => landings.splice(0),
+    // Bullet impacts since the last call: [{ effect, position }] (the 6.1 effect class, for sound).
+    takeImpacts: () => impacts.splice(0),
+    count: () => ({ marks: marks.filter(m => m.used).length, chips: chipPool.items.filter(i => i.bit.life > 0).length, casings: casingPool.items.filter(i => i.bit.life > 0).length, resting: [...chipPool.items, ...casingPool.items].filter(i => i.bit.life > 0 && i.bit.resting).length,
+      casingSpots: casingPool.items.filter(i => i.bit.life > 0).slice(0, 8).map(i => i.bit.position.map(v => +v.toFixed(2))) }),
+  };
 }
 
 // The decal atlas, painted once: 4 columns by 2 rows of 128 px, in the order of

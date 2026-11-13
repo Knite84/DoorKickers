@@ -95,7 +95,7 @@ function blast(state, map, rules, position, radius = 3, power = 120, heading, in
   (map.windows ?? []).forEach((window, index) => { if (Math.hypot(...windowCenter(window).map((v, axis) => v - position[axis])) < radius) shatterWindow(state, map, index); });
   state.guards.forEach((guard, index) => damageGuard(state, guard, guardExposure[index] * power * rules.blastDamage));
   if (rules.friendlyFire) damagePlayer(state, rules, playerExposure * power * rules.blastDamage);
-  alertGuards(state, rules, position, 24); event(state, 'blast', position, { radius });
+  alertGuards(state, rules, position, 24, map); event(state, 'blast', position, { radius });
 }
 export function detonateCharges(state, map, rules) {
   if (state.status !== 'active') return 0;
@@ -129,7 +129,7 @@ export function weaponStrike(state, map, rules, origin, rawDirection) {
     if (hit.kind === 'prop') damageProp(state, map, rules, hit.object, 'melee', durability.raw.strike, hit.position);
     if (hit.kind === 'decor') damageDecor(state, map, rules, hit.object, 'melee', durability.raw.strike, hit.position);
     event(state, 'strike', hit.position);
-    alertGuards(state, rules, hit.position, 5);
+    alertGuards(state, rules, hit.position, 5, map);
   }
   return { kind: hit?.kind ?? 'miss', killed: hit?.kind === 'guard' && hit.object.health <= 0 };
 }
@@ -177,14 +177,14 @@ export function useEquipment(state, map, rules, origin, rawDirection) {
     if (hit.kind === 'door') {
       if (id === 'axe' && rules.destructibleDoors) damageDoor(state, map, hit.object, 70, hit.position);
       state.doors[hit.object] = true;
-      state.lockedDoors[hit.object] = false; alertGuards(state, rules, origin, 7);
+      state.lockedDoors[hit.object] = false; alertGuards(state, rules, origin, 7, map);
     }
     if (hit.kind === 'wall' && rules.destructibleWalls) damageWall(state.wallPieces, hit.object, id === 'axe' ? 4 : 1);
     if (hit.kind === 'guard') damageGuard(state, hit.object, id === 'axe' ? 70 : 35);
     if (hit.kind === 'glass') shatterWindow(state, map, hit.object);
     if (hit.kind === 'prop') damageProp(state, map, rules, hit.object, 'melee', durability.raw[id], hit.position);
     if (hit.kind === 'decor') damageDecor(state, map, rules, hit.object, 'melee', durability.raw[id], hit.position);
-    if (id === 'axe' || hit.kind === 'glass') alertGuards(state, rules, origin, 7);
+    if (id === 'axe' || hit.kind === 'glass') alertGuards(state, rules, origin, 7, map);
     event(state, 'strike', hit.position);
     return hit.kind === 'glass' ? `Window shattered with ${item.name.toLowerCase()}.` : hit.kind === 'door' ? 'Door forced open.' : hit.kind === 'wall' && hit.object.blastOnly ? 'Exterior masonry requires explosives.' : `${item.name} strike.`;
   }
@@ -225,9 +225,9 @@ export function stepEquipment(state, map, rules, delta) {
       for (const guard of state.guards) if (guard.health > 0 && Math.hypot(guard.position[0] - p[0], guard.position[1] - p[2], elevation(guard) + 1.5 - p[1]) < 6 && segmentClear(state, map, p, [guard.position[0], elevation(guard) + 1.5, guard.position[1]], -1, { glass: false })) { guard.stunnedUntil = state.elapsed + 5; guard.suspicion = 0; }
       const eye=playerEye(state),dx = p[0] - eye[0], dz = p[2] - eye[2];
       if (Math.hypot(dx, dz, eye[1] - p[1]) < 5 && segmentClear(state, map, eye, p, -1, { glass: false }) && dx * state.facing[0] + dz * state.facing[1] > 0) state.flashUntil = state.elapsed + 1.5;
-      event(state, 'flash', p, { radius: 6 }); alertGuards(state, rules, p, 10);
+      event(state, 'flash', p, { radius: 6 }); alertGuards(state, rules, p, 10, map);
     }
-    if (projectile.type === 'molotov') { state.fires.push({ position: [...p], until: state.elapsed + 8, radius: 2 }); event(state, 'fire', p); alertGuards(state, rules, p, 10); }
+    if (projectile.type === 'molotov') { state.fires.push({ position: [...p], until: state.elapsed + 8, radius: 2 }); event(state, 'fire', p); alertGuards(state, rules, p, 10, map); }
   }
   for (let i = state.devices.length - 1; i >= 0; i--) {
     const device = state.devices[i];

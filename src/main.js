@@ -5,8 +5,13 @@ import { maps, resolveMap } from './maps/index.js';
 import { createMission, stepMission, interact, distance, movementGait, toggleCrouch, jump } from './simulation.js';
 import { createScene } from './scene.js';
 import { fireWeapon, reload } from './weapons.js';
-import { weaponReady } from './weapon-handling.js';
+import { weaponReady, drawWindow, handling as weaponHandling } from './weapon-handling.js';
 import { createGunAudio } from './audio.js';
+import { hearing, roomReverb, speakerReach, effectSounds, eventSounds, landingSound, handlingCues, fireSound, guardStep, guardSteps, stepReach, ambienceMix } from './sound-plan.js';
+import { surfaceAt } from './surface-plan.js';
+import { breakEffect } from './impacts.js';
+import { hearFootstep } from './combat.js';
+import { playerEye, doorCenter } from './world.js';
 import { createMotion, resetMotion, shapeInput, observeMotion } from './player-motion.js';
 import { weapons, items, ammoTypes, defaultLoadout, validateLoadout, equip, toggleHolster, restockEquipment, slotOrder, cycleEquipped } from './kit.js';
 import { useEquipment, detonateCharges, weaponStrike } from './equipment.js';
@@ -209,6 +214,7 @@ function applySettings() {
   $('#hints').hidden = !playerSettings.showHints;
   scene?.setLook({ sensitivity: playerSettings.sensitivity, invertY: playerSettings.invertY });
   audio.setMaster(playerSettings.masterVolume);
+  audio.setVolumes({ effects: playerSettings.effectsVolume, ambience: playerSettings.ambienceVolume });
 }
 function fitHud() {
   const box = $('.viewport').getBoundingClientRect();
@@ -349,6 +355,56 @@ function detonate() {
   const count = detonateCharges(state, map, rules);
   message(count ? `${count} placed charge(s) detonated.` : 'No placed charges to detonate.');
 }
+// ---- Sound helpers (step 6.4) ----
+// A named effect at a place in the house, heard through the shared hearing model.
+function heardEffect(name, position, gain = 1) {
+  const reach = effectSounds[name]?.reach;
+  if (!reach || !position) return audio.effect(name, { gain });
+  audio.effect(name, { position, heard: hearing(state, map, position, playerEye(state), reach * speakerReach), gain });
+}
+// Once a frame: weapon handling cues, doors opening and closing, landings, impacts, fires, flashbangs.
+let soundClock = 0, soundState = null, doorsHeard = [], drawHeard = null, flashHeard = 0, guardTrackers = new Map(), radioHeard = new Map();
+function soundFrame(ears, dt) {
+  const now = state.elapsed ?? 0, simulated = now - soundClock;
+  if (soundState !== state) { soundState = state; soundClock = now; doorsHeard = [...state.doors]; drawHeard = state.drawStart; flashHeard = state.flashUntil; guardTrackers = new Map(); radioHeard = new Map(state.guards.map(g => [g, g.lastRadio])); }
+  // Guards: footsteps every stride, and radio chatter from whoever just transmitted (stage C).
+  for (const guard of state.guards) {
+    let tracker = guardTrackers.get(guard);
+    if (!tracker) guardTrackers.set(guard, tracker = {});
+    const gait = simulated > 0 ? guardStep(tracker, guard, simulated) : null;
+    if (gait && playerSettings.footstepSounds) {
+      const feet = [guard.position[0], (guard.elevation ?? 0) + 0.1, guard.position[1]], level = Math.round((guard.elevation ?? 0) / 3.2);
+      const finish = surfaceAt(map, feet[0], feet[2], level), surface = finish?.outdoor ? 'outdoor' : finish?.kind ?? 'floor';
+      audio.step(surface, gait, false, { position: feet, heard: hearing(state, map, feet, ears, stepReach[gait] * guardSteps.earshot) });
+    }
+    if (guard.lastRadio !== radioHeard.get(guard)) { radioHeard.set(guard, guard.lastRadio); if (guard.lastRadio !== undefined) heardEffect('radio', [guard.position[0], (guard.elevation ?? 0) + 1.5, guard.position[1]]); }
+  }
+  // Ambience: room tone inside, wind outside, birds or crickets, rain.
+  audio.setAmbience(ambienceMix({ indoor: roomReverb(map, ears) !== 'outdoor', time: state.timeOfDay ?? rules.timeOfDay ?? 'day', weather: rules.weather }), dt);
+  const id = state.inventory.equipped, weapon = weapons[id], spec = weaponHandling[id];
+  if (state.status === 'active') for (const cue of handlingCues(state, soundClock, now, { weapon, style: spec?.reload, cycle: spec?.cycle, drawSpan: drawWindow(state, rules) })) audio.effect(cue);
+  if (state.drawStart !== drawHeard) { drawHeard = state.drawStart; if (state.drawFrom && state.drawFrom !== 'unarmed') audio.effect('holster'); }
+  soundClock = now;
+  // Doors: opened or closed by anyone. A door that broke open makes its own crash instead.
+  state.doors.forEach((open, i) => {
+    if (open === doorsHeard[i]) return;
+    doorsHeard[i] = open;
+    if (state.doorHealth[i] > 0) heardEffect(open ? 'doorOpen' : 'doorClose', doorCenter(map.doors[i]));
+  });
+  // Bits landing (6.2) and bullet impacts (6.1), a few per frame at most.
+  for (const landing of (scene?.takeLandings() ?? []).slice(0, 8)) {
+    const [x, y, z] = landing.position, level = Math.max(0, Math.round((y - 0.1) / 3.2));
+    const finish = surfaceAt(map, x, z, level), surface = finish?.outdoor ? 'outdoor' : finish?.kind ?? 'floor';
+    heardEffect(landingSound(landing.kind, surface), landing.position, Math.min(1, landing.speed / 3));
+  }
+  for (const impact of (scene?.takeImpacts() ?? []).slice(0, 6)) heardEffect(`impact-${impact.effect}`, impact.position, 0.8);
+  // Fires crackle while they burn.
+  audio.setFires((state.fires ?? []).slice(0, 4).map(fire => ({ key: fire, position: fire.position, heard: hearing(state, map, fire.position, ears, fireSound.reach * speakerReach) })), 1 / 60);
+  // Flashed: ears ring and the world goes dull.
+  if (state.flashUntil > flashHeard && state.flashUntil > now) audio.deafen(Math.min(1, (state.flashUntil - now) / 1.5));
+  flashHeard = state.flashUntil;
+}
+let lastDryFire = 0;
 function shoot(now = performance.now()) {
   if (mapOpen || menuVisible || !scene) return;
   if (state.inventory.equipped === 'unarmed') return message('Hands empty. H draws your last weapon; Tab opens inventory.');
@@ -357,10 +413,14 @@ function shoot(now = performance.now()) {
   const aim = scene.aim(state);
   if (items[state.inventory.equipped]) { const result = useEquipment(state, map, rules, aim.origin, aim.direction); if (result) message(result); return; }
   const shot = fireWeapon(state, map, rules, aim.origin, aim.direction);
+  // An empty gun clicks (once per trigger pull, not every frame of a held trigger).
+  if (!shot && state.ammo === 0 && !(state.reloadUntil > state.elapsed) && now - lastDryFire > 300) { lastDryFire = now; audio.effect('dryFire'); }
   if (shot) {
+    if (shot.removed.length) { const piece = shot.removed[0]; heardEffect(piece.material === 'timber' ? 'breachTimber' : 'breachDrywall', piece.center); }
     for (const pellet of shot.pellets) scene.shotEffect(pellet, state);
     scene.fired(state.inventory.equipped, { aimed: aimed && view === 'first', crouched: !!state.crouched, climb: rules.muzzleClimb !== false, suppressed: !!shot.suppressed });
-    audio.play(rules.gunVolume * (shot.suppressed ? 0.25 : 1));
+    const config = state.inventory.weapons[state.inventory.equipped];
+    audio.shot(state.inventory.equipped, { suppressed: !!shot.suppressed, subsonic: config?.velocity === 'subsonic' });
     if (shot.kind === 'guard') hitUntil = now + 150;
     if (shot.headshot) message('Headshot. Guard down.');
     else if (shot.killed) message('Guard down. Gunfire can alert nearby guards.');
@@ -501,7 +561,11 @@ window.addEventListener('keydown', event => {
   if (action === 'detonate') detonate();
   if (action?.startsWith('weapon')) equipSlot(Number(action.slice(6)));
   if (action === 'jump' && !mapOpen) jump(state, map);
-  if (action === 'interact') { const result = interact(state, map); if (result) message(result); }
+  if (action === 'interact') {
+    const target = nearbyInteraction(state, map), result = interact(state, map);
+    if (result) message(result);
+    if (target?.kind === 'door' && state.lockedDoors?.[target.index] && !state.doors[target.index]) heardEffect('doorLocked', doorCenter(map.doors[target.index]));
+  }
 });
 window.addEventListener('keyup', event => { held.delete(event.code); if (lookup.get(event.code) === 'peek') setPlayerPeek(state, map, false); });
 window.addEventListener('blur', () => { held.clear(); firing = false; if (state.status === 'active') pause(); });
@@ -541,8 +605,21 @@ function frame(now) {
   const feel = observeMotion(feelState, state, map, before, gait, topSpeed, dt, { localX: localInput.x, bobScale: playerSettings.viewBob });
   if (state.status === 'active') for (const step of feel.events) { state.events.push(step); }
   if (firing && weapons[state.inventory.equipped]?.automatic) shoot(now);
+  // Sound (src/audio.js, src/sound-plan.js): the player's ears follow the camera, the room sets the echo.
+  const ears = playerEye(state), earsFacing = scene?.aim(state).direction ?? [0, 0, -1];
+  audio.setListener(ears, earsFacing); audio.setRoom(roomReverb(map, ears)); audio.setWeaponVolume(rules.gunVolume);
+  soundFrame(ears, dt);
   for (const effect of state.events.splice(0)) {
-    if (effect.type === 'footstep') { if (playerSettings.footstepSounds) audio.step(effect.surface, effect.gait, effect.landing); continue; }
+    if (effect.type === 'footstep') {
+      // Guards may hear it (rule "Guards hear footsteps"), whether or not the sound is switched on.
+      hearFootstep(state, map, rules, effect.position, effect.landing ? 'run' : effect.gait, effect.surface);
+      if (playerSettings.footstepSounds) audio.step(effect.surface, effect.gait, effect.landing);
+      continue;
+    }
+    // Guard gunfire, heard through whatever lies between (the same model guards use).
+    if (effect.type === 'guard-shot' && effect.origin) audio.shot('guard', { position: effect.origin, heard: hearing(state, map, effect.origin, ears, 18 * speakerReach) });
+    if (effect.type === 'furniture-break') heardEffect(`break-${breakEffect(map, effect)}`, effect.position);
+    else if (eventSounds[effect.type]) heardEffect(eventSounds[effect.type], effect.position);
     scene?.eventEffect(effect, state);
   }
   const facing = scene?.aim(state).direction; if (facing) state.facing = [facing[0], facing[2]];

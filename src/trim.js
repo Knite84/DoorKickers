@@ -140,6 +140,55 @@ function passageReturns(map, pieces, out) {
   }
 }
 
+// Interior wall ends that stop in open space (a stub, the end of a partition) would
+// show the raw studs and plates, so they get the same thin drywall return as passages.
+// An end is free when, just beyond it, there is no other wall, door, window or passage.
+// Railing walls (height 1, drawn as railings) are skipped.
+function freeEndReturns(map, pieces, out) {
+  const openingBoxes = [
+    ...(map.doors ?? []).map(d => ({ center: doorCenter(d), size: doorSize(d) })),
+    ...(map.windows ?? []).map(w => ({ center: windowCenter(w), size: windowSize(w) })),
+    // A passage's own returns cover only the ends of its own wall line (`axis`), not a wall meeting it square.
+    ...(map.passages ?? []).map(p => ({ center: [p.position[0], (p.elevation ?? 0) + p.height / 2, p.position[1]], size: [p.size[0], p.height, p.size[1]], axis: p.size[0] > p.size[1] ? 'x' : 'z' })),
+  ];
+  const inBox = (box, p, pad = 0.02) => [0, 1, 2].every(i => Math.abs(p[i] - box.center[i]) <= box.size[i] / 2 + pad);
+  map.walls.forEach((wall, index) => {
+    if (!wall.destructible || wall.height === 1) return;
+    const along = wall.axis === 'x' ? 0 : 2, across = 2 - along, length = wall.size[along === 0 ? 0 : 1];
+    const base = wall.elevation ?? 0, height = wall.height ?? 2.8, mid = [wall.center[0], base + height / 2, wall.center[1]];
+    const lining = trimSize.frameLining;
+    for (const end of [-1, 1]) {
+      const endAt = mid[along] + end * length / 2;
+      const beyond = [...mid]; beyond[along] = endAt + end * 0.06;
+      // Something there at mid height, or near the top or bottom (a header or sill line)?
+      // Probe along each drywall skin line (the centre line is hollow between studs) at one
+      // height. A row is covered only if both skin lines run into something there: a wall
+      // that overshoots a corner, or meets a wall that starts higher, shows its end.
+      const lineBlocked = (offset, y) => {
+        const p = [...beyond]; p[1] = y; p[across] += offset;
+        const piece = pieceAt(pieces, p[0], p[1], p[2]);
+        // A railing wall (height 1) is drawn as a railing, so it does not hide a wall end.
+        return (piece && piece.wall !== index && map.walls[piece.wall]?.height !== 1) || openingBoxes.some(box => (!box.axis || box.axis === wall.axis) && inBox(box, p));
+      };
+      // Walk up the end, one box per row of this wall's own pieces.
+      const inside = endAt - end * 0.02;
+      const probe = y => [SKIN_OFFSET, -SKIN_OFFSET, 0].map(offset => { const p = [...mid]; p[1] = y; p[along] = inside; p[across] += offset; return pieceAt(pieces, p[0], p[1], p[2]); }).find(piece => piece && piece.wall === index);
+      for (let y = base + 0.01; y < base + height - 0.01;) {
+        const hit = probe(y + 0.05);
+        if (!hit) { y += 0.1; continue; }
+        const top = Math.min(hit.center[1] + hit.size[1] / 2, base + height), bottom = Math.max(y, hit.center[1] - hit.size[1] / 2);
+        const middle = (top + bottom) / 2;
+        if (top - bottom > 0.02 && !(lineBlocked(SKIN_OFFSET, middle) && lineBlocked(-SKIN_OFFSET, middle))) {
+          const c = [0, (top + bottom) / 2, 0], s = [0, top - bottom, 0];
+          c[along] = endAt + end * lining / 2; s[along] = lining; c[across] = mid[across]; s[across] = 0.23;
+          out.push({ kind: 'return', center: c, size: s, piece: hit.id, freeEnd: true });
+        }
+        y = top + 0.001;
+      }
+    }
+  });
+}
+
 // A baseboard on a wall that ends inside a door's leaf would poke through it.
 // Cut each run back to the door's edge along the run.
 function clipToDoors(map, out) {
@@ -173,5 +222,6 @@ export function trimFor(map, pieces) {
   baseboards(map, pieces, out);
   openings(map, pieces, out);
   passageReturns(map, pieces, out);
+  freeEndReturns(map, pieces, out);
   return clipToDoors(map, out);
 }

@@ -4,6 +4,8 @@
 
 export const settingsSchema = {
   masterVolume: { label: 'Master volume', group: 'Audio', min: 0, max: 1, step: 0.05, value: 1 },
+  effectsVolume: { label: 'Effects volume', group: 'Audio', min: 0, max: 1, step: 0.05, value: 1 },
+  ambienceVolume: { label: 'Ambience volume', group: 'Audio', min: 0, max: 1, step: 0.05, value: 0.8 },
   sensitivity: { label: 'Mouse sensitivity', group: 'Controls', min: 0.25, max: 3, step: 0.05, value: 1, unit: '×' },
   invertY: { label: 'Invert vertical look', group: 'Controls', value: false },
   viewBob: { label: 'View bob', group: 'Controls', min: 0, max: 1.5, step: 0.05, value: 1, unit: '×' },
