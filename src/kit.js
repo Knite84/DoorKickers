@@ -12,7 +12,12 @@ export const ammoTypes = {
   standard: { name: 'Standard', damage: 1, wall: 1, penetration: 1, description: 'Medium penetration; depends on firearm and remaining wall layers.' },
   hollow: { name: 'Hollow-point', damage: 1.3, wall: 0.5, penetration: 0.2, description: 'More body damage; lowest penetration, but not guaranteed to stop.' },
   solid: { name: 'Solid core', damage: 0.85, wall: 2, penetration: 4, description: 'Highest penetration through soft walls and guards; reduced body damage.' },
+  // Shotgun only: one heavy projectile in place of the buckshot spread (owner, 2026-11-12).
+  // Damage and penetration multiply the shotgun's per-pellet numbers: 12 x 7 = 84 in one hit.
+  slug: { name: 'Slug', damage: 7, wall: 2.5, penetration: 3, pellets: 1, only: ['shotgun'], description: 'Shotgun only. One heavy slug instead of buckshot: no spread, hits hard and punches through walls and furniture.' },
 };
+// The ammo a weapon can load: every general type, plus any made for it alone.
+export const ammoFor = id => Object.fromEntries(Object.entries(ammoTypes).filter(([, ammo]) => !ammo.only || ammo.only.includes(id)));
 export const items = {
   nightvision: { name: 'Night vision goggles', max: 1, count: 1, wearable: true, description: 'Battery-powered light amplification. Wear with your weapon; replaces thermals. N toggles night vision.', action: 'Wear' },
   thermal: { name: 'Thermal goggles', max: 1, count: 1, wearable: true, description: 'Highlights warm bodies in view. Walls still obscure them. Replaces night vision. T toggles thermals.', action: 'Wear' },
@@ -37,7 +42,7 @@ export function validateLoadout(input) {
     const config = input.weapons?.[id];
     // Add the new weapon to older saved kits without discarding their choices.
     if (id === 'minigun' && config === undefined && input.weapons) continue;
-    if (!config || typeof config.carried !== 'boolean' || typeof config.suppressor !== 'boolean' || !['subsonic', 'supersonic'].includes(config.velocity) || !Object.hasOwn(ammoTypes, config.ammoType)) throw new Error(`Invalid ${weapons[id].name} configuration.`);
+    if (!config || typeof config.carried !== 'boolean' || typeof config.suppressor !== 'boolean' || !['subsonic', 'supersonic'].includes(config.velocity) || !Object.hasOwn(ammoFor(id), config.ammoType)) throw new Error(`Invalid ${weapons[id].name} configuration.`);
     result.weapons[id] = { carried: config.carried, suppressor: config.suppressor, velocity: config.velocity, ammoType: config.ammoType };
   }
   if (!Object.keys(weapons).some(id => result.weapons[id].carried)) throw new Error('Carry at least one weapon.');

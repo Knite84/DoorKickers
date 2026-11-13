@@ -78,7 +78,7 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
     if (hit.kind === 'prop') {
       damageProp(state, map, rules, hit.object, source, damage, position);
       // A chair or stool hit hard enough tips over (src/furniture-tip.js).
-      pushProp(state, map, rules, hit.object, direction, source === 'shotgun' ? 'pellet' : state.inventory.equipped === 'sniper' ? 'sniper' : 'bullet');
+      pushProp(state, map, rules, hit.object, direction, state.inventory.weapons[state.inventory.equipped]?.ammoType === 'slug' ? 'slug' : source === 'shotgun' ? 'pellet' : state.inventory.equipped === 'sniper' ? 'sniper' : 'bullet');
       resistance = durability.classes[furnitureClass(map.props[hit.object])].bulletCost ?? Infinity;
     }
     if (hit.kind === 'wall' && rules.destructibleWalls) {
@@ -120,11 +120,13 @@ export function fireWeapon(state, map, rules, origin, rawDirection) {
   state.nextShot = state.elapsed + weapon.interval; state.shots++;
   const damage = weapon.damage * rules.weaponDamage / 50 * ammo.damage * (config.velocity === 'subsonic' ? 0.8 : 1);
   const pellets = [];
-  for (let i = 0; i < weapon.pellets; i++) {
+  // Slugs replace the shotgun's pellets with one projectile (ammo.pellets).
+  const pelletCount = ammo.pellets ?? weapon.pellets;
+  for (let i = 0; i < pelletCount; i++) {
     const right = Math.hypot(direction[0], direction[2]) > 0.001 ? [-direction[2], 0, direction[0]] : [1, 0, 0];
     const rlen = Math.hypot(...right); right.forEach((_, index) => { right[index] /= rlen; });
     const up = [direction[1] * right[2], direction[2] * right[0] - direction[0] * right[2], -direction[1] * right[0]];
-    const angle = i * 2.39996, spread = weapon.pellets > 1 ? weapon.spread * Math.sqrt(i / weapon.pellets) : 0;
+    const angle = i * 2.39996, spread = pelletCount > 1 ? weapon.spread * Math.sqrt(i / pelletCount) : 0;
     const ray = direction.map((v, axis) => v + right[axis] * Math.cos(angle) * spread + up[axis] * Math.sin(angle) * spread);
     const norm = Math.hypot(...ray); ray.forEach((_, axis) => { ray[axis] /= norm; });
     const penetration = weapon.penetration * ammo.penetration * (config.velocity === 'subsonic' ? 0.85 : 1);

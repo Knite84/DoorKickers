@@ -13,7 +13,7 @@ import { alertGuards } from './combat.js';
 export const tipping = {
   kinds: ['chair', 'barStool'],
   // Push per hit; a piece tips at a total of 1.
-  push: { bullet: 0.35, sniper: 0.7, pellet: 0.2, melee: 1.2, blast: 2 },
+  push: { bullet: 0.35, sniper: 0.7, pellet: 0.2, slug: 1, melee: 1.2, blast: 2 },
   angle: Math.PI / 2 * 0.95,   // how far it falls (just short of flat, resting on its back)
   time: 0.45,                  // seconds for the fall
   lyingHeight: 0.45,           // height of a tipped seat, for sight

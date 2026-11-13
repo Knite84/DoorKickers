@@ -550,7 +550,8 @@ Start from: `src/weapon-models.js` (the first-person models as data), `src/npc-v
 
 - The owner picks one real firearm for each slot (rifle, pistol, shotgun, sniper, minigun) and supplies side-on reference photos with overall and barrel lengths. Photos stay in the git-ignored `references/`; the models carry no brand marks or logos.
 - Rebuild each model to those proportions, with sights, controls and magazine shapes that match, keeping the 5.3 `sight`, `port`, `casing` and `moves` data working and its tests passing.
-- Ammo types (standard, hollow-point, solid core, plus subsonic) get visible differences where the player sees ammo: magazine and casing colours, shotgun shell colours, tracer tint. Owner to say which.
+- Ammo looks stay as they are for now (owner, 2026-11-12). Shotgun slugs were added as a fourth, shotgun-only type the same day.
+- Later, if wanted: ammo types (standard, hollow-point, solid core, slug, plus subsonic) get visible differences where the player sees ammo: magazine and casing colours, shotgun shell colours, tracer tint. Owner to say which.
 
 Done when: each weapon reads as its real counterpart at a glance, and every 5.3 and 6.2 test still passes.
 
