@@ -572,6 +572,33 @@ Done when: each weapon reads as its real counterpart at a glance, and every 5.3 
 - Gameplay change: the default pistol now holds 15 rounds instead of 12; tests that assumed 12 now read the model's magazine.
 - Not done: a separate gunshot sound for the .45; each model's sights seen while aiming in play.
 
+**Kit layout (owner, 2026-11-13; stage A built the same day).** The owner's plan for the armoury, in stages:
+
+- **Weapon categories:** Rifle, DMR, SMG, Pistol, Shotgun, Sniper, Other (`kit.js` `weaponCategories`). Each category is one card with a model picker, as the pistol has. Empty categories are hidden until their lists arrive. The M134 sits in Other.
+- **You carry a primary and an alternate**, chosen in planning. The Tab menu is a cheat menu: any weapon can be swapped into either slot mid-mission, or equipped straight away (it replaces the slot in hand), and the pistol model can change with a fresh magazine. Older saved kits migrate: their starting weapon becomes the primary and the pistol (or another carried weapon) the alternate. Weapon drop or staging points may come later.
+- **Throwables and equipment are separate** (`items[id].group`). Throwables are for the fight and each has its own key; equipment is setup gear for a breach or an ambush and shares one key that cycles it, so it never slows a quick frag.
+- **Keys:** 1 primary, 2 alternate, 3 frag, 4 flashbang, 5 Molotov, 6 equipment (press again for the next: det cord, claymore, pick gun, crowbar, axe; it remembers the last used), 7 knife, 8 med kit. The mouse wheel swaps primary and alternate. All rebindable.
+- **Stage B:** the owner's lists, each as models in its category. DMRs aim through a 2–4× LPVO. Rifles built 2026-11-13 (below); DMR, SMG, sniper and shotgun lists still to come.
+
+**Built (rifles, 2026-11-13).** Six rifles on the Rifle card, built the same way as the pistols (`kit.js` `rifleModels`, `weapon-handling.js` `rifleHandling`, `weapon-models.js` `rifleSpecs`):
+
+| Model | Calibre | Barrel | Mag | How it plays |
+|---|---|---|---|---|
+| M4A1 URG-I (default) | 5.56 NATO | 14.5 in | 30 | The old assault rifle's numbers; tan rail |
+| HK416 | 5.56 NATO | 14.5 in | 30 | Least climb; slightly slower cadence, draw and reload |
+| SIG MCX Rattler | .300 BLK | 5.5 in | 30 | Fastest to draw and aim; jumps more; 55 damage, less penetration |
+| Noveske N4 | 5.56 NATO | 14.5 in (assumed) | 30 | A little more damage and penetration |
+| Q Boombox | 8.6 BLK | 9 in (assumed) | 20 | 70 damage, most penetration and climb, slower cadence |
+| Q Honey Badger | .300 BLK | 7 in | 30 | Built-in suppressor: always quiet, no muzzle flash |
+
+- Model choice is now general: `modelSets` and `defaultModels` in kit.js; any weapon listed there gets a model picker showing calibre and magazine. Weapon keys are `'rifle:hk416'` and so on.
+- Calibre: subsonic ammo keeps 95% of damage and 90% of penetration for the Blackout rounds, against 80% and 85% for 5.56 and the rest (`subsonic` on the model).
+- `isSuppressed` in kit.js covers fitted and built-in suppressors for the guard alert radius, the sound and the muzzle flash. The Honey Badger's checkbox shows "Built-in suppressor", fixed on.
+- The models are true size now, so the rifle in hand is shorter than the old placeholder (muzzle about 40 cm ahead of the grip instead of 78).
+- `scripts/weapon-preview.html` (was pistol-preview) shows pistols or rifles side by side at true scale.
+- Not done: separate sounds per calibre; aiming down each rifle's sights in play; the owner to confirm the N4 and Boombox barrel lengths.
+- **Stage C, Other:** minigun (exists), grenade launcher, crossbow, flamethrower, RPG, and an Easter egg: a flight suit covered in Velcro and two-shot derringers. The operator grabs two at a time, fires akimbo (four shots a pair), throws them down and grabs the next pair. 24 derringers (12 pairs), refilled by Restock. Seen as hands and dropped derringers for now; a full third-person suit later.
+
 ## Phase 6: Effects, physics and sound
 
 ### 6.1 Impact effects and decals

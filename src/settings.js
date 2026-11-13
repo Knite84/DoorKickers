@@ -24,8 +24,8 @@ export const bindingLabels = {
   run: 'Run (hold)', creep: 'Creep (hold)', crouch: 'Crouch', jump: 'Jump', interact: 'Interact',
   reload: 'Reload', aim: 'Aim / scope', holster: 'Holster', cover: 'Take cover', peek: 'Peek (hold)', detonate: 'Detonate charges',
   nightvision: 'Night vision', thermal: 'Thermals', view: 'Change view', map: 'Tactical map', floor: 'Switch floor', pause: 'Pause',
-  weapon1: 'Weapon 1', weapon2: 'Weapon 2', weapon3: 'Weapon 3', weapon4: 'Weapon 4', weapon5: 'Weapon 5',
-  weapon6: 'Slot 6 · Grenade', weapon7: 'Slot 7 · Flashbang', weapon8: 'Slot 8 · Det cord',
+  weapon1: 'Primary weapon', weapon2: 'Alternate weapon', weapon3: 'Frag grenade', weapon4: 'Flashbang', weapon5: 'Molotov',
+  weapon6: 'Equipment (again: next)', weapon7: 'Knife', weapon8: 'Med kit',
 };
 export const defaultBindings = {
   forward: 'KeyW', back: 'KeyS', left: 'KeyA', right: 'KeyD',

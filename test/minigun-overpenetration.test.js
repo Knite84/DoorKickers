@@ -30,10 +30,10 @@ test('M134 blocks sprint only while equipped; held sprint resumes with a lighter
 
 test('old saved loadouts gain an M134 without losing their selected kit; invalid new configurations still fail', () => {
   const kit = defaultLoadout(); delete kit.weapons.minigun;
-  kit.primary = 'pistol'; kit.weapons.pistol.ammoType = 'solid'; kit.items.grenade = 0;
+  kit.primary = 'pistol'; kit.alternate = 'rifle'; kit.weapons.pistol.ammoType = 'solid'; kit.items.grenade = 0;
   const restored = validateLoadout(kit);
   assert.equal(restored.primary, 'pistol'); assert.equal(restored.weapons.pistol.ammoType, 'solid');
-  assert.equal(restored.items.grenade, 0); assert.equal(restored.weapons.minigun.carried, true);
+  assert.equal(restored.items.grenade, 0); assert.ok(restored.weapons.minigun, 'the M134 is added, ready to pick');
   restored.weapons.minigun.velocity = 'invalid'; assert.throws(() => validateLoadout(restored));
 });
 

@@ -13,7 +13,7 @@ import { breakEffect } from './impacts.js';
 import { hearFootstep } from './combat.js';
 import { playerEye, doorCenter } from './world.js';
 import { createMotion, resetMotion, shapeInput, observeMotion } from './player-motion.js';
-import { weapons, items, ammoTypes, weaponKey, equippedWeapon, weaponSpec, defaultLoadout, validateLoadout, equip, toggleHolster, restockEquipment, slotOrder, cycleEquipped } from './kit.js';
+import { weapons, items, ammoTypes, weaponKey, equippedWeapon, weaponSpec, defaultLoadout, validateLoadout, equip, toggleHolster, restockEquipment, slotOrder, cycleEquipped, equipSlot as equipKitSlot, equipmentCycle, assignSlot } from './kit.js';
 import { useEquipment, detonateCharges, weaponStrike } from './equipment.js';
 import { createKitMenu } from './menus.js';
 import { bindCombatMouse } from './combat-input.js';
@@ -324,6 +324,11 @@ const kitMenu = createKitMenu({
   },
   onClose: () => { menuVisible = false; if (menuWasActive && menuPaused && state.status === 'paused') state.status = 'active'; if (screens.current() === 'briefing') showBriefing(); else if (!screens.current()) canvas.focus(); },
   equip: id => { equip(state, id); aimed = false; }, detonate,
+  // Menu (cheat mode): put any weapon in the primary or alternate slot mid-mission; if the
+  // weapon it replaces was in hand, the new one comes out.
+  setSlot: (slot, id) => { const before = state.inventory[slot], inHand = state.inventory.equipped === before; assignSlot(state.inventory, slot, id); if (inHand) { equip(state, state.inventory[slot]); aimed = false; } },
+  // A model changed mid-mission comes with a full magazine of its own size.
+  modelChanged: id => { const full = weaponSpec(weaponKey(state.inventory, id)).magazine; state.inventory.magazines[id] = full; if (state.inventory.equipped === id) { state.ammo = full; state.reloadUntil = 0; } },
   restock: () => restockEquipment(state),
 });
 function openKit() { kitMenu.open(['planning', 'complete', 'captured'].includes(state.status) ? 'planning' : 'inventory'); }
@@ -332,8 +337,8 @@ function toggleAim() {
   if (view !== 'first' || mapOpen || menuVisible || state.status !== 'active' || !weapons[state.inventory.equipped]) return;
   aimed = !aimed;
 }
-// Wheel: zooms the sniper scope while aiming; otherwise, in first person, cycles
-// the slots (down = next). A short cooldown keeps one trackpad swipe to one step.
+// Wheel: zooms the sniper scope while aiming; otherwise, in first person, swaps
+// between the primary and alternate weapons. A short cooldown keeps one trackpad swipe to one step.
 let wheelReadyAt = 0;
 canvas.addEventListener('wheel', event => {
   if (aimed && state.inventory.equipped === 'sniper') { event.preventDefault(); scopeZoom = Math.max(2, Math.min(8, scopeZoom - Math.sign(event.deltaY))); return; }
@@ -342,13 +347,16 @@ canvas.addEventListener('wheel', event => {
   const now = performance.now();
   if (now < wheelReadyAt) return;
   wheelReadyAt = now + 150;
-  if (cycleEquipped(state, Math.sign(event.deltaY))) { aimed = false; firing = false; }
+  if (cycleEquipped(state)) { aimed = false; firing = false; }
 }, { passive: false });
+// Number keys: 1 primary, 2 alternate, 3 to 5 throwables, 6 equipment (cycles), 7 knife, 8 med kit.
 function equipSlot(slot) {
-  const id = slotOrder[slot - 1];
-  if (!id) return;
-  if (equip(state, id)) { aimed = false; firing = false; }
-  else message(`${weaponSpec(weaponKey(state.inventory, id))?.name ?? items[id].name} not carried${items[id] ? ' or used up' : ''}. Add it in loadout planning.`);
+  const key = slotOrder[slot - 1];
+  if (!key) return;
+  const id = equipKitSlot(state, slot);
+  if (id) { aimed = false; firing = false; if (key === 'equipment') message(`${items[id].name} · press ${slot} again for the next piece.`); return; }
+  if (key === 'equipment') message(equipmentCycle.some(item => state.inventory.items[item] > 0) ? 'No other equipment left to take out.' : 'No equipment left. Add some in loadout planning.');
+  else message(`${items[key]?.name ?? 'Weapon'} used up or not carried. Restock it from the Tab menu.`);
 }
 function detonate() {
   if (state.status !== 'active') return message('Resume the mission before detonating charges.');
@@ -524,6 +532,8 @@ function pause() {
   else if (state.status === 'paused') resume();
 }
 window.addEventListener('keydown', event => {
+  // Tab always closes the kit menu, even when a click that re-drew it left focus outside it.
+  if (event.code === 'Tab' && !event.shiftKey && kitMenu.isOpen()) { event.preventDefault(); if (!event.repeat) kitMenu.close(); return; }
   if (menuVisible) return;
   const action = lookup.get(event.code);
   if (mapOpen && (action === 'map' || action === 'floor')) {

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { distance, lineOfSight, obstacles } from './simulation.js';
 import { buildWallPieces } from './destruction.js';
-import { weapons, items, weaponKey, baseWeapon } from './kit.js';
+import { weapons, items, weaponKey, baseWeapon, isSuppressed } from './kit.js';
 import { elevation, eyeHeight, playerEye, doorCenter, doorSize, windowCenter, windowSize, activeProps } from './world.js';
 import { sightHalfAngle, sightRangeFactor } from './guard-traits.js';
 import { segmentClear } from './combat.js';
@@ -681,13 +681,14 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     weapon.position.set(...pose.position); weapon.rotation.set(...pose.rotation);
     if (shown) {
       shown.suppressorParts.forEach(mesh => { mesh.visible = !!config?.suppressor; });
+      const quiet = isSuppressed(state.inventory, shownId);
       const offsets = { magazine: pose.parts.magazine.offset, support: pose.parts.support, bolt: pose.parts.bolt, pump: pose.parts.pump };
       for (const [kind, list] of Object.entries(shown.moving)) for (const { mesh, base } of list) {
         mesh.position.set(base.x + offsets[kind][0], base.y + offsets[kind][1], base.z + offsets[kind][2]);
         if (kind === 'magazine') mesh.visible = pose.parts.magazine.visible;
       }
       if (shown.shell) { shown.shell.visible = !!pose.parts.shell; if (pose.parts.shell) shown.shell.position.set(...pose.parts.shell); }
-      flash.position.set(shown.muzzle[0], shown.muzzle[1], shown.muzzle[2] - (config?.suppressor ? suppressorFor(shownKey) : 0) - 0.02);
+      flash.position.set(shown.muzzle[0], shown.muzzle[1], shown.muzzle[2] - (quiet ? suppressorFor(shownKey) : 0) - 0.02);
     }
     const weaponVisible = !!spec && firstView && !scopedNow && !controls.menuVisible;
     weapon.visible = weaponVisible && shownId !== 'minigun';
@@ -707,7 +708,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     lastCycle = cycle;
     if (ejectQueued) { if (firstView && ejectQueued === shownKey) ejectCasing(shownKey); ejectQueued = null; }
     // Flash, puff and the brief light on nearby walls.
-    const flashAge = hand.time - hand.lastShot, flashing = flashAge < 0.05 && state.status === 'active' && !config?.suppressor && hand.lastWeapon === shownKey && firstView;
+    const flashAge = hand.time - hand.lastShot, flashing = flashAge < 0.05 && state.status === 'active' && !isSuppressed(state.inventory, shownId) && hand.lastWeapon === shownKey && firstView;
     const activeFlash = shownId === 'minigun' ? miniFlash : flash;
     flash.visible = flashing && activeFlash === flash && weapon.visible;
     miniFlash.visible = flashing && activeFlash === miniFlash && minigun.visible;

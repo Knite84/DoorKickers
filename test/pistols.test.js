@@ -69,10 +69,11 @@ test('each model has its own shape, scaled to its real length, with sights on th
   }
 });
 
-test('the weapon key names the chosen pistol only', () => {
+test('the weapon key names the chosen model of weapons that have models', () => {
   const state = mission('m17');
   assert.equal(weaponKey(state.inventory, 'pistol'), 'pistol:m17');
-  assert.equal(weaponKey(state.inventory, 'rifle'), 'rifle');
+  assert.equal(weaponKey(state.inventory, 'rifle'), 'rifle:m4urgi');
+  assert.equal(weaponKey(state.inventory, 'shotgun'), 'shotgun');
   assert.equal(weaponKey({}, 'pistol'), `pistol:${defaultPistol}`);
 });
 

@@ -117,26 +117,103 @@ function pistolModel(spec) {
   };
 }
 
+// Rifles (owner, 2026-11-13; POLISH_PLAN step 5.4). One builder fed each rifle's barrel
+// length and parts; the receiver, grip and magazine well sit where the old model had them,
+// so hands, ejection and aiming work the same. Keys are 'rifle:<model>' (kit.js rifleModels).
+// Barrel lengths: M4A1 URG-I and HK416 14.5 in, Rattler 5.5 in, Honey Badger 7 in (inside
+// its suppressor). The Noveske N4 (14.5 in) and Q Boombox (9 in) are assumptions.
+const inch = 0.0254;
+const rifleSpecs = {
+  // Long free-float rail in a desert tan, collapsible stock, flash hider.
+  m4urgi: { barrel: 14.5 * inch, rail: 0.33, railColor: 0x8a7a5a, body: 0x23292b, stock: 'carbine', magazine: 'stanag', device: 'flash' },
+  // Shorter rail with the piston gas block showing ahead of it, slimline stock, steel magazine.
+  hk416: { barrel: 14.5 * inch, rail: 0.26, railColor: 0x1f2426, body: 0x1f2426, stock: 'hk', magazine: 'steel', device: 'flash', gasBlock: true },
+  // Tiny: 5.5 in barrel, short rail, folding skeleton stock, no buffer tube.
+  rattler: { barrel: 5.5 * inch, rail: 0.11, railColor: 0x2a2f31, body: 0x2a2f31, stock: 'folding', magazine: 'stanag', device: 'flash', casing: [0.0045, 0.035] },
+  // Slim rail, wide flash hider.
+  n4: { barrel: 14.5 * inch, rail: 0.33, railColor: 0x30353a, body: 0x262b2d, stock: 'carbine', magazine: 'stanag', device: 'wide' },
+  // 8.6 Blackout: big straight magazine, brake, pistol-style brace.
+  boombox: { barrel: 9 * inch, rail: 0.2, railColor: 0x50524c, body: 0x2c2f30, stock: 'pdw', magazine: 'big', device: 'brake', casing: [0.0055, 0.045], receiver: 1.12 },
+  // Integral suppressor makes up the whole fore end; PDW stock.
+  honeybadger: { barrel: 7 * inch, rail: 0, railColor: 0x2a2d2e, body: 0x2a2d2e, stock: 'pdw', magazine: 'stanag', device: 'integral', casing: [0.0045, 0.035], can: [0.023, 0.27] },
+};
+function rifleModel(spec) {
+  const dark = 0x111517, bore = 0.03, chamber = 0.02, scale = spec.receiver ?? 1;
+  const railTop = 0.073, front = -0.06;   // upper receiver front; the rail or can starts here
+  const barrelEnd = chamber - spec.barrel;
+  const parts = [];
+  // Upper and lower receivers, top rail, charging handle.
+  parts.push(box([0, 0.045, 0.03], [0.034 * scale, 0.04, 0.18], spec.body));
+  parts.push(box([0, railTop - 0.004, 0.03], [0.022, 0.008, 0.18], spec.body));
+  for (let i = 0; i < 6; i++) parts.push(box([0, railTop + 0.0005, 0.1 - i * 0.028], [0.023, 0.002, 0.008], dark));
+  parts.push(box([0, 0.066, 0.125], [0.03, 0.01, 0.02], dark));
+  parts.push(box([0, -0.005, 0.015], [0.036 * scale, 0.045, 0.17], spec.body));
+  parts.push(box([0, -0.04, -0.025], [0.04 * scale, 0.04, 0.075], spec.body));           // magazine well
+  // Ejection port and forward assist on the right.
+  parts.push(box([0.0175 * scale, 0.04, 0.02], [0.002, 0.016, 0.05], dark));
+  // Pistol grip, trigger and guard.
+  parts.push(box([0, -0.075, 0.075], [0.032, 0.11, 0.045], 0x1b1f20, { rotation: [-0.3, 0, 0] }));
+  parts.push(box([0, -0.04, 0.04], [0.006, 0.02, 0.006], dark, { rotation: [-0.2, 0, 0] }));
+  parts.push(box([0, -0.055, 0.035], [0.02, 0.004, 0.06], spec.body));
+  // Magazine: curved box magazine in two pieces, a steel one, or a big straight 8.6.
+  if (spec.magazine === 'big') {
+    parts.push(box([0, -0.12, -0.03], [0.034, 0.13, 0.085], dark, { rotation: [0.06, 0, 0], moves: 'magazine' }));
+  } else {
+    const color = spec.magazine === 'steel' ? 0x3d4244 : 0x1c1f20;
+    parts.push(box([0, -0.1, -0.026], [0.026, 0.09, 0.064], color, { rotation: [0.1, 0, 0], moves: 'magazine' }));
+    parts.push(box([0, -0.175, -0.04], [0.026, 0.07, 0.062], color, { rotation: [0.3, 0, 0], moves: 'magazine' }));
+  }
+  // Stock.
+  if (spec.stock === 'carbine' || spec.stock === 'hk') {
+    parts.push(tube([0, 0.03, 0.2], 0.015, 0.16, dark));
+    const hk = spec.stock === 'hk';
+    parts.push(box([0, 0.015, 0.34], [hk ? 0.046 : 0.04, hk ? 0.09 : 0.075, 0.16], hk ? 0x1d2122 : 0x2a2f30));
+    parts.push(box([0, -0.02, 0.41], [0.042, 0.12, 0.02], 0x151819));
+  } else if (spec.stock === 'folding') {
+    for (const y of [0.05, -0.005]) parts.push(box([0, y, 0.23], [0.012, 0.012, 0.2], dark));
+    parts.push(box([0, 0.02, 0.33], [0.03, 0.09, 0.015], dark));
+  } else {
+    for (const x of [-0.012, 0.012]) parts.push(tube([x, 0.035, 0.2], 0.005, 0.18, dark));
+    parts.push(box([0, 0.02, 0.29], [0.04, 0.085, 0.018], dark));
+  }
+  // Rear sight ears on the upper rail; the front post goes on the rail or can.
+  for (const side of [-1, 1]) parts.push(box([side * 0.007, railTop + 0.009, 0.1], [0.006, 0.018, 0.015], dark));
+  let muzzleZ, sightZ, supportZ;
+  if (spec.device === 'integral') {
+    // The can is the fore end: a thick tube from the receiver to the muzzle, with a short top rail.
+    const [radius, length] = spec.can;
+    parts.push(tube([0, bore, front - length / 2], radius, length, spec.body));
+    parts.push(tube([0, bore, front - length + 0.004], radius * 0.45, 0.01, dark));
+    parts.push(box([0, railTop - 0.004, front - 0.05], [0.022, 0.008, 0.1], spec.body));
+    muzzleZ = front - length; sightZ = front - 0.09; supportZ = front - 0.08;
+  } else {
+    // Free-float rail around the barrel, with a top strip and side slots.
+    const railFront = front - spec.rail;
+    parts.push(box([0, 0.034, front - spec.rail / 2], [0.044, 0.058, spec.rail], spec.railColor));
+    parts.push(box([0, railTop - 0.005, front - spec.rail / 2], [0.022, 0.01, spec.rail], spec.railColor));
+    for (let z = front - 0.03; z > railFront + 0.02; z -= 0.035) for (const side of [-1, 1]) parts.push(box([side * 0.0225, 0.03, z], [0.002, 0.012, 0.02], dark));
+    if (spec.gasBlock) parts.push(box([0, 0.042, railFront - 0.015], [0.026, 0.03, 0.03], dark));
+    // Barrel beyond the rail, then the muzzle device.
+    if (barrelEnd < railFront) parts.push(tube([0, bore, (railFront + barrelEnd) / 2], 0.0085, railFront - barrelEnd, dark));
+    const device = { flash: [0.011, 0.055], wide: [0.016, 0.06], brake: [0.015, 0.06] }[spec.device];
+    parts.push(tube([0, bore, barrelEnd - device[1] / 2], device[0], device[1], dark));
+    if (spec.device === 'brake') for (const side of [-1, 1]) parts.push(box([side * 0.014, bore, barrelEnd - 0.03], [0.004, 0.012, 0.03], 0x07090a));
+    muzzleZ = Math.min(barrelEnd - device[1], railFront);
+    sightZ = railFront + 0.012; supportZ = front - Math.min(spec.rail * 0.6, 0.2);
+  }
+  parts.push(box([0, railTop + 0.009, sightZ], [0.005, 0.018, 0.008], dark));
+  // Suppressor (fitted only), except on the integral one.
+  const canLength = spec.device === 'integral' ? 0 : 0.17;
+  if (canLength) parts.push(tube([0, bore, muzzleZ - canLength / 2], 0.019, canLength, 0x151a1c, { role: 'suppressor' }));
+  parts.push(...hands([0, -0.095, 0.075], [0, -0.02, supportZ]));
+  const [radius, length] = spec.casing ?? [0.0045, 0.045];
+  return {
+    muzzle: [0, bore, muzzleZ], sight: [0, railTop + 0.018, sightZ], port: [0.03, 0.045, 0.02],
+    casing: [radius, length, brass], suppressorLength: canLength, parts,
+  };
+}
+
 export const weaponModels = {
-  rifle: {
-    muzzle: [0, 0.03, -0.78], sight: [0, 0.1025, -0.52], port: [0.03, 0.05, -0.08], casing: [0.0045, 0.045, brass],
-    parts: [
-      box([0, -0.01, -0.06], [0.06, 0.075, 0.32], metal),
-      box([0, 0.045, -0.12], [0.056, 0.06, 0.44], steel),
-      tube([0, 0.03, -0.42], 0.034, 0.3, 0x354438),
-      tube([0, 0.03, -0.64], 0.011, 0.2, metal),
-      tube([0, 0.03, -0.74], 0.02, 0.06, steel),
-      box([0, -0.12, -0.1], [0.036, 0.17, 0.065], metal, { rotation: [0.12, 0, 0], moves: 'magazine' }),
-      box([0, -0.085, 0.07], [0.042, 0.12, 0.05], metal, { rotation: [-0.3, 0, 0] }),
-      box([0, 0.0, 0.3], [0.052, 0.085, 0.24], 0x2a3a30),
-      box([0, 0.085, -0.52], [0.012, 0.035, 0.012], metal),
-      // Rear sight: two ears with a gap, so the front post shows between them.
-      box([-0.011, 0.093, 0.0], [0.008, 0.03, 0.035], metal),
-      box([0.011, 0.093, 0.0], [0.008, 0.03, 0.035], metal),
-      tube([0, 0.03, -0.84], 0.027, 0.2, 0x151a1c, { role: 'suppressor' }),
-      ...hands([0, -0.095, 0.075], [0, -0.025, -0.42]),
-    ],
-  },
   shotgun: {
     muzzle: [0, 0.03, -0.9], sight: [0, 0.065, -0.88], port: [0.03, 0.02, -0.12], casing: [0.0105, 0.065, 0x8e2a22],
     parts: [
@@ -174,12 +251,14 @@ export const weaponModels = {
 };
 
 for (const [id, spec] of Object.entries(pistolSpecs)) weaponModels[`pistol:${id}`] = pistolModel(spec);
-// The plain 'pistol' is the default model, kept off the list so it is not built twice.
+for (const [id, spec] of Object.entries(rifleSpecs)) weaponModels[`rifle:${id}`] = rifleModel(spec);
+// The plain 'pistol' and 'rifle' are the default models, kept off the list so they are not built twice.
 Object.defineProperty(weaponModels, 'pistol', { value: weaponModels[`pistol:${defaultPistol}`], enumerable: false });
+Object.defineProperty(weaponModels, 'rifle', { value: weaponModels['rifle:m4urgi'], enumerable: false });
 // The model for a weapon key ('pistol:mk23'), falling back to the slot's default.
 export const modelFor = key => key ? weaponModels[key] ?? weaponModels[key.split(':')[0]] : undefined;
 
 // Length of a fitted suppressor beyond the muzzle, so the flash moves out with it.
 export const suppressorLength = { rifle: 0.2, pistol: 0.2, shotgun: 0.2, sniper: 0.22 };
-for (const id of Object.keys(pistolSpecs)) suppressorLength[`pistol:${id}`] = weaponModels[`pistol:${id}`].suppressorLength;
+for (const key of Object.keys(weaponModels)) if (weaponModels[key].suppressorLength !== undefined) suppressorLength[key] = weaponModels[key].suppressorLength;
 export const suppressorFor = key => suppressorLength[key] ?? suppressorLength[key?.split(':')[0]] ?? 0;

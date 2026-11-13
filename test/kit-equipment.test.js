@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { defaults } from '../src/rules.js';
 import { courtyard } from '../src/maps/courtyard.js';
 import { createMission, stepMission, movePlayer } from '../src/simulation.js';
-import { defaultLoadout, validateLoadout, equip, weapons, slotOrder, cycleEquipped, equippedWeapon } from '../src/kit.js';
+import { defaultLoadout, validateLoadout, equip, weapons, slotOrder, cycleEquipped, equippedWeapon, equipSlot, assignSlot } from '../src/kit.js';
 import { fireWeapon, reload, finishReload } from '../src/weapons.js';
 import { useEquipment, detonateCharges, stepEquipment } from '../src/equipment.js';
 import { damagePlayer } from '../src/combat.js';
@@ -15,12 +15,23 @@ function ready(map = arena, rules = safeRules, kit = defaultLoadout()) {
 }
 
 test('loadout validation rejects missing kits, invalid ammo, no weapons and invalid quantities', () => {
-  for (const mutate of [kit => { kit.weapons.rifle.velocity = 'invalid'; }, kit => { kit.weapons.sniper.ammoType = '__proto__'; }, kit => { for (const gun of Object.values(kit.weapons)) gun.carried = false; }, kit => { kit.items.grenade = -1; }, kit => { kit.items.axe = 1.5; }]) {
+  for (const mutate of [kit => { kit.weapons.rifle.velocity = 'invalid'; }, kit => { kit.weapons.sniper.ammoType = '__proto__'; }, kit => { kit.alternate = kit.primary; }, kit => { kit.primary = 'crossbow'; }, kit => { kit.items.grenade = -1; }, kit => { kit.items.axe = 1.5; }]) {
     const kit = defaultLoadout(); mutate(kit); assert.throws(() => validateLoadout(kit));
   }
   assert.throws(() => validateLoadout(null));
-  const kit = defaultLoadout(); kit.weapons.rifle.carried = false;
-  assert.equal(validateLoadout(kit).primary, 'pistol');
+  // You carry a primary and an alternate; the carried flags follow them.
+  const kit = validateLoadout(defaultLoadout());
+  assert.deepEqual([kit.primary, kit.alternate], ['rifle', 'pistol']);
+  assert.deepEqual(Object.keys(weapons).filter(id => kit.weapons[id].carried), ['rifle', 'pistol']);
+  // Older kits marked weapons carried: their starting weapon is the primary, the pistol the alternate.
+  const old = defaultLoadout(); delete old.alternate; old.primary = 'sniper';
+  for (const id of Object.keys(weapons)) old.weapons[id].carried = ['sniper', 'shotgun', 'pistol'].includes(id);
+  assert.deepEqual((({ primary, alternate }) => [primary, alternate])(validateLoadout(old)), ['sniper', 'pistol']);
+  for (const gun of Object.values(old.weapons)) gun.carried = false;
+  assert.throws(() => validateLoadout(old), /at least one/);
+  // Assigning a slot swaps a weapon already in the other one.
+  const swap = defaultLoadout(); assignSlot(swap, 'primary', 'pistol');
+  assert.deepEqual([swap.primary, swap.alternate], ['pistol', 'rifle']);
 });
 test('weapon switching preserves separate magazines and reloads use each magazine size', () => {
   const state = ready(); state.ammo = 21;
@@ -28,8 +39,10 @@ test('weapon switching preserves separate magazines and reloads use each magazin
   state.ammo = 3; assert.equal(reload(state), true);
   state.elapsed = 1.1; finishReload(state); assert.equal(state.ammo, 15);
   equip(state, 'rifle'); assert.equal(state.ammo, 21);
-  state.inventory.weapons.sniper.carried = false;
-  assert.equal(equip(state, 'sniper'), false);
+  // Taking out a weapon you do not carry (menu cheat mode) puts it in the slot in hand.
+  assert.equal(equip(state, 'sniper'), true);
+  assert.deepEqual([state.inventory.primary, state.inventory.alternate], ['sniper', 'pistol']);
+  assert.ok(state.inventory.weapons.sniper.carried && !state.inventory.weapons.rifle.carried);
 });
 test('all weapons have independent cadence, damage, and shotgun pellet spread', () => {
   for (const id of Object.keys(weapons)) {
@@ -125,22 +138,27 @@ test('pausing freezes projectiles and guard damage as well as movement', () => {
   stepMission(state, arena, safeRules, 1, { x: 0, z: 0 }); assert.deepEqual(state, before);
 });
 
-test('slots 6 to 8 hold the grenade, flashbang and det cord, and the wheel cycles all eight', () => {
-  assert.deepEqual(slotOrder.slice(5), ['grenade', 'flashbang', 'detcord']);
+test('number keys: 1 primary, 2 alternate, 3 to 5 throwables, 6 cycles equipment, 7 knife, 8 med kit; the wheel swaps weapons', () => {
+  assert.deepEqual(slotOrder, ['primary', 'alternate', 'grenade', 'flashbang', 'molotov', 'equipment', 'knife', 'medkit']);
   const state = createMission(courtyard, { ...defaults, guardCount: 0 }, defaultLoadout());
-  state.inventory.equipped = 'rifle';
-  const seen = [];
-  for (let i = 0; i < slotOrder.length; i++) seen.push(cycleEquipped(state, 1));
-  assert.deepEqual(seen, [...slotOrder.slice(1), 'rifle'], 'down the list and back round');
-  assert.equal(cycleEquipped(state, -1), 'detcord', 'up from slot 1 wraps to slot 8');
-  // Used-up and uncarried slots are skipped.
-  state.inventory.items.flashbang = 0; state.inventory.weapons.minigun.carried = false;
-  state.inventory.equipped = 'sniper';
-  assert.equal(cycleEquipped(state, 1), 'grenade');
-  assert.equal(cycleEquipped(state, 1), 'detcord');
-  // From something off the list, down starts at slot 1 and up at slot 8.
-  state.inventory.equipped = 'knife';
-  assert.equal(cycleEquipped(state, 1), 'rifle');
-  state.inventory.equipped = 'unarmed';
-  assert.equal(cycleEquipped(state, -1), 'detcord');
+  assert.equal(state.inventory.equipped, 'rifle');
+  assert.equal(equipSlot(state, 2), 'pistol');
+  assert.equal(equipSlot(state, 1), 'rifle');
+  assert.equal(equipSlot(state, 3), 'grenade');
+  assert.equal(equipSlot(state, 4), 'flashbang');
+  assert.equal(equipSlot(state, 5), 'molotov');
+  assert.equal(equipSlot(state, 7), 'knife');
+  assert.equal(equipSlot(state, 8), 'medkit');
+  // Equipment: each press takes out the next piece, skipping used-up ones and wrapping round.
+  assert.deepEqual([1, 2, 3, 4, 5, 6].map(() => equipSlot(state, 6)), ['detcord', 'claymore', 'pickgun', 'crowbar', 'axe', 'detcord']);
+  state.inventory.items.claymore = 0;
+  assert.equal(equipSlot(state, 6), 'pickgun');
+  // From a gun, the equipment key brings back the last piece used.
+  equipSlot(state, 1); assert.equal(equipSlot(state, 6), 'pickgun');
+  // Used-up throwables do not come out.
+  state.inventory.items.flashbang = 0; assert.equal(equipSlot(state, 4), null);
+  // The wheel swaps primary and alternate; from anything else it takes out the primary.
+  equipSlot(state, 1);
+  assert.equal(cycleEquipped(state), 'pistol'); assert.equal(cycleEquipped(state), 'rifle');
+  equipSlot(state, 3); assert.equal(cycleEquipped(state), 'rifle');
 });

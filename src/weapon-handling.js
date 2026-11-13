@@ -64,13 +64,28 @@ export const pistolHandling = {
   // Big and heavy, with a .45 push: slow to draw and aim, a long roll back down.
   mk23: { draw: 0.45, aimTime: 0.15, climb: { pitch: 0.031, yaw: 0.007, drift: 0 }, recover: { share: 0.75, delay: 0.08, time: 0.11 }, kick: { back: 0.04, rise: 0.17, roll: 0.03 }, spring: { stiffness: 260, damping: 24 } },
 };
+// The owner's rifles (kit.js rifleModels).
+export const rifleHandling = {
+  m4urgi: {},
+  // Piston and weight: a little steadier, a little slower to bring up.
+  hk416: { draw: 0.5, climb: { pitch: 0.0092, yaw: 0.003, drift: 0.001 }, spring: { stiffness: 240, damping: 25 } },
+  // 5.5 in barrel and a folding stock: fast to draw and aim, but it jumps more.
+  rattler: { draw: 0.34, aimTime: 0.14, climb: { pitch: 0.0125, yaw: 0.0045, drift: 0.0015 }, kick: { back: 0.03, rise: 0.06, roll: 0.025 } },
+  n4: { draw: 0.47, climb: { pitch: 0.01, yaw: 0.0033, drift: 0.0012 } },
+  // 8.6 Blackout: the biggest kick of the rifles.
+  boombox: { draw: 0.45, aimTime: 0.2, climb: { pitch: 0.017, yaw: 0.005, drift: 0.002 }, recover: { share: 0.6, delay: 0.16, time: 0.14 }, kick: { back: 0.05, rise: 0.075, roll: 0.03 } },
+  // The suppressor soaks some kick; short and handy.
+  honeybadger: { draw: 0.37, aimTime: 0.15, climb: { pitch: 0.0105, yaw: 0.0035, drift: 0.001 }, kick: { back: 0.03, rise: 0.045, roll: 0.018 } },
+};
+const modelHandling = { pistol: pistolHandling, rifle: rifleHandling };
 const merged = {};
 // Handling for a weapon key; undefined for items.
 export function handlingFor(key) {
   if (!key) return undefined;
   const [id, model] = key.split(':');
-  if (!model || !pistolHandling[model]) return handling[id];
-  return merged[key] ??= { ...handling[id], ...pistolHandling[model] };
+  const extra = modelHandling[id]?.[model];
+  if (!extra) return handling[id];
+  return merged[key] ??= { ...handling[id], ...extra };
 }
 export const itemDraw = 0.3;            // grenades, tools and other carried items
 export const holsterShare = 0.5;        // lowering takes this share of the item's own draw time

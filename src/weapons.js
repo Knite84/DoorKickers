@@ -1,5 +1,5 @@
 import { damageWall, rayBox } from './destruction.js';
-import { weapons, ammoTypes, equippedWeapon } from './kit.js';
+import { weapons, ammoTypes, equippedWeapon, isSuppressed } from './kit.js';
 import { alertGuards, damageGuard, shatterWindow } from './combat.js';
 import { damageDoor } from './doors.js';
 import { doorCenter, doorSize, elevation, windowCenter, windowSize, propBox, decorBox } from './world.js';
@@ -118,7 +118,9 @@ export function fireWeapon(state, map, rules, origin, rawDirection) {
   if (!rules.unlimitedAmmo) state.ammo--;
   state.inventory.magazines[state.inventory.equipped] = state.ammo;
   state.nextShot = state.elapsed + weapon.interval; state.shots++;
-  const damage = weapon.damage * rules.weaponDamage / 50 * ammo.damage * (config.velocity === 'subsonic' ? 0.8 : 1);
+  // Subsonic rounds lose damage and penetration; Blackout calibres, made for it, lose less.
+  const subsonic = config.velocity === 'subsonic' ? weapon.subsonic ?? { damage: 0.8, penetration: 0.85 } : { damage: 1, penetration: 1 };
+  const damage = weapon.damage * rules.weaponDamage / 50 * ammo.damage * subsonic.damage;
   const pellets = [];
   // Slugs replace the shotgun's pellets with one projectile (ammo.pellets).
   const pelletCount = ammo.pellets ?? weapon.pellets;
@@ -129,10 +131,11 @@ export function fireWeapon(state, map, rules, origin, rawDirection) {
     const angle = i * 2.39996, spread = pelletCount > 1 ? weapon.spread * Math.sqrt(i / pelletCount) : 0;
     const ray = direction.map((v, axis) => v + right[axis] * Math.cos(angle) * spread + up[axis] * Math.sin(angle) * spread);
     const norm = Math.hypot(...ray); ray.forEach((_, axis) => { ray[axis] /= norm; });
-    const penetration = weapon.penetration * ammo.penetration * (config.velocity === 'subsonic' ? 0.85 : 1);
+    const penetration = weapon.penetration * ammo.penetration * subsonic.penetration;
     pellets.push(traceShot(state, map, rules, origin, ray, damage, rules.wallDamage * ammo.wall, penetration));
   }
-  const radius = (config.suppressor ? 6 : 18) * (config.velocity === 'subsonic' ? 0.5 : 1);
+  const suppressed = isSuppressed(state.inventory, state.inventory.equipped);
+  const radius = (suppressed ? 6 : 18) * (config.velocity === 'subsonic' ? 0.5 : 1);
   alertGuards(state, rules, origin, radius, map);
-  return { ...pellets[0], kind: pellets.some(p => p.kind === 'guard') ? 'guard' : pellets[0].kind, removed: pellets.flatMap(p => p.removed), killed: pellets.some(p => p.killed), headshot: pellets.some(p => p.headshot), doorDestroyed: pellets.some(p => p.doorDestroyed), doorHit: pellets.find(p => p.doorHit !== null)?.doorHit ?? null, pellets, suppressed: config.suppressor };
+  return { ...pellets[0], kind: pellets.some(p => p.kind === 'guard') ? 'guard' : pellets[0].kind, removed: pellets.flatMap(p => p.removed), killed: pellets.some(p => p.killed), headshot: pellets.some(p => p.headshot), doorDestroyed: pellets.some(p => p.doorDestroyed), doorHit: pellets.find(p => p.doorHit !== null)?.doorHit ?? null, pellets, suppressed };
 }
