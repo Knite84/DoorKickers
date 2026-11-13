@@ -62,12 +62,25 @@ export function createLightingModel(map) {
     // Step toward the room's centre until the point is clear of structure.
     const solidAt=p=>(state?.wallPieces?piecesAlong(state.wallPieces,p,p):boxes).some(box=>(box.hp??1)>0&&!box.floor
       &&[0,1,2].every(axis=>Math.abs(p[axis]-box.center[axis])<=box.size[axis]/2));
-    if(roomAt&&solidAt([position[0],base+height,position[1]])){
-      const [cx,cz]=roomAt.center,away=Math.hypot(cx-position[0],cz-position[1])||1;
-      for(let step=.05;step<=.5;step+=.05){
-        const moved=[position[0]+(cx-position[0])/away*step,position[1]+(cz-position[1])/away*step];
-        if(!solidAt([moved[0],base+height,moved[1]])){position=moved;break;}
+    // Step toward the room's centre and also sideways, and keep whichever clear
+    // point sees the most light: the stair divider wall runs straight through the
+    // stairwell's centre, and one side of it is the dark space under the upper flight.
+    // Spaces that are indoor only through their floor slab (the lower stairwell) have no room centre.
+    if(solidAt([position[0],base+height,position[1]])){
+      const [cx,cz]=roomAt?.center??position,away=Math.hypot(cx-position[0],cz-position[1]);
+      let best=null;
+      for(const [dx,dz] of [...(away>1e-6?[[(cx-position[0])/away,(cz-position[1])/away]]:[]),[1,0],[-1,0],[0,1],[0,-1]]){
+        for(let step=.05;step<=.5;step+=.05){
+          const moved=[position[0]+dx*step,position[1]+dz*step];
+          if(solidAt([moved[0],base+height,moved[1]])) continue;
+          // A step through an outside wall lands outdoors; it never stands in for an indoor point.
+          if(roomAt&&!inside(moved,roomAt.center,roomAt.size)) break;
+          const lit=sample(moved,base,destroyed,height,state),amount=lit.daylight+lit.solar+lit.electric;
+          if(lit.interior&&(!best||amount>best.amount)) best={lit,amount};
+          break;
+        }
       }
+      if(best) return best.lit;
     }
     const eye=[position[0],base+height,position[1]];
     for(const window of windows) {

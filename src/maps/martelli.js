@@ -244,6 +244,10 @@ v(915,510,720); h(590,915,1005,[door(942,40)]); h(718,915,1005,[door(942,40)]);
 // Stairwell: a wall on the mudroom side, open guard rails everywhere else.
 v(510,510,590); v(565,510,590,[],0); rail('z',565,510,590); rail('z',620,510,590); rail('x',510,510,565);
 floor(510,590,620,640,1.6,{ solid: true, depth: 0.15, material: 'deck' });
+// The landing's garage side. Below the garage slab it is foundation; above it, an
+// ordinary wall up to the Main ceiling. Without it the stairwell opened into the
+// garage and the dark space under its slab (owner report, 2026-11-12).
+v(510,590,646,[],0,true,garageFloor); v(510,590,646,[],garageFloor,false,main+2.8-garageFloor);
 
 // Align the lower plan's north/south margins to the shared stair and facade.
 // Its outer front walls must stay inside the main outline, clear of solid yard.

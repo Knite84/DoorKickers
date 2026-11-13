@@ -206,3 +206,15 @@ test('the garage can be walked in from the driveway and out by the mudroom and s
   walk(state, 480, 700); walk(state, 300, 720); walk(state, 149, 560); walk(state, 149, 440); // up the side steps and out
   assert.ok(Math.abs(state.playerY - 3.2) < 0.05);
 });
+
+test('the stair landing is walled off from the garage from the foundation floor to the Main ceiling', () => {
+  // Owner report, 2026-11-12: the landing's garage side (plan x 510, z 590 to 646) was open,
+  // showing the garage and the dark space under its slab from the stairs.
+  const pz = v => v / 0.02 + 500, px = v => v / 0.02 + 600;
+  const side = martelli.walls.filter(w => Math.abs(px(w.center[0]) - 510) < 1 && pz(w.center[1] - w.size[1] / 2) <= 591 && pz(w.center[1] + w.size[1] / 2) >= 645);
+  const spans = side.map(w => [w.elevation, w.elevation + w.height]).sort((a, b) => a[0] - b[0]);
+  assert.ok(spans.length >= 1 && Math.abs(spans[0][0]) < 1e-9, JSON.stringify(spans));
+  let top = spans[0][1];
+  for (const [low, high] of spans.slice(1)) { assert.ok(low <= top + 1e-6, 'no gap between wall pieces'); top = Math.max(top, high); }
+  assert.ok(top >= 3.2 + 2.8 - 1e-6, `wall reaches ${top}`);
+});

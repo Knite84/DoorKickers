@@ -18,11 +18,12 @@ Updated 2026-11-12. This is the current state of the project for a fresh session
   - **Door height:** Martelli doors are 2.03 m tall (garage doors 2.13 m) under a breakable wall header, instead of ceiling-high slabs. `doorHeight(door)` in `src/world.js` reads `door.height`; other maps keep 2.8 m doors. As a result, light no longer passes over doors between rooms, and a jump inside a doorway can hit the header.
 - **Controls (2026-11-12):** keys 6, 7 and 8 equip the grenade, flashbang and det cord. The mouse wheel cycles slots 1 to 8 in first person. See the 7.3 note.
 - **Bedroom 3 fix (2026-11-12):** light samples that landed inside walls baked black patches in eleven rooms, and accent paint wrapped round corners. Both are fixed; see `lessons_learned.md`.
-- **Step 5.3, weapon handling, is built, awaiting owner check** (2026-11-12, not committed when written). Muzzle climb and a weapon draw delay are real gameplay, each behind a rule in Gunplay; everything else (kick, sway, ADS, reload and draw animations, flash with a brief light, casings, no wall clipping) is drawn only. Tuning is in the `handling` table in `src/weapon-handling.js`. See the 5.3 Built note.
+- **Step 5.3, weapon handling, is built, awaiting owner check** (committed in `aac8919`). Muzzle climb and a weapon draw delay are real gameplay, each behind a rule in Gunplay; everything else (kick, sway, ADS, reload and draw animations, flash with a brief light, casings, no wall clipping) is drawn only. Tuning is in the `handling` table in `src/weapon-handling.js`. See the 5.3 Built note.
+- **Stairwell fixes (2026-11-12):** the landing's garage side now has a wall (foundation to Main ceiling), and the light field no longer bakes the top of the wall between the flights black. See `lessons_learned.md`. 108 light samples are still pitch black in windowless spaces with no light fitting (closets, mostly on the primary-bedroom side); not yet reviewed.
 - **Step 6.5, destructible furniture, is built, awaiting owner check and tuning** (committed in `a44a692`). All the tuning is in the `durability` table in `src/furniture.js`.
 - **Built 2026-11-12 and not yet committed when this was written:** the 4.1 passage returns, the 4.3 leftovers (fence, shrubs, curbs, open deck treads), step 4.4 (three great-room windows, lowered garage with steps and ramps), and step 6.3 (movement feel: acceleration, view bob, placeholder footsteps; tuning in the `motion` table in `src/player-motion.js`). Run `git status` and `git log -3` first: the owner may have committed since.
 - Each of those has a **Built** note in `POLISH_PLAN.md` with what was seen on screen and what was not.
-- `npm test`: 307 passing on 2026-11-12, about 3 seconds.
+- `npm test`: 309 passing on 2026-11-12, about 3 seconds.
 
 ## Good next work
 

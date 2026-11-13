@@ -173,3 +173,16 @@ test('light samples that land inside a wall are taken from the room side instead
   assert.equal(sample.interior, true);
   assert.ok(sample.daylight > 0.2 && sample.electric > 0.2, JSON.stringify(sample));
 });
+
+test('light samples inside the stair divider wall are lit from the open side, not the dark space under the upper flight', () => {
+  // The lower stairwell is indoor only through its floor slab (no room centre), and
+  // the wall between the two flights (plan x 565) runs through the light grid column.
+  const model = createLightingModel(martelli);
+  const at = (px, pz) => [martelli.bounds.minX + (Math.floor(((px - 600) * 0.02 - martelli.bounds.minX) / 0.65) + 0.5) * 0.65, (pz - 500) * 0.02];
+  for (const pz of [531, 564]) {
+    const [x] = at(565, pz), z = martelli.bounds.minZ + (Math.floor(((pz - 500) * 0.02 - martelli.bounds.minZ) / 0.65) + 0.5) * 0.65;
+    const sample = model.sample([x, z], 0, [], 2.2, { timeOfDay: 'night' });
+    assert.equal(sample.interior, true);
+    assert.ok(sample.daylight + sample.electric > 0.2, JSON.stringify(sample));
+  }
+});
