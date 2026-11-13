@@ -23,6 +23,7 @@ import { weaponModels, suppressorLength } from './weapon-models.js';
 import { handling, createHandling, resetHandling, fireKick, stepHandling, weaponPose, shownItem, drawDrop, cycleProgress, ejectsBetween, scopeUp, fieldOfView, weaponReady, hipPosition } from './weapon-handling.js';
 import { stairDressFor, dressKinds, railWalls } from './stair-dress.js';
 import { createScenePost } from './scene-post.js';
+import { createSceneEffects } from './scene-effects.js';
 import { createRoofMesh } from './roof-mesh.js';
 import { createSiteMesh } from './site-mesh.js';
 import { fitSunShadow, tuneSunShadow } from './scene-shadows.js';
@@ -66,6 +67,9 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   const structure = buildWallPieces(map);
   const lighting = createSceneLighting(map, structure);
   const sky = createSceneSky(renderer, scene, lighting.sunDirection);
+  // Impact particles, bullet holes, blood, scorch, explosions and fire (src/scene-effects.js).
+  const impactEffects = createSceneEffects({ scene, renderer, lighting, map });
+  let drawnState = null, muzzleLight = null;
   const ambient=new THREE.HemisphereLight(0xd9ecdf,0x344438,2.5);scene.add(ambient);
   const sun = new THREE.DirectionalLight(0xffebc4, 3.2);
   sun.position.set(...lighting.sunDirection.map(v=>v*35));
@@ -322,7 +326,8 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   const fireGeometry = new THREE.ConeGeometry(0.35, 0.8, 6);
   function syncDynamic(state) {
     const active = new Set();
-    for (const object of [...state.devices, ...state.projectiles, ...state.fires]) {
+    // Fires are drawn by src/scene-effects.js as flames and smoke.
+    for (const object of [...state.devices, ...state.projectiles]) {
       active.add(object);
       let mesh = dynamicMeshes.get(object);
       if (!mesh) {
@@ -336,32 +341,16 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     for (const [object, mesh] of dynamicMeshes) if (!active.has(object)) { scene.remove(mesh); dynamicMeshes.delete(object); }
   }
   const effects = [];
-  const chipGeometry = new THREE.BoxGeometry(0.065, 0.04, 0.06);
-  function shotEffect(shot) {
+  function shotEffect(shot, state = drawnState) {
     const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...shot.origin), new THREE.Vector3(...shot.position)]), new THREE.LineBasicMaterial({ color: 0xffdf9a, transparent: true, opacity: 0.85 }));
     scene.add(line); effects.push({ mesh: line, life: 0.075, disposable: true });
-    // Show every entry/exit-layer impact, including those beyond the first wall.
-    for (const impact of shot.impacts ?? []) {
-      const chip = new THREE.Mesh(chipGeometry, material(impact.material === 'timber' ? 0xa16d3f : 0xe3dbc3));
-      chip.position.set(...impact.position); scene.add(chip);
-      effects.push({ mesh: chip, life: 0.8, velocity: new THREE.Vector3(0, 0.8, 0) });
-    }
-    const color = shot.material === 'timber' ? 0xa16d3f : shot.kind === 'guard' ? 0xc89058 : 0xe3dbc3;
-    for (let i = 0; i < (shot.removed.length ? 15 : 5); i++) {
-      const chip = new THREE.Mesh(chipGeometry, material(color)); chip.position.set(...shot.position);
-      scene.add(chip); effects.push({ mesh: chip, life: 1 + Math.random(), velocity: new THREE.Vector3((Math.random() - 0.5) * 3, Math.random() * 3, (Math.random() - 0.5) * 3) });
-    }
+    if (!state) return;
+    impactEffects.shot(shot, state);
+    if (shot.removed?.length) impactEffects.breach(shot.removed.filter(piece => piece && piece.center), state);
   }
-  function eventEffect(event) {
+  function eventEffect(event, state = drawnState) {
     if (event.type === 'footstep') return;   // heard, not drawn
-    if (event.type === 'door-break' || event.type === 'glass-break' || event.type === 'furniture-break') {
-      for (let i = 0; i < 18; i++) {
-        const chip = new THREE.Mesh(chipGeometry, material(event.type === 'glass-break' ? 0x9edce7 : event.type === 'furniture-break' ? 0x7a5636 : 0xa57946)); chip.position.set(...event.position);
-        chip.scale.set(2, 1 + Math.random() * 6, 2); scene.add(chip);
-        effects.push({ mesh: chip, life: 1.2 + Math.random(), velocity: new THREE.Vector3((Math.random() - 0.5) * 4, Math.random() * 3, (Math.random() - 0.5) * 4) });
-      }
-      return;
-    }
+    if (impactEffects.event(event, state)) return;
     if (event.type === 'guard-shot') {
       const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(...event.origin), new THREE.Vector3(...event.position)]), new THREE.LineBasicMaterial({ color: 0xf39a72 }));
       scene.add(line); effects.push({ mesh: line, life: 0.12, disposable: true }); return;
@@ -647,7 +636,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
       puff.sprite.position.copy(flashWorld); puff.life = 0.7; puff.strength = puffQueued; puff.sprite.visible = true;
     }
     puffQueued = 0;
-    lighting.setMuzzleLight(flashing ? flashWorld : null, flashing ? flashSize * (1 - flashAge / 0.05) : 0);
+    muzzleLight = flashing ? { position: flashWorld.toArray(), color: [1, 0.68, 0.36], strength: flashSize * (1 - flashAge / 0.05), radius: 4.5 } : null;
     stepCasings(dt);
     stepPuffs(dt, Math.max(0.25, lightingProfile(state.timeOfDay ?? rules.timeOfDay ?? 'day').daylight ?? 1));
     for (let i = effects.length - 1; i >= 0; i--) {
@@ -698,6 +687,19 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
       doorCracks[i].material.opacity = Math.min(1, damage * 2);
     });
     objective.visible = !state.collected && onLevel(map.objective);
+    // Marks follow what they sit on: wall pieces, closed doors, intact furniture, the shown floor.
+    drawnState = state;
+    impactEffects.update(dt, currentCamera, state, owner => {
+      switch (owner.kind) {
+        case 'piece': return wallDisplay[owner.index] === 1;
+        case 'door': return doors[owner.index]?.visible;
+        case 'prop': return !propBroken(state, owner.index) && onLevel(map.props[owner.index]);
+        case 'decor': return !decorBroken(state, owner.index) && onLevel(map.decor[owner.index]);
+        case 'world': return !overview || owner.level === undefined || owner.level === selectedLevel;
+        default: return false;
+      }
+    }, { daylight: Math.max(0.2, lightingProfile(state.timeOfDay ?? rules.timeOfDay ?? 'day').daylight ?? 1), vision: mapOpen ? 'off' : state.inventory.vision });
+    lighting.setDynamicLights([...(muzzleLight ? [muzzleLight] : []), ...impactEffects.lights()].slice(0, 4));
     objective.rotation.y += dt * 0.6;
     extraction.material.opacity = state.collected ? 0.7 + Math.sin(state.elapsed * 4) * 0.25 : 0.4;
     grid.visible = rules.floorPlan && overview; grid.position.y = selectedLevel * 3.2 + 0.08;
@@ -790,6 +792,8 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
       if (!handling[id]?.cycle && id !== 'minigun') ejectQueued = id;
       puffQueued = suppressed ? 0.1 : 0.22;
     },
+    // For preview pages: how many marks and chips are alive.
+    effectCounts: () => impactEffects.count(),
     // True while the sniper scope overlay should show (the scope has reached the eye).
     scoped: () => scopedNow,
     // For preview pages: 0 turns the baked contact shading off.
@@ -805,10 +809,10 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
       height: canvas.height,
     }),
     dispose: () => {
-      post?.dispose(); sky.dispose(); lighting.dispose(); surfaceShading?.dispose();
+      post?.dispose(); sky.dispose(); lighting.dispose(); surfaceShading?.dispose(); impactEffects.dispose();
       for (const { mesh } of furnitureRender) if (mesh.isInstancedMesh) mesh.dispose();
       resizeObserver.disconnect(); canvas.removeEventListener('pointermove', pointerMove); canvas.removeEventListener('wheel', zoomWheel);
-      const geometries = new Set([chipGeometry]), sceneMaterials = new Set(Object.values(materials)), textures = new Set();
+      const geometries = new Set(), sceneMaterials = new Set(Object.values(materials)), textures = new Set();
       scene.traverse(object => {
         if (object.geometry) geometries.add(object.geometry);
         if (object.material) for (const mat of Array.isArray(object.material) ? object.material : [object.material]) sceneMaterials.add(mat);
@@ -828,7 +832,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     // Mouse look scale and vertical inversion (src/settings.js).
     setLook: ({ sensitivity = 1, invertY = false } = {}) => { lookSensitivity = sensitivity; lookInvert = invertY ? -1 : 1; },
     look: (horizontal, vertical) => { if (view === 'first' && !mapOpen) { yaw -= horizontal; pitch = THREE.MathUtils.clamp(pitch + vertical, -1.35, 1.35); } },
-    reset: (heading = -0.55) => { yaw = lastYaw = heading; pitch = lastPitch = 0; resetHandling(hand); lastCycle = null; ejectQueued = null; puffQueued = 0; for (const casing of casingPool) casing.mesh.visible = false; for (const puff of puffPool) puff.sprite.visible = false; selectedLevel = 0; for (const effect of effects) { scene.remove(effect.mesh); if (effect.disposable) { effect.mesh.geometry.dispose(); effect.mesh.material.dispose(); } } effects.length = 0; },
+    reset: (heading = -0.55) => { impactEffects.reset(); yaw = lastYaw = heading; pitch = lastPitch = 0; resetHandling(hand); lastCycle = null; ejectQueued = null; puffQueued = 0; for (const casing of casingPool) casing.mesh.visible = false; for (const puff of puffPool) puff.sprite.visible = false; selectedLevel = 0; for (const effect of effects) { scene.remove(effect.mesh); if (effect.disposable) { effect.mesh.geometry.dispose(); effect.mesh.material.dispose(); } } effects.length = 0; },
     movement: (x, z) => view === 'first' ? [x * Math.cos(yaw) + z * Math.sin(yaw), -x * Math.sin(yaw) + z * Math.cos(yaw)] : [x, z],
     aim: state => {
       const origin = playerEye(state);

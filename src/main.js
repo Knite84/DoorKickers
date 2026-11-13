@@ -358,7 +358,7 @@ function shoot(now = performance.now()) {
   if (items[state.inventory.equipped]) { const result = useEquipment(state, map, rules, aim.origin, aim.direction); if (result) message(result); return; }
   const shot = fireWeapon(state, map, rules, aim.origin, aim.direction);
   if (shot) {
-    for (const pellet of shot.pellets) scene.shotEffect(pellet);
+    for (const pellet of shot.pellets) scene.shotEffect(pellet, state);
     scene.fired(state.inventory.equipped, { aimed: aimed && view === 'first', crouched: !!state.crouched, climb: rules.muzzleClimb !== false, suppressed: !!shot.suppressed });
     audio.play(rules.gunVolume * (shot.suppressed ? 0.25 : 1));
     if (shot.kind === 'guard') hitUntil = now + 150;
@@ -543,7 +543,7 @@ function frame(now) {
   if (firing && weapons[state.inventory.equipped]?.automatic) shoot(now);
   for (const effect of state.events.splice(0)) {
     if (effect.type === 'footstep') { if (playerSettings.footstepSounds) audio.step(effect.surface, effect.gait, effect.landing); continue; }
-    scene?.eventEffect(effect);
+    scene?.eventEffect(effect, state);
   }
   const facing = scene?.aim(state).direction; if (facing) state.facing = [facing[0], facing[2]];
   if (state.status === 'active') scene?.face(movement[0], movement[1]);

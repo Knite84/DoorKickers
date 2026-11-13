@@ -47,14 +47,19 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
   let last = { distance: 80, kind: 'miss' }, removed = [], killed = false, guardHit = false, headshot = false, doorDestroyed = false, doorHit = null;
   const hitGuards = new Set(), drywallImpacts = new Set();
   const impacts = [];
+  // Drawn-only data for impact effects (src/impacts.js): soft furniture and decor the shot passed through.
+  const softHits = [];
+  let stopped = false;
   for (const hit of hits) {
     if (hit.kind === 'decor') {
       // Drawn-only TVs, mirrors and rugs take damage but never stop a shot.
       if (rules.destructibleFurniture !== false) damageDecor(state, map, rules, hit.object, source, damage, origin.map((v, i) => v + direction[i] * hit.distance));
+      softHits.push({ kind: 'decor', index: hit.object, distance: hit.distance, position: origin.map((v, i) => v + direction[i] * hit.distance), soft: true });
       continue;
     }
     if (hit.kind === 'prop' && !durability.classes[furnitureClass(map.props[hit.object])].stopsBullets) {
       damageProp(state, map, rules, hit.object, source, damage, origin.map((v, i) => v + direction[i] * hit.distance));
+      softHits.push({ kind: 'prop', index: hit.object, distance: hit.distance, position: origin.map((v, i) => v + direction[i] * hit.distance), soft: true });
       continue;
     }
     if (hit.distance > 80 || hit.kind === 'wall' && hit.object.hp <= 0 || hit.kind === 'door' && state.doors[hit.object] || hit.kind === 'guard' && (hit.object.health <= 0 || hitGuards.has(hit.object))) continue;
@@ -65,7 +70,9 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
     }
     last = hit;
     const position = origin.map((v, i) => v + direction[i] * hit.distance);
-    impacts.push({ position, material: hit.kind === 'door' ? 'timber' : hit.object?.material, kind: hit.kind, zone: hit.zone, wall: hit.kind === 'wall' ? hit.object.wall : null, damage, penetration });
+    impacts.push({ position, material: hit.kind === 'door' ? 'timber' : hit.object?.material, kind: hit.kind, zone: hit.zone, wall: hit.kind === 'wall' ? hit.object.wall : null, damage, penetration,
+      // For drawing only: which piece or object was hit, and how far along the ray.
+      piece: hit.kind === 'wall' ? hit.object.id : undefined, index: typeof hit.object === 'number' ? hit.object : undefined, distance: hit.distance });
     let resistance = Infinity;
     if (hit.kind === 'prop') {
       damageProp(state, map, rules, hit.object, source, damage, position);
@@ -92,10 +99,10 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
       killed = damageGuard(state, hit.object, hit.zone === 'head' ? hit.object.health : bodyDamage, { zone: hit.zone, joint: hit.joint, direction, position, origin, protectedHit }) || killed;
       hitGuards.add(hit.object); guardHit = true; resistance = penetrationCosts.body;
     }
-    if (penetration <= resistance) break;
+    if (penetration <= resistance) { stopped = true; break; }
     penetration -= resistance; damage *= 0.8; wallPower *= 0.8;
   }
-  return { origin, position: origin.map((v, i) => v + direction[i] * last.distance), kind: guardHit ? 'guard' : last.kind, material: last.kind === 'door' ? 'timber' : last.object?.material, removed, killed, headshot, doorDestroyed, doorHit, impacts };
+  return { origin, position: origin.map((v, i) => v + direction[i] * last.distance), kind: guardHit ? 'guard' : last.kind, material: last.kind === 'door' ? 'timber' : last.object?.material, removed, killed, headshot, doorDestroyed, doorHit, impacts, softHits, stopped };
 }
 export function fireWeapon(state, map, rules, origin, rawDirection) {
   if(state.playerCover&&!state.playerCover.peeking) return null;

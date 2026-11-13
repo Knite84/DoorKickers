@@ -19,16 +19,17 @@ Updated 2026-11-12. This is the current state of the project for a fresh session
 - **Controls (2026-11-12):** keys 6, 7 and 8 equip the grenade, flashbang and det cord. The mouse wheel cycles slots 1 to 8 in first person. See the 7.3 note.
 - **Bedroom 3 fix (2026-11-12):** light samples that landed inside walls baked black patches in eleven rooms, and accent paint wrapped round corners. Both are fixed; see `lessons_learned.md`.
 - **Step 5.3, weapon handling, is built, awaiting owner check** (committed in `aac8919`). Muzzle climb and a weapon draw delay are real gameplay, each behind a rule in Gunplay; everything else (kick, sway, ADS, reload and draw animations, flash with a brief light, casings, no wall clipping) is drawn only. Tuning is in the `handling` table in `src/weapon-handling.js`. See the 5.3 Built note.
+- **Step 6.1, impact effects and decals, is built, awaiting owner check** (2026-11-12, not committed when written): per-material particles, bullet holes, blood marks, scorch, explosions, fire and four shared effect lights. Tuning is in `recipes` in `src/impacts.js`. See the 6.1 Built note. Owner's running order from here: 6.2, then 6.4 and the small follow-ups, then 5.1.
 - **Stairwell fixes (2026-11-12):** the landing's garage side now has a wall (foundation to Main ceiling), and the light field no longer bakes the top of the wall between the flights black. See `lessons_learned.md`. 108 light samples are still pitch black in windowless spaces with no light fitting (closets, mostly on the primary-bedroom side); not yet reviewed.
 - **Step 6.5, destructible furniture, is built, awaiting owner check and tuning** (committed in `a44a692`). All the tuning is in the `durability` table in `src/furniture.js`.
 - **Built 2026-11-12 and not yet committed when this was written:** the 4.1 passage returns, the 4.3 leftovers (fence, shrubs, curbs, open deck treads), step 4.4 (three great-room windows, lowered garage with steps and ramps), and step 6.3 (movement feel: acceleration, view bob, placeholder footsteps; tuning in the `motion` table in `src/player-motion.js`). Run `git status` and `git log -3` first: the owner may have committed since.
 - Each of those has a **Built** note in `POLISH_PLAN.md` with what was seen on screen and what was not.
-- `npm test`: 309 passing on 2026-11-12, about 3 seconds.
+- `npm test`: 315 passing on 2026-11-12, about 3 seconds.
 
 ## Good next work
 
 Everything a Sonnet session could start alone is built. What remains in the [status table](POLISH_PLAN.md#status):
-1. **Opus-tagged steps:** 5.1 skinned guard bodies, 6.1 impact effects and decals, 6.2 loose physics, 6.4 sound. 6.1 and 6.4 should pick up the `furniture-break` event (`src/furniture-damage.js`) and the `footstep` event (`src/player-motion.js`); 6.4 replaces the placeholder `audio.step()`.
+1. **Opus-tagged steps (owner's order: 6.2, 6.4, small follow-ups, 5.1):** 6.2 loose physics, 6.4 sound, 5.1 skinned guard bodies. 6.4 should pick up the `furniture-break` event (`src/furniture-damage.js`), the `footstep` event (`src/player-motion.js`) and the 6.1 effect events; it replaces the placeholder `audio.step()`.
 2. **Proposals still to write:** mantling over low cover (6.3, a gameplay change), and guards reacting to the player's footsteps (a gameplay change).
 3. **Small follow-ups:** trace the raw timber ends still showing in the hall near the passage returns; handrails for the open deck stairs and the garage steps; darkening for furniture drawn as single meshes (glass, fixtures).
 
@@ -36,7 +37,7 @@ Everything a Sonnet session could start alone is built. What remains in the [sta
 
 These need the owner's machine or knowledge, so a session can't finish them. Remind the owner when relevant; don't block on them.
 
-0. **Newest work to check in play:** weapon handling (5.3): how much the rifle climbs and settles, the draw times, aiming down the sights, the flash and casings; furniture damage numbers (the axe and crowbar are probably too slow), the movement feel, the garage and its ramps, the great-room windows (two are not climbable because the sectional and end table stand against them; the owner asked for all three), the fence layout (a guess), and whether the outdoor planters should become breakable.
+0. **Newest work to check in play:** impact effects (6.1): dust and debris amounts, hole size, blood marks, explosions and fire; weapon handling (5.3): how much the rifle climbs and settles, the draw times, aiming down the sights, the flash and casings; furniture damage numbers (the axe and crowbar are probably too slow), the movement feel, the garage and its ramps, the great-room windows (two are not climbable because the sectional and end table stand against them; the owner asked for all three), the fence layout (a guess), and whether the outdoor planters should become breakable.
 
 1. **Frame timing.** Measure 1080p at Low, Medium and High in a foreground tab using `scripts/interior-preview.html`. This is the 60 fps budget check for steps 1.1, 1.4, 3.2 and 3.4.
 2. **Interior walkthrough.** Check window highlights (1.2), reflections (1.3), shadow shimmer (1.5), contact shading strength (3.4), and fixture styles and positions against the photos (2.2).

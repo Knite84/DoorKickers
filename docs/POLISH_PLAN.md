@@ -101,7 +101,7 @@ These are traps that have already cost time. Follow them on every rendering chan
 | 5.1 | Skinned guard bodies | ☐ |  | Opus |
 | 5.2 | First-person weapon and hands | ◐ | Owner look at the four firearm models; wall clipping fixed in 5.3 by drawing first-person items in front; melee and thrown-item hands, and minigun not done | Sonnet |
 | 5.3 | Weapon handling feel | ◐ | Built 2026-11-12; owner to feel the climb, recovery, draw times, ADS and flash in play and tune the `handling` table. Not felt in play: any of the timing (automation browser runs at about one frame a second); frame time | Opus, then Sonnet for tuning |
-| 6.1 | Impact effects and decals | ☐ |  | Opus |
+| 6.1 | Impact effects and decals | ◐ | Built 2026-11-12; owner to judge in play: amount of dust and debris, hole size, blood marks, explosion and fire look. Not seen in play: a live firefight, a real grenade or Molotov, the overhead and tactical views with marks, frame time | Sonnet for tuning |
 | 6.2 | Loose physics: casings, debris, doors, chairs | ☐ |  | Opus |
 | 6.3 | Movement feel | ◐ | Built 2026-11-12; owner to feel it in play. Mantling stays out, as a separate proposal | Sonnet (mantling: Opus) |
 | 6.4 | Sound | ☐ |  | Opus brief, then Sonnet |
@@ -542,6 +542,15 @@ Start from: `shotEffect` and `eventEffect` in `src/scene.js` (the current tracer
 - Per-material impact response keyed off what the ray hit (drywall, wood, masonry, glass, metal, fabric, flesh): dust, chips, sparks, splinters.
 - Bullet-hole and scorch decals with a capped pool, removed with the piece they sit on.
 - Better explosions, fire and smoke; glass shards.
+
+**Built (2026-11-12), awaiting owner check.** Owner chose blood puffs and marks.
+- **Where it lives:** `src/impacts.js` (pure, tested in `test/impacts.test.js`) decides what a hit throws up and which marks it leaves; every look number is in its `recipes`, `blood` and `scorch` tables. `src/scene-effects.js` draws it: one instanced mesh of chips, two point clouds (puffs, and additive glows for fire and sparks) and one instanced mesh of decals from a painted atlas. `scene.js` routes shots and events to it.
+- **Hit data:** `traceShot` in `src/weapons.js` now also reports, for drawing only, the piece or object index and distance of each impact, the soft furniture and decor a shot passed through (`softHits`), and whether the bullet stopped (`stopped`). The existing `impacts` entries and every weapon test are unchanged.
+- **Per material:** drywall dust and chalk, wood splinters, masonry grit, metal sparks, ceramic chips, fabric fluff, glass shards, outdoor dirt, and a dark-red mist on guards. Floors take their finish from the room plan (carpet, tile, wood).
+- **Marks:** entry holes, exit holes on the far face when a bullet goes through (none inside a wall cavity), blood on the first surface behind a hit guard within 1.8 m and sometimes on the floor below, scorch on the floor and nearest walls around a blast. Capped at 400, oldest replaced. Marks follow piece visibility (convention 3), closed doors, intact furniture, and the shown floor in the overhead and tactical views.
+- **Big moments:** blasts (fireball, smoke that lingers 3 to 5 s, debris, sparks, scorch), flashbangs (white flare, smoke), Molotov fires (rising flames, smoke, flickering light; the old cone is gone), glass, door and furniture breaks by material, wall breaches.
+- **Lights:** the muzzle light became four shared short-lived lights (`setDynamicLights` in `src/scene-lighting.js`): muzzle, blasts, flashbangs and fires. They ignore walls, so a little light reaches the next room.
+- **Seen in Chrome** on the interior preview page, firing through the game's own `fireWeapon`: holes on the Bedroom 3 accent wall and the bunk bed, dust and splinters, an explosion (fireball, room light, smoke, floor scorch), blood spatter on the wall behind a simulated guard hit, a fire at night with the power off, night vision and thermal (fire white-hot). The game loads and deploys with no console errors. **Not seen:** a live firefight with real guards, a thrown grenade, flashbang or Molotov in play, the overhead and tactical views with marks on other floors, minigun spam, frame time. The fire is soft round glows rather than tongues of flame.
 
 ### 6.2 Loose physics: casings, debris, doors and chairs
 
