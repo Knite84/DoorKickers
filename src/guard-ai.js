@@ -1,6 +1,6 @@
 import { segmentClear, sendGuardReport } from './combat.js';
 import { isArmed } from './kit.js';
-import { elevation, playerEye, doorCenter, doorSize, windowCenter, windowSize, stairHeight, supportHeight, activeProps, propBroken } from './world.js';
+import { elevation, playerEye, doorCenter, doorSize, windowCenter, windowSize, stairHeight, supportHeight, activeProps, propBroken, propDown } from './world.js';
 import { rayBox } from './destruction.js';
 import { findGuardPath, navigationFor } from './navigation.js';
 import { guardDisabled, guardSpeed, guardShotInterval, guardEye } from './npc-body.js';
@@ -27,7 +27,8 @@ function evidence(state, map) {
   });
   // Smashed furniture is evidence too, like a broken window.
   map.props.forEach((prop, index) => {
-    if (propBroken(state, index)) result.push({ id: `furniture:${index}`, kind: 'damage', center: [prop.position[0], elevation(prop) + 0.45, prop.position[1]], size: [prop.size[0], 0.9, prop.size[1]], elevation: elevation(prop), label: 'furniture' });
+    // Broken or knocked-over furniture is something a guard notices and reports.
+    if (propDown(state, index)) result.push({ id: `furniture:${index}`, kind: 'damage', center: [prop.position[0], elevation(prop) + 0.45, prop.position[1]], size: [prop.size[0], 0.9, prop.size[1]], elevation: elevation(prop), label: 'furniture' });
   });
   (map.windows ?? []).forEach((window, index) => {
     if (state.windowHealth[index] <= 0) result.push({ id: `window:${index}`, kind: 'damage', center: windowCenter(window), size: windowSize(window), elevation: elevation(window), label: 'window' });

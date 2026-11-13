@@ -1,77 +1,97 @@
 <!doctype html>
 <html lang="en">
 <meta charset="utf-8">
-<title>NPC reactions · development preview</title>
+<title>Guard bodies · development preview</title>
 <style>
   body { margin: 0; background: #17251f; color: #e6e6d8; font: 15px system-ui; }
-  header { position: absolute; padding: 24px 30px; z-index: 1; }
-  h1 { font-size: 24px; margin: 0 0 8px; } p { margin: 6px 0 14px; }
-  button { background: #d8e7c9; border: 0; padding: 10px 18px; margin-right: 8px; cursor: pointer; }
+  header { position: absolute; padding: 20px 26px; z-index: 1; max-width: 70vw; }
+  h1 { font-size: 22px; margin: 0 0 6px; } p { margin: 4px 0 10px; color: #c9d3c2; }
+  button, select, label { background: #d8e7c9; color: #17251f; border: 0; padding: 8px 14px; margin: 0 6px 6px 0; cursor: pointer; font: inherit; }
+  label { display: inline-block; }
   canvas { display: block; width: 100vw; height: 100vh; }
-  footer { position: absolute; bottom: 25px; left: 30px; right: 30px; display: flex; justify-content: space-around; }
-  footer div { width: 15%; text-align: center; } small { display: block; color: #b9c7b3; margin-top: 8px; }
+  #looks { position: absolute; bottom: 18px; left: 26px; right: 26px; display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; font-size: 12px; color: #c9d3c2; }
 </style>
-<header><h1>Articulated NPC · injury and ragdoll preview</h1>
-<p>Shared gameplay skeleton, hit capsules, and fixed-step physics. Development fixture.</p>
-<button id="hit">Apply hits</button><button id="reset">Reset bodies</button><button id="pause">Pause</button>
-<button id="aim">Aim / fire preview</button>
+<header><h1>Guard bodies (step 5.1)</h1>
+<p>Skinned bodies built in code, driven by the same 16 joints as the hit zones. Each guard's outfit comes from the map's mix and the mission seed.</p>
+<select id="map"><option value="martelli">Martelli House (mostly private security)</option><option value="lodge">Lodge (mostly tactical)</option><option value="courtyard">Courtyard (even mix)</option></select>
+<button id="seed">New seed</button>
+<select id="body"><option value="skinned">Skinned body</option><option value="capsules">Hit zones only</option><option value="both">Body with hit zones</option></select>
+<button id="hit">Apply hits</button><button id="aim">Aim</button><button id="surrender">Surrender</button><button id="spin">Turntable</button><button id="reset">Reset</button><button id="pause">Pause</button>
 </header>
 <canvas></canvas>
-<footer>
-  <div>Healthy<small>Patrol gait</small></div><div>Left leg<small>Limp · reduced stride</small></div>
-  <div>Left arm<small>Opposite hand supports injury</small></div><div>Stomach<small>Alive · rolls onto side</small></div>
-  <div>Chest<small>Alive · falls to ground</small></div><div>Head<small>Lethal · gravity collapse</small></div>
-</footer>
+<div id="looks"></div>
 <script type="module">
 import * as THREE from 'three';
 import { createGuardVisual } from '/src/npc-visual.js';
+import { guardLook } from '/src/npc-shape.js';
 import { stepBodies } from '/src/npc-body.js';
 import { damageGuard } from '/src/combat.js';
 const canvas = document.querySelector('canvas'), renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.shadowMap.enabled = true;
-renderer.setClearColor(0x17251f);
-const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(36, 1, 0.1, 100);
-camera.position.set(0, 6.5, 22); camera.lookAt(0, 0.65, 0);
-scene.add(new THREE.HemisphereLight(0xf4eed4, 0x465b4f, 3));
-const sun = new THREE.DirectionalLight(0xffedcd, 3); sun.position.set(0, 9, 6); sun.castShadow = true; scene.add(sun);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.shadowMap.enabled = true; renderer.setClearColor(0x17251f);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
+scene.add(new THREE.HemisphereLight(0xf4eed4, 0x465b4f, 2.6));
+const sun = new THREE.DirectionalLight(0xffedcd, 2.6); sun.position.set(4, 9, 7); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 6, bottom: -2 }); scene.add(sun);
 const ground = new THREE.Mesh(new THREE.BoxGeometry(30, 0.1, 12), new THREE.MeshStandardMaterial({ color: 0x516152 }));
 ground.position.y = -0.05; ground.receiveShadow = true; scene.add(ground);
-const grid = new THREE.GridHelper(30, 30, 0x899582, 0x65775f); grid.position.y = 0.002; scene.add(grid);
-const materials = {}, visuals = Array.from({ length: 6 }, () => {
-  const visual = createGuardVisual(color => materials[color] ??= new THREE.MeshStandardMaterial({ color })); scene.add(visual); return visual;
-});
+const materials = {}, material = color => materials[color] ??= new THREE.MeshStandardMaterial({ color, roughness: 0.8 });
+const ghost = color => materials['g' + color] ??= new THREE.MeshStandardMaterial({ color: 0xff5a3c, transparent: true, opacity: 0.28, depthWrite: false });
+const bodyMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
 const map = { bounds: { minX: -15, maxX: 15, minZ: -6, maxZ: 6 }, doors: [], props: [] };
-let state, paused = false, hit = false, aiming = false;
+const COUNT = 8;
+let state, visuals = [], seed = 4242, paused = false, aiming = false, surrender = false, spin = false, hit = false, angle = 0;
+function build() {
+  for (const v of visuals) scene.remove(v);
+  const mode = document.querySelector('#body').value, mapId = document.querySelector('#map').value;
+  const looks = state.guards.map(g => guardLook(mapId, g, seed));
+  visuals = state.guards.flatMap((g, i) => {
+    const list = [];
+    if (mode !== 'capsules') list.push(createGuardVisual(material, { body: 'skinned', look: looks[i], bodyMaterial }));
+    if (mode !== 'skinned') list.push(createGuardVisual(mode === 'both' ? ghost : material, { body: 'capsules' }));
+    list.forEach(v => { v.userData.guard = g; scene.add(v); });
+    return list;
+  });
+  document.querySelector('#looks').innerHTML = looks.map((l, i) => `<div>${i + 1}. ${l.style}${state.guards[i].armored ? ' · armoured' : ''}<br>${l.headwear}${l.balaclava ? ' · balaclava' : ''} · vest ${l.vest}</div>`).join('');
+}
 function reset() {
-  state = { elapsed: 0, kills: 0, events: [], wallPieces: [], guards: Array.from({ length: 6 }, (_, i) => ({ id: i, position: [(i - 2.5) * 2.35, 0], heading: Math.PI / 2, health: 100, suspicion: 0 })) };
-  hit = false;
+  state = { elapsed: 0, kills: 0, events: [], wallPieces: [], player: [0, 8], playerY: 0, guardReports: [], doors: [], windowHealth: [], guards: Array.from({ length: COUNT }, (_, i) => ({ id: i, armored: i === 6, armorHits: i === 6 ? 10 : 0, position: [(i - (COUNT - 1) / 2) * 2.2, 0], heading: Math.PI / 2, health: 100, suspicion: 0 })) };
+  hit = false; build();
 }
 reset();
 document.querySelector('#reset').onclick = reset;
-document.querySelector('#aim').onclick = event => { aiming = !aiming; event.target.textContent = aiming ? 'Lower weapons' : 'Aim / fire preview'; };
-document.querySelector('#pause').onclick = event => { paused = !paused; event.target.textContent = paused ? 'Resume' : 'Pause'; };
+document.querySelector('#seed').onclick = () => { seed = Math.floor(Math.random() * 1e6); build(); };
+document.querySelector('#map').onchange = build;
+document.querySelector('#body').onchange = build;
+document.querySelector('#aim').onclick = e => { aiming = !aiming; e.target.textContent = aiming ? 'Lower' : 'Aim'; };
+document.querySelector('#surrender').onclick = e => { surrender = !surrender; state.guards.forEach(g => { g.surrendered = surrender; }); e.target.textContent = surrender ? 'Stand up' : 'Surrender'; };
+document.querySelector('#spin').onclick = e => { spin = !spin; e.target.textContent = spin ? 'Stop turning' : 'Turntable'; };
+document.querySelector('#pause').onclick = e => { paused = !paused; e.target.textContent = paused ? 'Resume' : 'Pause'; };
 document.querySelector('#hit').onclick = () => {
   if (hit) return; hit = true;
-  for (const [i, zone] of ['healthy', 'leftLeg', 'leftArm', 'stomach', 'chest', 'head'].entries()) if (i) damageGuard(state, state.guards[i], zone === 'head' ? 100 : 15, { zone, direction: [0, 0, 1] });
+  // A spread of wounds: limp, arm, stomach, chest, and a fatal head shot for the ragdoll.
+  for (const [i, zone] of [[1, 'leftLeg'], [2, 'leftArm'], [3, 'stomach'], [4, 'chest'], [5, 'head']]) damageGuard(state, state.guards[i], zone === 'head' ? 100 : 15, { zone, direction: [0, 0, 1] });
 };
+window.preview = { get state() { return state; }, build, camera, set seed(v) { seed = v; build(); } };
 let previous = performance.now();
 function frame(now) {
   const dt = Math.min(0.05, (now - previous) / 1000); previous = now;
   if (!paused) {
     state.elapsed += dt;
-    state.guards.forEach(g => {
-      if (!g.incapacitated) g.stride = (g.stride ?? 0) + dt * (g.injuries?.leftLeg ? 2 : 5);
+    if (spin) angle += dt * 0.5;
+    state.guards.forEach((g, i) => {
+      if (!g.incapacitated && !g.ragdoll) g.stride = (g.stride ?? 0) + dt * (g.injuries?.leftLeg ? 2 : i % 2 ? 0 : 5);
       g.aimTarget = aiming && !g.incapacitated ? camera.position.toArray() : null;
-      if (g.aimTarget) g.heading = Math.atan2(camera.position.z-g.position[1],camera.position.x-g.position[0]);
-      else if (!g.incapacitated) g.heading = Math.PI / 2;
-      g.recoil = aiming ? Math.max(0,1-(state.elapsed%0.8)*7) : 0;
+      if (!g.ragdoll) g.heading = g.aimTarget ? Math.atan2(camera.position.z - g.position[1], camera.position.x - g.position[0]) : Math.PI / 2 + angle;
+      g.recoil = aiming ? Math.max(0, 1 - (state.elapsed % 0.8) * 7) : 0;
     });
     stepBodies(state, map, dt);
   }
-  visuals.forEach((v, i) => v.userData.update(state.guards[i]));
+  for (const v of visuals) v.userData.update(v.userData.guard);
   if (canvas.width !== innerWidth * renderer.getPixelRatio() || canvas.height !== innerHeight * renderer.getPixelRatio()) {
     renderer.setSize(innerWidth, innerHeight, false); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
   }
+  if (!window.cameraLocked) { camera.position.set(0, 2.2, 14); camera.lookAt(0, 1, 0); }
   renderer.render(scene, camera); requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

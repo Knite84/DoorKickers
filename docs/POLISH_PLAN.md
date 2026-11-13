@@ -98,11 +98,12 @@ These are traps that have already cost time. Follow them on every rendering chan
 | 4.2 | Stairs, railings and fireplaces | ◐ | Owner look at railing, carpet colour, fireplace and arch shapes against photos; special views and timing not checked |  |
 | 4.3 | Roof, deck and site | ◐ | Owner look at the roof against the aerial, the level strips (keep or drop), the solid deck stairs, and the sun direction; Low/High, night vision, thermal and frame time not checked; fence, shrubs and driveway edge not built | Sonnet |
 | 4.4 | Known map gaps | ◐ | Built 2026-11-12 from the owner's answers: three great-room windows (two blocked by furniture), lowered garage with steps and ramps. Cubby stays closed. See the Built note |  Sonnet, with owner answers |
-| 5.1 | Skinned guard bodies | ☐ |  | Opus |
+| 5.1 | Skinned guard bodies | ◐ | Built and in the game 2026-11-12; owner to look in play and tune outfits. Hit zones slimmed to real size (a gameplay change). Not seen: night vision on the new bodies, eight guards' frame time | Sonnet for tuning |
 | 5.2 | First-person weapon and hands | ◐ | Owner look at the four firearm models; wall clipping fixed in 5.3 by drawing first-person items in front; melee and thrown-item hands, and minigun not done | Sonnet |
 | 5.3 | Weapon handling feel | ◐ | Built 2026-11-12; owner to feel the climb, recovery, draw times, ADS and flash in play and tune the `handling` table. Not felt in play: any of the timing (automation browser runs at about one frame a second); frame time | Opus, then Sonnet for tuning |
+| 5.4 | Weapon model refinement | ☐ | Waiting on the owner: one real firearm per slot with side-on reference photos and dimensions, and what each ammo type should look like | Opus |
 | 6.1 | Impact effects and decals | ◐ | Built 2026-11-12; owner to judge in play: amount of dust and debris, hole size, blood marks, explosion and fire look. Not seen in play: a live firefight, a real grenade or Molotov, the overhead and tactical views with marks, frame time | Sonnet for tuning |
-| 6.2 | Loose physics: casings, debris, doors, chairs | ◐ | Built 2026-11-12: loose bits with contacts, drawn-only swinging doors. Owner to check in play: door hinge sides against the real house, how far casings fly and how long they lie. Chairs deferred by the owner. Not seen in play: doors opened by guards, frame time | Sonnet for tuning |
+| 6.2 | Loose physics: casings, debris, doors, chairs | ◐ | Built 2026-11-12: loose bits with contacts, drawn-only swinging doors. Owner to check in play: door hinge sides against the real house, how far casings fly and how long they lie, tipping chairs. Not seen in play: doors opened by guards, frame time | Sonnet for tuning |
 | 6.3 | Movement feel | ◐ | Built 2026-11-12; owner to feel it in play. Mantling stays out, as a separate proposal | Sonnet (mantling: Opus) |
 | 6.4 | Sound | ◐ | Stages A, B and C built 2026-11-12; owner to listen and tune. Not heard by Claude: any of it. Not tried in play: a real firefight, guards behind walls reacting to suppressed shots | Sonnet for tuning |
 | 6.5 | Destructible furniture | ◐ | Built 2026-11-12, awaiting owner check and tuning. See the **Built** note in the step. Not seen in play: the real firefight feel, frame time | Sonnet |
@@ -499,6 +500,15 @@ Start from: `src/npc-body.js` (simulated joints, shared with hit capsules), `src
 
 Done when: guards read as people at 3 m, hit capsules still line up with the visible body, and eight guards stay within budget.
 
+**Built, preview stage (2026-11-12), awaiting owner check.** Owner chose real-size hit zones and a mix of tactical and private-security guards that varies by map.
+- **Hit zones slimmed** (`bodySegments` in `src/npc-body.js`, a gameplay change): head 0.2 to 0.125 m, chest 0.2 to 0.175, stomach 0.23 to 0.165, upper and lower arm 0.095/0.08 to 0.058/0.048, thigh and shin 0.12/0.1 to 0.085/0.065. Guards, and headshots, are harder to hit. No existing test needed changing.
+- **Bodies as data** (`src/npc-shape.js`, tested in `test/npc-shape.test.js`): 11 bones, each spanning two of the 16 simulation joints; every frame a bone carries its rest span onto the current one, so walking, aiming, wounds, surrender and ragdolls carry over. One mesh per guard (about 2,000 to 3,000 triangles, vertex colours): torso wider than deep, shoulders bridging to the arms, tapered limbs bending at elbows and knees, hands, boots, head with nose and ears or a balaclava with an eye opening, and gear (plate carrier or soft vest with pouches, helmet or cap with brim, belt). Tests: weights sum to one, the rest pose is unchanged, bones meet their joints exactly, every face points outward, the solid body stays within 4 cm of the hit capsules standing, walking and aiming (4 cm because the top of the shoulder sits in the seam between the chest and arm zones), and the torso and head fill most of their zone.
+- **Outfits** (`guardLook`, `mapGuardMix`): Martelli is 65% private security, Lodge 70% tactical, others even. Private security: dark polos or jackets, short or long sleeves, caps or bare heads, sometimes a soft vest, bare faces. Tactical: green, coyote or black, helmets or caps, a plate carrier, gloves, and often a balaclava. Armoured guards always wear plates. Chosen from the mission seed and the guard's number.
+- **Drawing** (`src/npc-visual.js`): `createGuardVisual(material, { body: 'skinned', look, bodyMaterial })` builds a SkinnedMesh with flat bones; the pistol is now the 5.2 pistol model. `body: 'capsules'` (still the default, so the game is unchanged) draws the old capsules, which are the hit zones.
+- **Preview** (`scripts/npc-preview.html`): eight guards for a chosen map and seed, hit reactions, aim, surrender, turntable, and a "Body with hit zones" overlay. The preview's fake mission also gained the player, door and window fields the wound and ragdoll code needs (it had stopped working).
+- **Seen in Chrome:** outfits at 3 m and from afar, hit reactions (limp, arm, stomach curl, chest fall, head-shot ragdoll), the aim pose with the hit zones overlaid. A first build had every tube wound inside out (dark holes, inverted lighting); a test now checks every part's faces point outward.
+- **In the game (owner approved, 2026-11-12):** `scene.js` rebuilds each guard's body when the mission or guard changes (`rebuildGuard`), from the mission seed (or one random seed per deployment when the seed rule is 0), with one shared vertex-colour material that is warm in thermal. Seen in Chrome: two guards in their outfits in first person, both glowing as people in thermal, the overhead view, no console errors. **Not seen:** night vision on the new bodies (the toggle did not switch on in the automation browser), Martelli guards up close in play, frame time with eight guards.
+
 ### 5.2 First-person weapon and hands
 
 Start from: the placeholder weapon boxes built with `weaponBox()` in `src/scene.js`, held items in the same file, and the item catalogue in `src/kit.js` and `src/weapons.js`. Keep the models as data in a new Three-free module where possible, as `src/furniture.js` does for furniture.
@@ -534,6 +544,16 @@ Done when: firing, reloading and switching feel weighty, and all weapon tests pa
 
 ---
 
+### 5.4 Weapon model refinement (owner, 2026-11-12)
+
+Start from: `src/weapon-models.js` (the first-person models as data), `src/npc-visual.js` (the guard pistol reuses it), and the ammo types in `src/kit.js`.
+
+- The owner picks one real firearm for each slot (rifle, pistol, shotgun, sniper, minigun) and supplies side-on reference photos with overall and barrel lengths. Photos stay in the git-ignored `references/`; the models carry no brand marks or logos.
+- Rebuild each model to those proportions, with sights, controls and magazine shapes that match, keeping the 5.3 `sight`, `port`, `casing` and `moves` data working and its tests passing.
+- Ammo types (standard, hollow-point, solid core, plus subsonic) get visible differences where the player sees ammo: magazine and casing colours, shotgun shell colours, tracer tint. Owner to say which.
+
+Done when: each weapon reads as its real counterpart at a glance, and every 5.3 and 6.2 test still passes.
+
 ## Phase 6: Effects, physics and sound
 
 ### 6.1 Impact effects and decals
@@ -563,6 +583,8 @@ Start from: `shotEffect` and `eventEffect` in `src/scene.js` (the current tracer
 - **Loose bits** (`src/loose-bits.js`, pure, tested in `test/loose-bits.test.js`; tuning in `looseBits`): spent casings and every chip, splinter, shard and chunk from 6.1 now collide with the same solids as the ragdolls: wall, floor and stair pieces, closed doors, intact glass and standing furniture. Moves are swept, so a fast chip cannot pass through a drywall skin. Bits bounce, slide, come to rest and then cost nothing; damage, a door or broken furniture nearby wakes them. Casings lie for about 20 s (up to 60 at once, oldest recycled), other debris about 8 s, then shrink away. Each audible landing is queued for step 6.4 (`takeLandings()` in `src/scene-effects.js`). The 5.3 casing pool in `scene.js` is gone; casings go to the same pool.
 - **Swinging doors** (`src/door-swing.js`, pure, tested in `test/door-swing.test.js`; tuning in `swing`): an open door is now drawn swung against the wall instead of vanishing, and opening or closing turns it over 0.45 s. It swings away from whoever is nearest when it opens (player or guard) on the hinge end whose open leaf clashes least with walls and furniture. A map can fix either with `door.hinge` and `door.swing` (each -1 or 1) once the owner says which way the real doors open. The simulation still sees open or closed only, so movement, sight, shots and guard routes are unchanged; a half-swung door blocks like a closed one until it finishes. Door cracks swing with the leaf; 6.1 bullet holes on a door wait for it to close.
 - **Seen in Chrome** on the interior preview page: four Primary-bedroom-area doors swinging open against their walls and closing back into their frames, rifle casings landing and resting on the carpet beside the bed, no console errors. **Not seen:** doors opened by guards, the hinge choice on every door, casings on stairs or the garage ramps, frame time.
+
+- **Tipping chairs and stools** (owner asked, 2026-11-12; `src/furniture-tip.js`, tested in `test/furniture-tip.test.js`; tuning in `tipping`): dining, desk and office chairs and bar stools collect a push from hits (bullet 0.35, sniper 0.7, shotgun pellet 0.2, melee 1.2, blast 2) and tip over at 1, away from the hit: a rifle needs three hits, one shotgun shot or one strike does it. A tipped piece stops blocking movement and shots (`activeProps`, `propBox`), hides only below 0.45 m, makes a 6 m noise for guards, and is reported as disturbed furniture like a broken piece; caches see it through the broken-furniture count. It falls over 0.45 s about its floor edge (`applyTips` in `src/scene.js`), with a little dust and a wooden clatter. The "Breakable furniture" rule switches it off. Seen in Chrome: a dining chair lying on its back. **Not seen:** in play, a guard reacting to one.
 
 ### 6.3 Movement feel
 

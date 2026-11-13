@@ -6,6 +6,7 @@ import { elevation, eyeHeight, playerEye, doorCenter, doorSize, windowCenter, wi
 import { sightHalfAngle, sightRangeFactor } from './guard-traits.js';
 import { segmentClear } from './combat.js';
 import { createGuardVisual } from './npc-visual.js';
+import { guardLook } from './npc-shape.js';
 import { guardDisabled, guardEye } from './npc-body.js';
 import { coverClear } from './guard-tactics.js';
 import { createSceneLighting } from './scene-lighting.js';
@@ -13,6 +14,7 @@ import { lightingProfile } from './lighting.js';
 import { piecesInArea } from './spatial.js';
 import { isFurniture, furnitureClass } from './furniture.js';
 import { propBroken, decorBroken } from './world.js';
+import { tipPose } from './furniture-tip.js';
 import { batchFurnitureMeshes, createFurnitureMaterials, furnitureMeshes } from './furniture-mesh.js';
 import { createSurfaceShading } from './surface-materials.js';
 import { exposureRange, graphicsPresets } from './graphics.js';
@@ -389,6 +391,39 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   }
   const furnitureRender = batchFurnitureMeshes(furnitureParts);
   furnitureRender.forEach(({ mesh }) => scene.add(mesh));
+  // Tipped chairs and stools (src/furniture-tip.js): every part of the piece turns about the
+  // floor edge it falls over. Each prop's parts, batched or single, with their standing matrix.
+  const propParts = new Map();
+  for (const { mesh } of furnitureRender) {
+    if (mesh.isInstancedMesh) mesh.userData.owners?.forEach((owner, instance) => { if (owner.kind === 'prop') { if (!propParts.has(owner.index)) propParts.set(owner.index, []); propParts.get(owner.index).push({ mesh, instance, base: mesh.userData.matrices[instance] }); } });
+    else if (mesh.userData.owner?.kind === 'prop') { mesh.updateMatrix(); const index = mesh.userData.owner.index; if (!propParts.has(index)) propParts.set(index, []); propParts.get(index).push({ mesh, base: mesh.matrix.clone() }); }
+  }
+  const tipMatrix = new THREE.Matrix4(), tipStep = new THREE.Matrix4(), tipAxis = new THREE.Vector3(), tipPart = new THREE.Matrix4();
+  const tipShown = new Map();   // prop index -> angle drawn
+  let tipState = null;
+  function placeParts(index, matrix) {
+    for (const part of propParts.get(index) ?? []) {
+      if (part.instance !== undefined) {
+        // A broken piece stays hidden (scale zero); only standing or tipped pieces are placed.
+        if (propBroken(tipState, index)) continue;
+        part.mesh.setMatrixAt(part.instance, matrix ? tipPart.multiplyMatrices(matrix, part.base) : part.base); part.mesh.instanceMatrix.needsUpdate = true;
+      } else {
+        part.mesh.matrixAutoUpdate = !matrix;
+        if (matrix) { part.mesh.matrix.multiplyMatrices(matrix, part.base); part.mesh.matrixWorldNeedsUpdate = true; }
+      }
+    }
+  }
+  function applyTips(state) {
+    if (tipState !== state) { const old = [...tipShown.keys()]; tipState = state; for (const index of old) placeParts(index, null); tipShown.clear(); }
+    for (const [key, tip] of Object.entries(state.propTipped ?? {})) {
+      const index = Number(key), pose = tipPose(map.props[index], tip, state.elapsed ?? 0);
+      if (tipShown.get(index) === pose.angle) continue;
+      tipShown.set(index, pose.angle);
+      tipAxis.set(...pose.axis).normalize();
+      tipMatrix.makeTranslation(...pose.pivot).multiply(tipStep.makeRotationAxis(tipAxis, pose.angle)).multiply(tipStep.makeTranslation(-pose.pivot[0], -pose.pivot[1], -pose.pivot[2]));
+      placeParts(index, tipMatrix);
+    }
+  }
   for (const [index, prop] of map.props.entries()) {
     if (isFurniture(prop)) continue;
     const firstMesh = scene.children.length, base = elevation(prop);
@@ -520,6 +555,20 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
   const guards = [], cones = [], routes = [];
   const heatMaterials={};
   const heatMaterial=color=>heatMaterials[color]??=lighting.decorate(new THREE.MeshStandardMaterial({color}),color===0xd5bd91?1:.82);
+  // Skinned guard bodies (step 5.1): one shared vertex-colour material, warm in thermal.
+  // Each guard's outfit depends on the mission, so its body is rebuilt in draw() when the
+  // mission or the guard changes (rebuildGuard below); these start as placeholders.
+  const guardBodyMaterial = lighting.decorate(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 }), 0.9);
+  const lookSeeds = new WeakMap();   // missions without a seed still get one look per deployment
+  function rebuildGuard(i, state, guard) {
+    const seed = state.missionSeed || (lookSeeds.has(state) ? lookSeeds.get(state) : lookSeeds.set(state, Math.floor(Math.random() * 1e6)).get(state));
+    const key = `${seed}:${guard.id}:${!!guard.armored}`;
+    if (guards[i].userData.lookKey === key) return;
+    const old = guards[i], fresh = createGuardVisual(heatMaterial, { body: 'skinned', look: guardLook(map.id, guard, seed), bodyMaterial: guardBodyMaterial });
+    fresh.userData.lookKey = key; fresh.visible = old.visible;
+    scene.remove(old); old.traverse(object => { if (object.isSkinnedMesh) { object.geometry.dispose(); object.skeleton.dispose(); } });
+    scene.add(fresh); guards[i] = fresh;
+  }
   for (let i = 0; i < 8; i++) {
     const guardVisual = createGuardVisual(heatMaterial); scene.add(guardVisual); guards.push(guardVisual);
     const geometry = new THREE.BufferGeometry();
@@ -700,6 +749,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     windowMeshes.forEach((mesh, i) => { mesh.visible = state.windowHealth[i] > 0 && onLevel(map.windows[i]); windowFrames[i].forEach(frame => { frame.visible = onLevel(map.windows[i]); }); });
     propMeshes.forEach((meshes, i) => meshes.forEach(mesh => { mesh.visible = onLevel(map.props[i]) && !(overview && mesh.userData.overhead); }));
     syncFurniture(state);
+    applyTips(state);
     furnitureRender.forEach(({ prop, mesh }) => { mesh.visible = onLevel(prop) && !(overview && mesh.userData.overhead) && !mesh.userData.broken; });
     for (const [index, pile] of debrisPiles) pile.visible = propBroken(state, index) && onLevel(map.props[index]);
     syncDynamic(state);
@@ -745,6 +795,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     site?.update(overview, selectedLevel);
     for (let i = 0; i < 8; i++) {
       const guard = state.guards[i];
+      if (guard) rebuildGuard(i, state, guard);
       const visible = !!guard && onLevel(guard) && (!overview || rules.fullIntel || state.scanUntil > state.elapsed || (distance(guard.position, state.player) < 9 && coverClear(state,map,playerEye(state),guardEye(guard))));
       guards[i].visible = visible;
       cones[i].visible = visible && !guardDisabled(guard) && rules.showVision && (view !== 'first' || mapOpen);

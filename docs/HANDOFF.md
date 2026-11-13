@@ -19,7 +19,9 @@ Updated 2026-11-12. This is the current state of the project for a fresh session
 - **Controls (2026-11-12):** keys 6, 7 and 8 equip the grenade, flashbang and det cord. The mouse wheel cycles slots 1 to 8 in first person. See the 7.3 note.
 - **Bedroom 3 fix (2026-11-12):** light samples that landed inside walls baked black patches in eleven rooms, and accent paint wrapped round corners. Both are fixed; see `lessons_learned.md`.
 - **Step 5.3, weapon handling, is built, awaiting owner check** (committed in `aac8919`). Muzzle climb and a weapon draw delay are real gameplay, each behind a rule in Gunplay; everything else (kick, sway, ADS, reload and draw animations, flash with a brief light, casings, no wall clipping) is drawn only. Tuning is in the `handling` table in `src/weapon-handling.js`. See the 5.3 Built note.
-- **Small follow-ups done (2026-11-12, not committed when written):** raw timber ends covered everywhere (free wall ends and corner notches, `src/trim.js`, with a whole-house test); handrails on the deck stairs and both garage step flights (`stepRailsFor` in `src/stair-dress.js`, sloped, drawn only); furniture drawn as single meshes now darkens with damage (lamp shades keep glowing while lit). **Guards hear the player's footsteps** (owner asked, 2026-11-12): rule "Guards hear footsteps" in Guards, a multiplier with 0 for off, default 1; `footstepNotice` in `src/sound-plan.js` holds the reach by pace and floor and a 1.5 s cooldown; a guard who hears one turns and goes to look, without raising the alarm (`hearFootstep` in `src/combat.js`).
+- **Chairs and stools tip over** (2026-11-12, not committed when written): hits, strikes and blasts knock them over; see the 6.2 notes.
+- **Step 5.1 is built and in the game, awaiting owner check** (not committed when written): skinned guard bodies in `src/npc-shape.js` and `src/npc-visual.js` (preview on `scripts/npc-preview.html`); `scene.js` rebuilds each guard's body per mission. **Hit zones are slimmed to real size** (gameplay change, `bodySegments`). Outfits mix tactical and private security per map (`mapGuardMix`). See the 5.1 Built note.
+- **Small follow-ups done (2026-11-12, committed in `5df382d`):** raw timber ends covered everywhere (free wall ends and corner notches, `src/trim.js`, with a whole-house test); handrails on the deck stairs and both garage step flights (`stepRailsFor` in `src/stair-dress.js`, sloped, drawn only); furniture drawn as single meshes now darkens with damage (lamp shades keep glowing while lit). **Guards hear the player's footsteps** (owner asked, 2026-11-12): rule "Guards hear footsteps" in Guards, a multiplier with 0 for off, default 1; `footstepNotice` in `src/sound-plan.js` holds the reach by pace and floor and a 1.5 s cooldown; a guard who hears one turns and goes to look, without raising the alarm (`hearFootstep` in `src/combat.js`).
 - **Step 6.4 (sound) is built in full, awaiting owner check** (not committed when written; 6.2 is in the same uncommitted change): engine, gun reports, footsteps, shared hearing (rule in Guards, on by default), weapon handling, doors, glass, breaches, furniture, casings, impacts, explosions, flashbang ringing, fire, guard footsteps, reloads and radio, ambience, and Effects and Ambience volume sliders. Tuning is all in `src/sound-plan.js`; see the 6.4 notes.
 - **Step 6.2 is built, awaiting owner check** (also not committed when written): casings and debris bounce off the house and lie still (`src/loose-bits.js`), and open doors are drawn swung against the wall (`src/door-swing.js`, drawn only). Chairs are deferred by the owner. See the 6.2 Built note.
 - **Step 6.1, impact effects and decals, is built, awaiting owner check** (committed in `da2ad76`): per-material particles, bullet holes, blood marks, scorch, explosions, fire and four shared effect lights. Tuning is in `recipes` in `src/impacts.js`. See the 6.1 Built note. Owner's running order from here: 6.4 and the small follow-ups, then 5.1.
@@ -27,14 +29,15 @@ Updated 2026-11-12. This is the current state of the project for a fresh session
 - **Step 6.5, destructible furniture, is built, awaiting owner check and tuning** (committed in `a44a692`). All the tuning is in the `durability` table in `src/furniture.js`.
 - **Built 2026-11-12 and not yet committed when this was written:** the 4.1 passage returns, the 4.3 leftovers (fence, shrubs, curbs, open deck treads), step 4.4 (three great-room windows, lowered garage with steps and ramps), and step 6.3 (movement feel: acceleration, view bob, placeholder footsteps; tuning in the `motion` table in `src/player-motion.js`). Run `git status` and `git log -3` first: the owner may have committed since.
 - Each of those has a **Built** note in `POLISH_PLAN.md` with what was seen on screen and what was not.
-- `npm test`: 342 passing on 2026-11-12, about 3 seconds.
+- `npm test`: 354 passing on 2026-11-12, about 3 seconds.
 
 ## Good next work
 
 Everything a Sonnet session could start alone is built. What remains in the [status table](POLISH_PLAN.md#status):
-1. **Owner's order from here:** 5.1 skinned guard bodies (Opus, propose first).
+1. **Owner's order from here:** the owner's check of 5.1 in play. Every numbered step in the plan is now built; what remains is owner checks, tuning, and the open proposals below.
 2. **Proposals still to write:** mantling over low cover (6.3, a gameplay change).
-3. **Small follow-ups:** none open. Possible later: chairs and stools that tip over (6.2, deferred by the owner); the 108 pitch-black light samples in windowless closets (see the stairwell fix note).
+4. **Step 5.4, weapon model refinement:** waiting on the owner's choice of real firearms and reference photos; see the 5.4 entry.
+3. **Small follow-ups:** none open. Possible later: the 108 pitch-black light samples in windowless closets (see the stairwell fix note).
 
 ## Waiting on the owner
 

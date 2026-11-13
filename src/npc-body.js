@@ -9,14 +9,18 @@ const rest = {
   leftHip: [0, 0.87, -0.15], leftKnee: [0.025, 0.48, -0.15], leftFoot: [0.06, 0.12, -0.15],
   rightHip: [0, 0.87, 0.15], rightKnee: [0.025, 0.48, 0.15], rightFoot: [0.06, 0.12, 0.15],
 };
+// Hit capsules: [from joint, to joint, radius in metres, zone]. Sized to a real adult
+// in light gear (owner, 2026-11-12, step 5.1); they were about half again as fat before
+// (head 0.2, torso 0.23, arms 0.095/0.08, legs 0.12/0.1). The drawn body (npc-shape.js)
+// is built to fill these, so what you see is what you can hit.
 export const bodySegments = [
-  ['pelvis', 'chest', 0.23, 'stomach'], ['chest', 'neck', 0.2, 'chest'],
-  ['head', 'head', 0.2, 'head'],
+  ['pelvis', 'chest', 0.165, 'stomach'], ['chest', 'neck', 0.175, 'chest'],
+  ['head', 'head', 0.125, 'head'],
   ...['left', 'right'].flatMap(side => [
-    [`${side}Shoulder`, `${side}Elbow`, 0.095, `${side}Arm`],
-    [`${side}Elbow`, `${side}Hand`, 0.08, `${side}Arm`],
-    [`${side}Hip`, `${side}Knee`, 0.12, `${side}Leg`],
-    [`${side}Knee`, `${side}Foot`, 0.1, `${side}Leg`],
+    [`${side}Shoulder`, `${side}Elbow`, 0.058, `${side}Arm`],
+    [`${side}Elbow`, `${side}Hand`, 0.048, `${side}Arm`],
+    [`${side}Hip`, `${side}Knee`, 0.085, `${side}Leg`],
+    [`${side}Knee`, `${side}Foot`, 0.065, `${side}Leg`],
   ]),
 ];
 const separation = (a, b) => Math.hypot(...a.map((v, i) => v - b[i]));

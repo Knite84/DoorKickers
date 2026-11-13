@@ -4,6 +4,7 @@ import { alertGuards, damageGuard, damagePlayer, segmentClear, shatterWindow } f
 import { damageDoor } from './doors.js';
 import { doorCenter, doorSize, elevation, playerEye, windowCenter, windowSize, propBox, decorBox } from './world.js';
 import { damageProp, damageDecor } from './furniture-damage.js';
+import { pushProp } from './furniture-tip.js';
 import { durability } from './furniture.js';
 import { hitGuard, guardPose } from './npc-body.js';
 
@@ -88,6 +89,8 @@ function blast(state, map, rules, position, radius = 3, power = 120, heading, in
       if (!segmentClear(state, map, position, position.map((v, axis) => v + (surface[axis] - v) * 0.98), -1, { glass: false })) return;
       const exposure = innerRadius > 0 ? Math.max(0, 1 - Math.max(0, d - innerRadius) / (radius - innerRadius)) : Math.max(0.25, 1 - d / radius);
       hurt(state, map, rules, index, 'blast', exposure * power * rules.blastDamage, surface);
+      // Chairs and stools in the blast are thrown over, away from it.
+      if (hurt === damageProp) pushProp(state, map, rules, index, surface.map((v, axis) => v - position[axis]), 'blast');
     });
     hurtFurniture(map.props.map((_, index) => propBox(state, map, index)), damageProp);
     hurtFurniture((map.decor ?? []).map((_, index) => decorBox(state, map, index)), damageDecor);
@@ -126,7 +129,7 @@ export function weaponStrike(state, map, rules, origin, rawDirection) {
   if (hit) {
     if (hit.kind === 'guard') damageGuard(state, hit.object, 25);
     if (hit.kind === 'glass') shatterWindow(state, map, hit.object);
-    if (hit.kind === 'prop') damageProp(state, map, rules, hit.object, 'melee', durability.raw.strike, hit.position);
+    if (hit.kind === 'prop') { damageProp(state, map, rules, hit.object, 'melee', durability.raw.strike, hit.position); pushProp(state, map, rules, hit.object, direction, 'melee'); }
     if (hit.kind === 'decor') damageDecor(state, map, rules, hit.object, 'melee', durability.raw.strike, hit.position);
     event(state, 'strike', hit.position);
     alertGuards(state, rules, hit.position, 5, map);
@@ -182,7 +185,7 @@ export function useEquipment(state, map, rules, origin, rawDirection) {
     if (hit.kind === 'wall' && rules.destructibleWalls) damageWall(state.wallPieces, hit.object, id === 'axe' ? 4 : 1);
     if (hit.kind === 'guard') damageGuard(state, hit.object, id === 'axe' ? 70 : 35);
     if (hit.kind === 'glass') shatterWindow(state, map, hit.object);
-    if (hit.kind === 'prop') damageProp(state, map, rules, hit.object, 'melee', durability.raw[id], hit.position);
+    if (hit.kind === 'prop') { damageProp(state, map, rules, hit.object, 'melee', durability.raw[id], hit.position); pushProp(state, map, rules, hit.object, direction, 'melee'); }
     if (hit.kind === 'decor') damageDecor(state, map, rules, hit.object, 'melee', durability.raw[id], hit.position);
     if (id === 'axe' || hit.kind === 'glass') alertGuards(state, rules, origin, 7, map);
     event(state, 'strike', hit.position);

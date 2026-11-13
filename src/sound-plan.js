@@ -211,6 +211,8 @@ export const effectSounds = {
   flashbang: { reach: 10, layers: [{ noise: 'highpass', freq: 1000, gain: 1, decay: 0.08 }, { tone: 'sine', from: 140, to: 50, gain: 0.8, decay: 0.25 }, { noise: 'lowpass', freq: 500, gain: 0.5, decay: 0.5 }] },
   fireIgnite: { reach: 10, layers: [{ noise: 'lowpass', freq: 900, gain: 0.7, decay: 0.4, rate: 0.5 }, click(1200, 0.4), { noise: 'highpass', freq: 3000, gain: 0.2, decay: 0.2, delay: 0.05 }] },
   firePop: { reach: 8, layers: [{ noise: 'highpass', freq: 2200, gain: 0.35, decay: 0.008 }] },
+  // A chair or stool knocked over: a wooden clatter and a thud.
+  chairTip: { reach: 8, layers: [{ tone: 'triangle', from: 190, to: 120, gain: 0.5, decay: 0.07 }, { noise: 'bandpass', freq: 900, q: 1, gain: 0.4, decay: 0.03, count: 3, spread: 0.3, delay: 0.05 }, { tone: 'sine', from: 95, to: 60, gain: 0.5, decay: 0.1, delay: 0.3 }] },
   meleeHit: { reach: 7, layers: [{ noise: 'lowpass', freq: 700, gain: 0.7, decay: 0.06 }, { tone: 'sine', from: 120, to: 70, gain: 0.4, decay: 0.06 }] },
 };
 // Ears ringing after a flashbang: a high tone and the rest of the mix dulled for this long.
@@ -221,7 +223,7 @@ export const fireSound = { roar: { freq: 450, gain: 0.35 }, pops: 10, reach: 10 
 // Which recipe each simulation event plays.
 export const eventSounds = {
   'door-break': 'doorBreak', 'glass-break': 'glassBreak', blast: 'blast', flash: 'flashbang', fire: 'fireIgnite', strike: 'meleeHit',
-  'guard-reload': 'guardReload', 'guard-jam': 'guardJam',
+  'guard-reload': 'guardReload', 'guard-jam': 'guardJam', 'furniture-tip': 'chairTip',
 };
 
 // The surface a bit lands on: hard floors ring, soft ones thud.

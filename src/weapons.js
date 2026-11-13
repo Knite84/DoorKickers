@@ -4,6 +4,7 @@ import { alertGuards, damageGuard, shatterWindow } from './combat.js';
 import { damageDoor } from './doors.js';
 import { doorCenter, doorSize, elevation, windowCenter, windowSize, propBox, decorBox } from './world.js';
 import { damageProp, damageDecor } from './furniture-damage.js';
+import { pushProp } from './furniture-tip.js';
 import { furnitureClass, durability } from './furniture.js';
 import { hitGuard } from './npc-body.js';
 import { roomLights } from './lighting.js';
@@ -76,6 +77,8 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
     let resistance = Infinity;
     if (hit.kind === 'prop') {
       damageProp(state, map, rules, hit.object, source, damage, position);
+      // A chair or stool hit hard enough tips over (src/furniture-tip.js).
+      pushProp(state, map, rules, hit.object, direction, source === 'shotgun' ? 'pellet' : state.inventory.equipped === 'sniper' ? 'sniper' : 'bullet');
       resistance = durability.classes[furnitureClass(map.props[hit.object])].bulletCost ?? Infinity;
     }
     if (hit.kind === 'wall' && rules.destructibleWalls) {

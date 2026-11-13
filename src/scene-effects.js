@@ -234,6 +234,7 @@ export function createSceneEffects({ scene, renderer, lighting, map }) {
       case 'door-break': shatter('wood', e.position, state, 4); burst('drywall', e.position, null, state, 1); return true;
       case 'furniture-break': { const effect = breakEffect(map, e); shatter(effect, e.position, state, 4); if (effect !== 'fabric') burst('drywall', e.position, null, state, 0.6); else burst('fabric', e.position, null, state, 2); return true; }
       case 'strike': burst('drywall', e.position, null, state, 0.6); return true;
+      case 'furniture-tip': burst('wood', e.position, null, state, 0.3); return true;   // a chair or stool knocked over
       case 'surrender': case 'guard-reload': case 'guard-jam': return true;   // heard, not drawn (step 6.4)
       default: return false;
     }

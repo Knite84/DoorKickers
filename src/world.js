@@ -8,6 +8,9 @@ export const propHeight = prop => prop.height ?? furnitureHeight(prop) ?? 1.1;
 // the map. A broken piece leaves low debris: walkable, hides sight, stops nothing.
 export const propBroken = (state, index) => state?.propHealth?.[index] <= 0;
 export const decorBroken = (state, index) => state?.decorHealth?.[index] <= 0;
+// A chair or stool knocked over (src/furniture-tip.js): no longer in the way, low to the floor.
+export const propTipped = (state, index) => !!state?.propTipped?.[index];
+export const propDown = (state, index) => propBroken(state, index) || propTipped(state, index);
 // What a piece does, by use:
 //   solid  - blocks walking, standing, ragdolls and the walking grid
 //   sight  - hides what is behind it (soft pieces and debris included)
@@ -20,6 +23,12 @@ export function propBox(state, map, index, use = 'solid') {
     const height = durability.debrisHeight;
     return { center: [prop.position[0], base + height / 2, prop.position[1]], size: [prop.size[0], height, prop.size[1]], debris: true };
   }
+  if (propTipped(state, index)) {
+    // Lying on its back: you can step over it, shots pass, and it hides only what is below knee height.
+    if (use !== 'sight') return null;
+    const height = 0.45;
+    return { center: [prop.position[0], base + height / 2, prop.position[1]], size: [prop.size[0], height, prop.size[1]], tipped: true };
+  }
   if (use === 'bullet' && !durability.classes[furnitureClass(prop)].stopsBullets) return null;
   const height = propHeight(prop);
   return { center: [prop.position[0], base + height / 2, prop.position[1]], size: [prop.size[0], height, prop.size[1]] };
@@ -27,7 +36,7 @@ export function propBox(state, map, index, use = 'solid') {
 // The props that still block movement. Returns map.props itself when nothing has broken.
 export function activeProps(state, map) {
   if (!state?.propBroken) return map.props;
-  return map.props.filter((_, index) => !propBroken(state, index));
+  return map.props.filter((_, index) => !propDown(state, index));
 }
 // Intact decor (TVs, mirrors, rugs) as hit boxes; decor never collides.
 export function decorBox(state, map, index) {
