@@ -12,7 +12,7 @@
 </style>
 <header><h1>Weapon models (step 5.4)</h1>
 <p>The real models from src/weapon-models.js at true scale, without hands, seen from the right (ejection port) side. The grid is 1 cm.</p>
-<select id="set"><option value="pistol">Pistols</option><option value="rifle">Rifles</option></select>
+<select id="set"><option value="pistol">Pistols</option><option value="smg">SMGs</option><option value="rifle">Rifles</option><option value="dmr">DMRs</option><option value="lmg">LMGs</option><option value="sniper">Sniper rifles</option></select>
 <button data-view="side">Right side</button><button data-view="right">Left side</button><button data-view="three">Three-quarter</button><button id="close">Close-up (next)</button><button id="can">Suppressor</button>
 </header>
 <canvas></canvas>
@@ -29,12 +29,13 @@ const sun = new THREE.DirectionalLight(0xffedcd, 2.2); sun.position.set(-2, 3, 2
 const fill = new THREE.DirectionalLight(0xdfe8ff, 1.0); fill.position.set(2, 1, -2); scene.add(fill);
 const grid = new THREE.GridHelper(3, 300, 0x34483c, 0x26362d); grid.rotation.x = Math.PI / 2; grid.position.z = -0.06; scene.add(grid);
 const materials = {}, material = color => materials[color] ??= new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.15 });
-const set = new URLSearchParams(location.search).get('set') === 'rifle' ? 'rifle' : 'pistol';
+const asked = new URLSearchParams(location.search).get('set'), set = modelSets[asked] ? asked : 'pistol';
 document.querySelector('#set').value = set;
 document.querySelector('#set').onchange = e => { location.search = `?set=${e.target.value}`; };
 const models = modelSets[set], ids = Object.keys(models), cans = [], groups = [];
 // Pistols stand in a row; rifles are stacked, one per line.
-const place = i => set === 'pistol' ? [(i - (ids.length - 1) / 2) * 0.29 - 0.08, 0, 0] : [0.12, ((ids.length - 1) / 2 - i) * 0.32 - 0.06, 0];
+const row = set === 'pistol' || set === 'smg', gap = set === 'sniper' ? 0.36 : 0.32;
+const place = i => row ? [(i - (ids.length - 1) / 2) * (set === 'smg' ? 0.55 : 0.29) - 0.08, 0, 0] : [0.12, ((ids.length - 1) / 2 - i) * gap - 0.06, 0];
 ids.forEach((id, i) => {
   const model = weaponModels[`${set}:${id}`], group = new THREE.Group();
   for (const part of model.parts) {
@@ -52,7 +53,7 @@ ids.forEach((id, i) => {
   const info = models[id];
   document.querySelector('#names').insertAdjacentHTML('beforeend', `<div>${i + 1}. ${info.name} · ${info.caliber} · ${info.magazine} rds · muzzle ${Math.round(-model.muzzle[2] * 1000)} mm ahead of the grip</div>`);
 });
-const span = set === 'pistol' ? [ids.length * 0.29, 0.3] : [1.0, ids.length * 0.32 + 0.3];
+const span = row ? [ids.length * (set === 'smg' ? 0.55 : 0.29), 0.3] : [set === 'sniper' ? 1.5 : 1.15, ids.length * gap + 0.3];
 // Far enough back that the whole set fits the window.
 const fit = () => { const v = Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)); return Math.max(span[0] / 2 / (v * camera.aspect), span[1] / 2 / v) * 1.1; };
 const views = {
@@ -60,7 +61,7 @@ const views = {
   right: () => { camera.position.set(0, -0.02, -fit()); camera.lookAt(0, -0.02, 0); },
   three: () => { camera.position.set(-fit() * 0.4, fit() * 0.25, fit() * 0.8); camera.lookAt(0, -0.02, 0); },
   // One weapon filling the view; each click moves to the next.
-  close: () => { const p = groups[focus].position, d = set === 'pistol' ? 0.85 : 2.4, x = set === 'pistol' ? p.x - 0.03 : p.x; camera.position.set(x, p.y - 0.02, d); camera.lookAt(x, p.y - 0.02, 0); },
+  close: () => { const p = groups[focus].position, d = set === 'pistol' ? 0.85 : set === 'smg' ? 1.5 : 2.6, x = set === 'pistol' ? p.x - 0.03 : p.x; camera.position.set(x, p.y - 0.02, d); camera.lookAt(x, p.y - 0.02, 0); },
 };
 let view = 'side', focus = 0;
 document.querySelector('#close').onclick = () => { focus = view === 'close' ? (focus + 1) % groups.length : 0; view = 'close'; views.close(); };

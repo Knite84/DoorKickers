@@ -10,7 +10,11 @@ import { hitGuard } from './npc-body.js';
 import { roomLights } from './lighting.js';
 export const MAGAZINE = 30;
 // Drywall is easy to cross; framing and bodies consume the same heavier budget.
-const penetrationCosts = { drywall: 1, ceiling: 1, timber: 4, body: 4, door: 3, particleboard: 6, truss: 12 };
+const penetrationCosts = { drywall: 1, ceiling: 1, timber: 4, body: 4, door: 3, particleboard: 6, truss: 12, masonry: 8 };
+// .50 BMG against masonry walls (owner, 2026-11-13): each hit takes this many times the normal
+// wall damage off a 10-point masonry piece (three hits break one), and the round carries on
+// through at the masonry cost above. Floors and stairs still stop it; other rounds still stop at masonry.
+export const masonryBreak = 3.5;
 export function reload(state) {
   const weapon = equippedWeapon(state);
   if (!weapon || state.status !== 'active' || state.reloadUntil > state.elapsed || state.ammo === weapon.magazine) return false;
@@ -78,12 +82,14 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
     if (hit.kind === 'prop') {
       damageProp(state, map, rules, hit.object, source, damage, position);
       // A chair or stool hit hard enough tips over (src/furniture-tip.js).
-      pushProp(state, map, rules, hit.object, direction, state.inventory.weapons[state.inventory.equipped]?.ammoType === 'slug' ? 'slug' : source === 'shotgun' ? 'pellet' : state.inventory.equipped === 'sniper' ? 'sniper' : 'bullet');
+      pushProp(state, map, rules, hit.object, direction, state.inventory.weapons[state.inventory.equipped]?.ammoType === 'slug' ? 'slug' : source === 'shotgun' ? 'pellet' : equippedWeapon(state)?.push ?? 'bullet');
       resistance = durability.classes[furnitureClass(map.props[hit.object])].bulletCost ?? Infinity;
     }
     if (hit.kind === 'wall' && rules.destructibleWalls) {
-      removed.push(...damageWall(state.wallPieces, hit.object, wallPower, ['pistol', 'rifle', 'sniper'].includes(state.inventory.equipped) ? 'precise' : 'impact'));
-      resistance = penetrationCosts[hit.object.material] ?? Infinity;
+      const heavy = !!equippedWeapon(state)?.breaksMasonry && hit.object.material === 'masonry' && !hit.object.floor && !hit.object.stair;
+      if (heavy) removed.push(...damageWall(state.wallPieces, hit.object, wallPower * masonryBreak, 'heavy'));
+      else removed.push(...damageWall(state.wallPieces, hit.object, wallPower, ['pistol', 'rifle', 'sniper', 'dmr', 'smg', 'lmg'].includes(state.inventory.equipped) ? 'precise' : 'impact'));
+      resistance = heavy ? penetrationCosts.masonry : hit.object.material === 'masonry' ? Infinity : penetrationCosts[hit.object.material] ?? Infinity;
     }
     if (hit.kind === 'light') { (state.destroyedLights ??= [])[hit.object] = true; resistance = 0.1; }
     if (hit.kind === 'glass') { shatterWindow(state, map, hit.object); resistance = 0.1; }

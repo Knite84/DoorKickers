@@ -40,7 +40,7 @@ app.innerHTML = `
       <canvas id="world" tabindex="0" aria-label="3D mission. Movement, view, inventory and the other controls are listed in the control hints and can be changed in Settings."></canvas>
       <div id="cover-status" hidden role="status"></div>
       <div id="crosshair" data-style="plus" aria-hidden="true"></div><div id="hit-marker" aria-hidden="true">×</div>
-      <div id="scope-overlay" hidden aria-label="Sniper scope"><div class="scope-reticle"></div><span id="scope-zoom">4×</span></div><div id="damage-overlay" aria-hidden="true"></div><div id="flash-overlay" aria-hidden="true"></div>
+      <div id="scope-overlay" hidden aria-label="Scope"><div class="scope-reticle"></div><span id="scope-zoom">4×</span></div><div id="damage-overlay" aria-hidden="true"></div><div id="flash-overlay" aria-hidden="true"></div>
       <div id="damage-arrow" aria-hidden="true"><i></i></div>
       <button id="capture-mouse" class="capture-hint">Click here to aim · Esc releases mouse</button>
       <div id="detainment-banner" hidden role="status"></div>
@@ -337,11 +337,12 @@ function toggleAim() {
   if (view !== 'first' || mapOpen || menuVisible || state.status !== 'active' || !weapons[state.inventory.equipped]) return;
   aimed = !aimed;
 }
-// Wheel: zooms the sniper scope while aiming; otherwise, in first person, swaps
+// Wheel: zooms a scope (sniper 2-8x, DMR 2-4x) while aiming; otherwise, in first person, swaps
 // between the primary and alternate weapons. A short cooldown keeps one trackpad swipe to one step.
 let wheelReadyAt = 0;
 canvas.addEventListener('wheel', event => {
-  if (aimed && state.inventory.equipped === 'sniper') { event.preventDefault(); scopeZoom = Math.max(2, Math.min(8, scopeZoom - Math.sign(event.deltaY))); return; }
+  const scope = equippedWeapon(state)?.scope;
+  if (aimed && scope) { event.preventDefault(); scopeZoom = Math.max(scope[0], Math.min(scope[1], scopeZoom - Math.sign(event.deltaY))); return; }
   if (view !== 'first' || mapOpen || menuVisible || state.status !== 'active' || !event.deltaY) return;
   event.preventDefault();
   const now = performance.now();
@@ -635,6 +636,9 @@ function frame(now) {
   const facing = scene?.aim(state).direction; if (facing) state.facing = [facing[0], facing[2]];
   if (state.status === 'active') scene?.face(movement[0], movement[1]);
   const exposed=!state.playerCover||state.playerCover.peeking;
+  // Keep the zoom inside the scope in hand (a DMR's LPVO stops at 4x).
+  const scopeRange = equippedWeapon(state)?.scope;
+  if (scopeRange) scopeZoom = Math.max(scopeRange[0], Math.min(scopeRange[1], scopeZoom));
   scene?.draw(state, rules, dt, { moving: shaped.pace > 0.05 && state.status === 'active', feel: state.status === 'active' ? feel.view : null, running: gait === 'run', firing: firing && state.status === 'active' && exposed, aimed:aimed&&exposed, scopeZoom, menuVisible, exposure: graphics.exposure });
   // The scope overlay waits until the scope has come up to the eye (src/weapon-handling.js).
   const scoped = exposed && !menuVisible && !!scene?.scoped();

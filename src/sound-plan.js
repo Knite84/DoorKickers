@@ -108,6 +108,10 @@ export const gunSounds = {
   pistol: { crack: { gain: 0.8, highpass: 2400, decay: 0.022 }, body: { gain: 0.6, lowpass: 2800, decay: 0.08 }, thump: { gain: 0.35, from: 200, to: 80, decay: 0.08 }, tail: { gain: 0.15, lowpass: 1100, decay: 0.35 }, click: { gain: 0.1, delay: 0.02 } },
   shotgun: { crack: { gain: 0.7, highpass: 1200, decay: 0.04 }, body: { gain: 1, lowpass: 1500, decay: 0.2 }, thump: { gain: 0.9, from: 110, to: 40, decay: 0.2 }, tail: { gain: 0.35, lowpass: 700, decay: 0.8 } },
   sniper: { crack: { gain: 1, highpass: 1500, decay: 0.04 }, body: { gain: 0.9, lowpass: 1800, decay: 0.18 }, thump: { gain: 0.9, from: 120, to: 35, decay: 0.22 }, tail: { gain: 0.45, lowpass: 650, decay: 1.4 } },
+  // Added with the owner's lists (2026-11-13); placeholders until the sound pass.
+  dmr: { crack: { gain: 0.95, highpass: 1600, decay: 0.035 }, body: { gain: 0.85, lowpass: 2000, decay: 0.15 }, thump: { gain: 0.75, from: 140, to: 45, decay: 0.17 }, tail: { gain: 0.35, lowpass: 750, decay: 0.9 }, click: { gain: 0.12, delay: 0.03 } },
+  smg: { crack: { gain: 0.75, highpass: 2300, decay: 0.022 }, body: { gain: 0.65, lowpass: 2600, decay: 0.08 }, thump: { gain: 0.4, from: 190, to: 75, decay: 0.08 }, tail: { gain: 0.15, lowpass: 1050, decay: 0.35 }, click: { gain: 0.12, delay: 0.02 } },
+  lmg: { crack: { gain: 0.9, highpass: 1700, decay: 0.03 }, body: { gain: 0.85, lowpass: 2000, decay: 0.12 }, thump: { gain: 0.65, from: 150, to: 50, decay: 0.12 }, tail: { gain: 0.3, lowpass: 850, decay: 0.6 }, click: { gain: 0.14, delay: 0.03 } },
   minigun: { crack: { gain: 0.6, highpass: 2000, decay: 0.018 }, body: { gain: 0.55, lowpass: 2000, decay: 0.05 }, thump: { gain: 0.4, from: 150, to: 70, decay: 0.05 }, tail: { gain: 0.08, lowpass: 900, decay: 0.3 } },
   guard: { crack: { gain: 0.8, highpass: 2000, decay: 0.025 }, body: { gain: 0.7, lowpass: 2400, decay: 0.1 }, thump: { gain: 0.45, from: 180, to: 70, decay: 0.1 }, tail: { gain: 0.2, lowpass: 1000, decay: 0.45 } },
 };
@@ -132,6 +136,13 @@ export const stepSounds = {
   outdoor: { tap: { gain: 0.3, bandpass: 900, q: 0.7, decay: 0.08 }, knock: { gain: 0.15, from: 70, decay: 0.05 }, scuff: 0.5 },
 };
 export const stepLoudness = { walk: 0.55, run: 1, crouch: 0.3, creep: 0.15 };
+// Overall footstep volume in the speakers (owner, 2026-11-13: "way down", from 0.5, about
+// 12 dB quieter). Sound only: what guards hear is set by stepReach and footstepNotice.
+export const stepVolume = 0.12;
+// Everything except gunfire, turned down until the sound pass (owner, 2026-11-13): effects
+// (impacts, doors, glass, explosions, reloads and other handling), footsteps, ambience and
+// the ear ringing. Multiplies the settings' volume sliders. About 12 dB down.
+export const nonGunVolume = 0.25;
 // How far a footstep carries in open air for the speakers, by pace.
 export const stepReach = { walk: 9, run: 16, crouch: 5, creep: 3 };
 // How far a guard notices the player's footstep (rule "Guards hear footsteps" scales it):

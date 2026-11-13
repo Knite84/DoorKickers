@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { distance, lineOfSight, obstacles } from './simulation.js';
 import { buildWallPieces } from './destruction.js';
-import { weapons, items, weaponKey, baseWeapon, isSuppressed } from './kit.js';
+import { weapons, items, weaponKey, baseWeapon, isSuppressed, weaponSpec } from './kit.js';
 import { elevation, eyeHeight, playerEye, doorCenter, doorSize, windowCenter, windowSize, activeProps } from './world.js';
 import { sightHalfAngle, sightRangeFactor } from './guard-traits.js';
 import { segmentClear } from './combat.js';
@@ -669,7 +669,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     if (firstView) { yaw += recovery.yaw; pitch = THREE.MathUtils.clamp(pitch + recovery.pitch, -1.35, 1.35); }
     lastYaw = yaw; lastPitch = pitch;
     firstPerson.rotation.set(pitch, yaw, feel ? -feel.roll : 0);
-    scopedNow = aimedNow && shownId === 'sniper' && scopeUp(hand);
+    scopedNow = aimedNow && !!weaponSpec(shownKey)?.scope && scopeUp(hand);
     const fov = fieldOfView(hand, spec ? shownKey : null, { scoped: scopedNow, zoom: controls.scopeZoom ?? 4 });
     if (Math.abs(firstPerson.fov - fov) > 1e-4) { firstPerson.fov = fov; firstPerson.updateProjectionMatrix(); }
     const strike = state.status === 'active' ? Math.sin(Math.PI * Math.max(0, Math.min(1, ((state.meleeUntil ?? 0) - state.elapsed) / .65))) : 0;
@@ -876,7 +876,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
       const lift = fireKick(hand, id, { aimed, crouched, climb: climb && view === 'first' && !mapOpen });
       yaw += lift.yaw; pitch = THREE.MathUtils.clamp(pitch + lift.pitch, -1.35, 1.35);
       lastYaw = yaw; lastPitch = pitch;
-      flashSize = ({ shotgun: 1.4, sniper: 1.25, pistol: 0.75, minigun: 0.9, 'pistol:mk23': 0.9 })[id] ?? ({ pistol: 0.75 })[baseWeapon(id)] ?? 1;
+      flashSize = ({ 'pistol:mk23': 0.9, 'sniper:tac50': 1.6, 'sniper:m107a1': 1.6, 'smg:mp5k': 0.85 })[id] ?? ({ shotgun: 1.4, sniper: 1.25, pistol: 0.75, minigun: 0.9, dmr: 1.15, smg: 0.75, lmg: 1.05 })[baseWeapon(id)] ?? 1;
       for (const group of [flash, miniFlash]) { group.rotation.z = Math.random() * Math.PI; group.scale.setScalar(flashSize * (0.8 + Math.random() * 0.4)); }
       if (!handlingFor(id)?.cycle && id !== 'minigun') ejectQueued = id;
       puffQueued = suppressed ? 0.1 : 0.22;

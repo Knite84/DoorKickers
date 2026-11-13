@@ -43,6 +43,29 @@ export const handling = {
     spring: { stiffness: 150, damping: 18 },
     aimTime: 0.25, aimFov: 55, eyeRelief: 0.145, draw: 0.6, reload: 'magazine', cycle: 'bolt',
   },
+  // Added 2026-11-13 with the owner's lists. DMRs aim through a 2-4x LPVO, so their eye
+  // relief is set for the scope, like the sniper's.
+  dmr: {
+    climb: { pitch: 0.03, yaw: 0.006, drift: 0 },
+    recover: { share: 0.75, delay: 0.1, time: 0.15 },
+    kick: { back: 0.05, rise: 0.08, roll: 0.02 },
+    spring: { stiffness: 200, damping: 22 },
+    aimTime: 0.22, aimFov: 55, eyeRelief: 0.145, draw: 0.55, reload: 'magazine',
+  },
+  smg: {
+    climb: { pitch: 0.007, yaw: 0.003, drift: 0.0008 },
+    recover: { share: 0.65, delay: 0.1, time: 0.1 },
+    kick: { back: 0.025, rise: 0.035, roll: 0.015 },
+    spring: { stiffness: 300, damping: 28 },
+    aimTime: 0.14, aimFov: 58, eyeRelief: 0.26, draw: 0.38, reload: 'magazine',
+  },
+  lmg: {
+    climb: { pitch: 0.008, yaw: 0.0045, drift: 0.0015 },
+    recover: { share: 0.55, delay: 0.12, time: 0.15 },
+    kick: { back: 0.03, rise: 0.035, roll: 0.02 },
+    spring: { stiffness: 220, damping: 26 },
+    aimTime: 0.3, aimFov: 58, eyeRelief: 0.26, draw: 0.75, reload: 'magazine',
+  },
   minigun: {
     climb: { pitch: 0.0045, yaw: 0.003, drift: 0 },
     recover: { share: 0.6, delay: 0.08, time: 0.15 },
@@ -77,7 +100,41 @@ export const rifleHandling = {
   // The suppressor soaks some kick; short and handy.
   honeybadger: { draw: 0.37, aimTime: 0.15, climb: { pitch: 0.0105, yaw: 0.0035, drift: 0.001 }, kick: { back: 0.03, rise: 0.045, roll: 0.018 } },
 };
-const modelHandling = { pistol: pistolHandling, rifle: rifleHandling };
+export const smgHandling = {
+  mp5: {},
+  mp5k: { draw: 0.3, aimTime: 0.12, climb: { pitch: 0.0095, yaw: 0.004, drift: 0.0012 } },
+  // Hydraulic buffer: flattest of the SMGs despite the .45.
+  apc45: { climb: { pitch: 0.0065, yaw: 0.0025, drift: 0.0006 }, kick: { back: 0.022, rise: 0.03, roll: 0.012 } },
+  apc10: { climb: { pitch: 0.0105, yaw: 0.0038, drift: 0.001 }, kick: { back: 0.03, rise: 0.045, roll: 0.018 } },
+};
+// Bolt-action models cycle the bolt between shots.
+const bolt = { cycle: 'bolt', draw: 0.6, climb: { pitch: 0.05, yaw: 0.007, drift: 0 }, kick: { back: 0.07, rise: 0.11, roll: 0.025 } };
+export const dmrHandling = {
+  m110a1: {},
+  sr25: { draw: 0.6, climb: { pitch: 0.031, yaw: 0.006, drift: 0 } },
+  mrggs: { climb: { pitch: 0.025, yaw: 0.005, drift: 0 } },
+  mk20: { climb: { pitch: 0.032, yaw: 0.006, drift: 0 } },
+  qfix86: { ...bolt, draw: 0.5 },
+  qfix65: { ...bolt, draw: 0.5 },
+  cross: { ...bolt, draw: 0.45 },
+};
+export const lmgHandling = {
+  mk46: { draw: 0.6, climb: { pitch: 0.0065, yaw: 0.004, drift: 0.0012 } },
+  mk48: {},
+  m240l: { draw: 0.85, aimTime: 0.34, climb: { pitch: 0.009, yaw: 0.005, drift: 0.0015 } },
+  m250: { draw: 0.8, climb: { pitch: 0.0095, yaw: 0.005, drift: 0.0015 } },
+  // .338: the heaviest kick of anything held.
+  mmg338: { draw: 0.9, aimTime: 0.36, climb: { pitch: 0.014, yaw: 0.006, drift: 0.002 }, kick: { back: 0.045, rise: 0.05, roll: 0.025 } },
+};
+export const sniperHandling = {
+  mrad338: {},
+  mrad300: { climb: { pitch: 0.065, yaw: 0.008, drift: 0 } },
+  axsr: {},
+  tac50: { draw: 0.75, aimTime: 0.3, climb: { pitch: 0.1, yaw: 0.012, drift: 0 }, kick: { back: 0.12, rise: 0.18, roll: 0.04 } },
+  // Semi-automatic: no bolt to work, but a lot of kick per shot.
+  m107a1: { cycle: null, draw: 0.8, aimTime: 0.32, climb: { pitch: 0.085, yaw: 0.012, drift: 0 }, recover: { share: 0.8, delay: 0.1, time: 0.18 }, kick: { back: 0.11, rise: 0.15, roll: 0.04 } },
+};
+const modelHandling = { pistol: pistolHandling, rifle: rifleHandling, smg: smgHandling, dmr: dmrHandling, lmg: lmgHandling, sniper: sniperHandling };
 const merged = {};
 // Handling for a weapon key; undefined for items.
 export function handlingFor(key) {

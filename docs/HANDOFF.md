@@ -37,7 +37,7 @@ Updated 2026-11-12. This is the current state of the project for a fresh session
 Everything a Sonnet session could start alone is built. What remains in the [status table](POLISH_PLAN.md#status):
 1. **Owner's order from here:** the owner's check of 5.1 in play. Every numbered step in the plan is now built; what remains is owner checks, tuning, and the open proposals below.
 2. **Proposals still to write:** mantling over low cover (6.3, a gameplay change).
-4. **Step 5.4, weapon model refinement:** pistols built 2026-11-13 (five real models, picked in planning), and rifles the same day (six models; `scripts/weapon-preview.html` shows either set side by side). Stage A of the new kit layout is built: primary and alternate, separate throwables and equipment, new number keys, and the Tab cheat menu. Stage B has the rifles; the DMR, SMG, sniper and shotgun lists are still to come; stage C is the Other weapons and the derringer suit. See the 5.4 entry.
+4. **Step 5.4, weapon model refinement:** pistols built 2026-11-13 (five real models, picked in planning), and rifles the same day (six models; `scripts/weapon-preview.html` shows either set side by side). Stage A of the new kit layout is built: primary and alternate, separate throwables and equipment, new number keys, and the Tab cheat menu. Stage B has rifles, SMGs, DMRs, LMGs and sniper rifles (21 models on top of the rifles and pistols); only the shotgun list is still to come; stage C is the Other weapons and the derringer suit. See the 5.4 entry.
 3. **Small follow-ups:** none open. Possible later: the 108 pitch-black light samples in windowless closets (see the stairwell fix note).
 
 ## Waiting on the owner

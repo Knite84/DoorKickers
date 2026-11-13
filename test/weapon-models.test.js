@@ -31,7 +31,9 @@ test('parts are well formed and the barrel points forward', () => {
   }
 });
 
-test('longer weapons have longer models: pistol < rifle < shotgun < sniper', () => {
+test('longer weapons have longer models: pistol < SMG < rifle < DMR < sniper', () => {
+  // The default models, at true size since 2026-11-13. The shotgun is still the old
+  // placeholder (too long) until its list arrives, so it is left out.
   const reach = id => -weaponModels[id].muzzle[2];
-  assert.ok(reach('pistol') < reach('rifle') && reach('rifle') < reach('shotgun') && reach('shotgun') < reach('sniper'));
+  assert.ok(reach('pistol') < reach('smg') && reach('smg') < reach('rifle') && reach('rifle') < reach('dmr') && reach('dmr') < reach('sniper'));
 });

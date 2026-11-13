@@ -213,6 +213,218 @@ function rifleModel(spec) {
   };
 }
 
+// DMRs and sniper rifles (owner, 2026-11-13). One builder with a scope instead of iron
+// sights: the sight point is the objective lens on the scope's axis, so aiming looks down
+// the tube. Bolt actions get a bolt handle that cycles; semi-autos a charging handle.
+// Barrel lengths are published specs where known; the MRGG-S, Q Fix and SIG Cross are
+// assumptions (18, 16 and 16 in).
+const longSpecs = {
+  // DMRs: semi-auto 7.62 and 6.5 Creedmoor on AR-10 style receivers, a 2-4x LPVO.
+  'dmr:m110a1': { barrel: 16.5 * inch, rail: 0.33, body: 0x8a7a5a, railColor: 0x8a7a5a, stock: 'carbine', magazine: 20, device: 'flash', scope: 'lpvo', receiver: 1.1, casing: [0.006, 0.07] },
+  'dmr:sr25': { barrel: 20 * inch, rail: 0.33, body: 0x2a2e2b, railColor: 0x2a2e2b, stock: 'precision', magazine: 20, device: 'flash', scope: 'lpvo', receiver: 1.1, casing: [0.006, 0.07] },
+  'dmr:mrggs': { barrel: 18 * inch, rail: 0.36, body: 0x8f7d5e, railColor: 0x8f7d5e, stock: 'carbine', magazine: 20, device: 'brake', scope: 'lpvo', receiver: 1.1, casing: [0.0058, 0.06] },
+  'dmr:mk20': { barrel: 20 * inch, rail: 0.3, body: 0x9a8762, railColor: 0x9a8762, stock: 'scar', magazine: 20, device: 'flash', scope: 'lpvo', receiver: 1.15, casing: [0.006, 0.07] },
+  // Bolt-action DMRs with folding stocks.
+  'dmr:qfix86': { barrel: 16 * inch, rail: 0.3, body: 0x3a3d3e, railColor: 0x3a3d3e, stock: 'folding', magazine: 10, device: 'brake', scope: 'lpvo', action: 'bolt', casing: [0.0055, 0.045] },
+  'dmr:qfix65': { barrel: 16 * inch, rail: 0.3, body: 0x3a3d3e, railColor: 0x3a3d3e, stock: 'folding', magazine: 10, device: 'brake', scope: 'lpvo', action: 'bolt', casing: [0.0058, 0.06] },
+  'dmr:cross': { barrel: 16 * inch, rail: 0.27, body: 0x6e6450, railColor: 0x2c2f30, stock: 'folding', magazine: 5, device: 'brake', scope: 'lpvo', action: 'bolt', casing: [0.0058, 0.06] },
+  // Sniper rifles: long heavy barrels, big scopes, bipods.
+  'sniper:mrad338': { barrel: 27 * inch, rail: 0.38, body: 0x7d6d50, railColor: 0x7d6d50, stock: 'folding', magazine: 10, device: 'brake', scope: 'sniper', action: 'bolt', bipod: true, barrelRadius: 0.013, receiver: 1.15, casing: [0.0075, 0.09] },
+  'sniper:mrad300': { barrel: 26 * inch, rail: 0.38, body: 0x7d6d50, railColor: 0x7d6d50, stock: 'folding', magazine: 10, device: 'brake', scope: 'sniper', action: 'bolt', bipod: true, barrelRadius: 0.013, receiver: 1.15, casing: [0.0072, 0.085] },
+  'sniper:axsr': { barrel: 27 * inch, rail: 0.36, body: 0x55594a, railColor: 0x55594a, stock: 'folding', magazine: 10, device: 'brake', scope: 'sniper', action: 'bolt', bipod: true, barrelRadius: 0.013, receiver: 1.15, casing: [0.0075, 0.09] },
+  'sniper:tac50': { barrel: 29 * inch, rail: 0.34, body: 0x262a24, railColor: 0x3b4134, stock: 'thumbhole', magazine: 5, device: 'brake50', scope: 'sniper', action: 'bolt', bipod: true, barrelRadius: 0.016, receiver: 1.3, casing: [0.01, 0.1] },
+  'sniper:m107a1': { barrel: 20 * inch, rail: 0.3, body: 0x6b6758, railColor: 0x6b6758, stock: 'barrett', magazine: 10, device: 'brake50', scope: 'sniper', bipod: true, barrelRadius: 0.017, receiver: 1.5, casing: [0.01, 0.1] },
+};
+function longGunModel(spec) {
+  const dark = 0x111517, bore = 0.03, chamber = 0.02, scale = spec.receiver ?? 1;
+  const railTop = 0.073, front = -0.07 * scale, body = spec.body;
+  const barrelEnd = chamber - spec.barrel, parts = [];
+  // Receiver, top rail, controls.
+  parts.push(box([0, 0.04, (0.12 + front) / 2], [0.036 * scale, 0.05 * scale, 0.12 - front], body));
+  parts.push(box([0, railTop - 0.004, (0.12 + front) / 2], [0.022, 0.008, 0.12 - front], body));
+  parts.push(box([0, -0.01, 0.02], [0.036 * scale, 0.045, 0.17], body));
+  if (spec.action === 'bolt') {
+    parts.push(box([0.032 * scale, 0.045, 0.06], [0.035, 0.01, 0.012], steel, { moves: 'bolt' }));
+    parts.push(tube([0.05 * scale, 0.04, 0.06], 0.008, 0.016, dark, { moves: 'bolt' }));
+  } else parts.push(box([0, 0.066, 0.12], [0.03, 0.01, 0.02], dark));
+  parts.push(box([0.018 * scale, 0.04, 0.02], [0.002, 0.016, 0.06], dark));
+  // Grip, trigger, guard.
+  parts.push(box([0, -0.075, 0.075], [0.032, 0.11, 0.045], 0x1b1f20, { rotation: [-0.3, 0, 0] }));
+  parts.push(box([0, -0.045, 0.04], [0.006, 0.02, 0.006], dark, { rotation: [-0.2, 0, 0] }));
+  parts.push(box([0, -0.06, 0.035], [0.02, 0.004, 0.06], body));
+  // Straight box magazine, deeper for more rounds.
+  const depth = { 5: 0.045, 10: 0.065, 20: 0.1 }[spec.magazine] * Math.max(1, scale * 0.9);
+  parts.push(box([0, -0.03 - depth / 2, -0.035], [0.032 * scale, depth, 0.08 * Math.min(scale, 1.3)], dark, { rotation: [0.05, 0, 0], moves: 'magazine' }));
+  // Stock.
+  if (spec.stock === 'carbine') {
+    parts.push(tube([0, 0.03, 0.2], 0.016, 0.16, dark));
+    parts.push(box([0, 0.015, 0.34], [0.044, 0.085, 0.16], 0x24282a));
+  } else if (spec.stock === 'precision') {
+    parts.push(box([0, 0.0, 0.29], [0.042, 0.1, 0.25], body));
+    parts.push(box([0, 0.055, 0.25], [0.034, 0.02, 0.12], dark));
+  } else if (spec.stock === 'scar') {
+    parts.push(box([0, 0.01, 0.3], [0.046, 0.09, 0.22], 0x2a2c26));
+    parts.push(box([0, 0.065, 0.27], [0.034, 0.025, 0.1], 0x2a2c26));
+  } else if (spec.stock === 'thumbhole') {
+    parts.push(box([0, -0.005, 0.27], [0.05, 0.13, 0.3], spec.railColor));
+    parts.push(box([0, -0.02, 0.17], [0.052, 0.045, 0.07], 0x07090a));
+  } else if (spec.stock === 'barrett') {
+    parts.push(box([0, 0.0, 0.3], [0.05, 0.11, 0.24], body));
+    parts.push(box([0, -0.035, 0.42], [0.05, 0.14, 0.025], 0x151819));
+  } else {
+    for (const y of [0.05, -0.035]) parts.push(box([0, y, 0.24], [0.012, 0.012, 0.22], dark));
+    parts.push(box([0, 0.065, 0.24], [0.03, 0.025, 0.09], dark));
+    parts.push(box([0, 0.005, 0.355], [0.032, 0.14, 0.018], 0x151819));
+  }
+  // Fore end around the barrel, barrel, muzzle device, bipod.
+  const railFront = front - spec.rail, radius = spec.barrelRadius ?? 0.011;
+  parts.push(box([0, 0.032, front - spec.rail / 2], [0.046, 0.06, spec.rail], spec.railColor));
+  parts.push(box([0, railTop - 0.005, front - spec.rail / 2], [0.022, 0.01, spec.rail], spec.railColor));
+  for (let z = front - 0.03; z > railFront + 0.02; z -= 0.04) for (const side of [-1, 1]) parts.push(box([side * 0.0235, 0.03, z], [0.002, 0.012, 0.022], dark));
+  if (barrelEnd < railFront) parts.push(tube([0, bore, (railFront + barrelEnd) / 2], radius, railFront - barrelEnd, dark));
+  const device = { flash: [0.012, 0.06], brake: [0.017, 0.075], brake50: [0.026, 0.12] }[spec.device];
+  parts.push(tube([0, bore, barrelEnd - device[1] / 2], device[0], device[1], dark));
+  if (spec.device !== 'flash') for (const side of [-1, 1]) parts.push(box([side * device[0], bore, barrelEnd - device[1] * 0.45], [0.004, device[0], device[1] * 0.5], 0x07090a));
+  if (spec.bipod) {
+    parts.push(box([0, 0.0, railFront + 0.02], [0.03, 0.02, 0.03], dark));
+    for (const side of [-1, 1]) parts.push(box([side * 0.012, -0.008, railFront + 0.12], [0.008, 0.008, 0.2], dark));
+  }
+  const muzzleZ = Math.min(barrelEnd - device[1], railFront);
+  // Scope on two rings: a 2-4x LPVO on DMRs, a long scope on sniper rifles.
+  const big = spec.scope === 'sniper', tubeR = big ? 0.017 : 0.015, length = big ? 0.36 : 0.27;
+  const scopeY = railTop + (big ? 0.045 : 0.034), ocular = 0.03, objective = ocular - length;
+  parts.push(tube([0, scopeY, (ocular + objective) / 2], tubeR, length, 0x151a1c));
+  parts.push(tube([0, scopeY, objective - 0.02], big ? 0.028 : 0.02, 0.05, 0x151a1c));
+  parts.push(tube([0, scopeY, ocular + 0.02], 0.021, 0.05, 0x151a1c));
+  parts.push(box([0, scopeY + tubeR + 0.008, (ocular + objective) / 2], [0.018, 0.018, 0.022], 0x1d2224));
+  parts.push(box([tubeR + 0.008, scopeY, (ocular + objective) / 2], [0.016, 0.018, 0.022], 0x1d2224));
+  for (const z of [ocular - 0.08, objective + 0.09]) parts.push(box([0, (railTop + scopeY) / 2, z], [0.03, scopeY - railTop, 0.016], dark));
+  // Suppressor (fitted only) and hands.
+  parts.push(tube([0, bore, muzzleZ - 0.11], device[0] < 0.02 ? 0.023 : 0.028, 0.22, 0x151a1c, { role: 'suppressor' }));
+  parts.push(...hands([0, -0.095, 0.075], [0, -0.02, front - Math.min(spec.rail * 0.55, 0.25)]));
+  const [cr, cl] = spec.casing;
+  return {
+    muzzle: [0, bore, muzzleZ], sight: [0, scopeY, objective - 0.045], port: [0.03, 0.045, 0.02],
+    casing: [cr, cl, brass], suppressorLength: 0.22, parts,
+  };
+}
+
+// SMGs (owner, 2026-11-13). MP5 family: slim receiver with the cocking tube over a short
+// barrel, drum rear sight and hooded front post, curved magazine. B&T APC: flat top rail,
+// straight magazine, folding stock. Barrels: MP5 8.9 in, MP5K 4.5 in, APC 6.9 in.
+const smgSpecs = {
+  'smg:mp5': { type: 'mp5', barrel: 8.9 * inch, handguard: 0.13, stock: 'retract', body: 0x23272a },
+  'smg:mp5k': { type: 'mp5', barrel: 4.5 * inch, handguard: 0.05, stock: 'none', body: 0x23272a, foregrip: true },
+  'smg:apc45': { type: 'apc', barrel: 6.9 * inch, handguard: 0.1, stock: 'folding', body: 0x2b2f31, magazine: 0.11 },
+  'smg:apc10': { type: 'apc', barrel: 6.9 * inch, handguard: 0.1, stock: 'folding', body: 0x2b2f31, magazine: 0.13, casing: [0.0053, 0.025] },
+};
+function smgModel(spec) {
+  const dark = 0x111517, bore = 0.03, chamber = 0.02, railTop = 0.07, front = -0.06, body = spec.body;
+  const barrelEnd = chamber - spec.barrel, guardFront = front - spec.handguard, parts = [];
+  parts.push(box([0, 0.04, 0.03], [0.038, 0.05, 0.18], body));
+  parts.push(box([0, -0.01, 0.03], [0.034, 0.04, 0.14], body));
+  parts.push(box([0, -0.02, -0.025], [0.032, 0.04, 0.05], body));                       // magazine well
+  parts.push(box([0, -0.075, 0.075], [0.032, 0.1, 0.045], 0x1b1f20, { rotation: [-0.3, 0, 0] }));
+  parts.push(box([0, -0.045, 0.04], [0.006, 0.02, 0.006], dark, { rotation: [-0.2, 0, 0] }));
+  parts.push(box([0.0195, 0.04, 0.0], [0.002, 0.014, 0.04], dark));                    // ejection port
+  if (spec.type === 'mp5') {
+    // Cocking tube over the barrel, slim handguard under it, drum sight and hooded front post.
+    parts.push(tube([0, 0.06, (front + guardFront - 0.02) / 2], 0.01, front - guardFront + 0.02, body));
+    parts.push(box([0, 0.025, front - spec.handguard / 2], [0.044, 0.042, spec.handguard], 0x1a1d1f));
+    parts.push(box([0, railTop + 0.004, 0.11], [0.024, 0.024, 0.024], dark));
+    for (const side of [-1, 1]) parts.push(box([side * 0.011, railTop + 0.011, guardFront - 0.012], [0.003, 0.022, 0.016], dark));
+    // Curved magazine in two pieces.
+    parts.push(box([0, -0.075, -0.03], [0.022, 0.075, 0.04], dark, { rotation: [0.15, 0, 0], moves: 'magazine' }));
+    parts.push(box([0, -0.135, -0.045], [0.022, 0.055, 0.038], dark, { rotation: [0.35, 0, 0], moves: 'magazine' }));
+  } else {
+    parts.push(box([0, railTop - 0.004, 0.03], [0.022, 0.008, 0.18], body));
+    parts.push(box([0, 0.032, front - spec.handguard / 2], [0.042, 0.05, spec.handguard], body));
+    parts.push(box([0, railTop - 0.004, front - spec.handguard / 2], [0.022, 0.008, spec.handguard], body));
+    parts.push(box([0, -0.02 - spec.magazine / 2, -0.03], [0.026, spec.magazine, 0.04], dark, { rotation: [0.05, 0, 0], moves: 'magazine' }));
+  }
+  // Rear sight ears and front post (the MP5's hood sits round the post).
+  for (const side of [-1, 1]) parts.push(box([side * 0.007, railTop + 0.009, 0.09], [0.006, 0.018, 0.012], dark));
+  const sightZ = guardFront - 0.012;
+  parts.push(box([0, railTop + (spec.type === 'mp5' ? 0.0 : 0.009), sightZ], [0.005, spec.type === 'mp5' ? 0.036 : 0.018, 0.008], dark));
+  // Barrel and muzzle.
+  if (barrelEnd < guardFront) parts.push(tube([0, bore, (guardFront + barrelEnd) / 2], 0.008, guardFront - barrelEnd, dark));
+  const muzzleZ = Math.min(barrelEnd - 0.02, guardFront - 0.01);
+  parts.push(tube([0, bore, muzzleZ + 0.01], 0.011, 0.02, dark));
+  if (spec.foregrip) parts.push(box([0, -0.04, front - 0.03], [0.026, 0.07, 0.03], 0x1b1f20, { rotation: [0.1, 0, 0] }));
+  // Stock.
+  if (spec.stock === 'retract') {
+    for (const x of [-0.013, 0.013]) parts.push(box([x, 0.03, 0.22], [0.006, 0.01, 0.2], dark));
+    parts.push(box([0, 0.02, 0.33], [0.04, 0.1, 0.018], 0x151819));
+  } else if (spec.stock === 'folding') {
+    for (const y of [0.05, -0.005]) parts.push(box([0, y, 0.22], [0.012, 0.012, 0.18], dark));
+    parts.push(box([0, 0.022, 0.31], [0.03, 0.09, 0.015], dark));
+  } else parts.push(box([0, 0.04, 0.125], [0.036, 0.04, 0.01], dark));
+  parts.push(tube([0, bore, muzzleZ - 0.085], 0.019, 0.17, 0x151a1c, { role: 'suppressor' }));
+  const support = spec.foregrip ? [0, -0.055, front - 0.03] : [0, -0.012, front - spec.handguard * 0.55];
+  parts.push(...hands([0, -0.095, 0.075], support));
+  const [cr, cl] = spec.casing ?? [0.0048, 0.019];
+  return {
+    muzzle: [0, bore, muzzleZ], sight: [0, railTop + 0.018, sightZ], port: [0.025, 0.045, 0.0],
+    casing: [cr, cl, brass], suppressorLength: 0.17, parts,
+  };
+}
+
+// LMGs (owner, 2026-11-13): belt-fed receivers with a feed cover on top, an ammunition box
+// or pouch under the left side (it comes off on a reload), carry handle and bipod.
+// Barrels: Mk 46 16.3 in, Mk 48 19.75 in, M240L 20.9 in, M250 17.5 in, MMG 338 24 in.
+const lmgSpecs = {
+  'lmg:mk46': { barrel: 16.3 * inch, guard: 0.2, body: 0x2a2d2b, stock: 'collapsible', pouch: 0x6d6448, casing: [0.0045, 0.045] },
+  'lmg:mk48': { barrel: 19.75 * inch, guard: 0.22, body: 0x2a2d2b, stock: 'collapsible', pouch: 0x6d6448, gasTube: true, casing: [0.006, 0.07] },
+  'lmg:m240l': { barrel: 20.9 * inch, guard: 0.24, body: 0x262927, stock: 'skeleton', pouch: 0x4e5340, gasTube: true, handle: true, casing: [0.006, 0.07] },
+  'lmg:m250': { barrel: 17.5 * inch, guard: 0.26, body: 0x6e6450, stock: 'folding', pouch: 0x5e5a46, casing: [0.0062, 0.07] },
+  'lmg:mmg338': { barrel: 24 * inch, guard: 0.3, body: 0x23262a, stock: 'folding', pouch: 0x4e5340, gasTube: true, handle: true, casing: [0.0075, 0.09], scale: 1.12 },
+};
+function lmgModel(spec) {
+  const dark = 0x111517, bore = 0.03, chamber = 0.02, k = spec.scale ?? 1, body = spec.body;
+  const coverTop = 0.095 * k, front = -0.16, barrelEnd = chamber - spec.barrel, guardFront = front - spec.guard, parts = [];
+  parts.push(box([0, 0.035, -0.03], [0.05 * k, 0.075 * k, 0.26], body));
+  parts.push(box([0, coverTop - 0.012, -0.03], [0.052 * k, 0.024, 0.18], 0x1d2021));
+  parts.push(box([0, coverTop - 0.002, -0.03], [0.022, 0.008, 0.16], 0x1d2021));
+  parts.push(box([0.026 * k, 0.03, -0.02], [0.002, 0.02, 0.07], dark));
+  parts.push(box([0, -0.075, 0.075], [0.032, 0.11, 0.045], 0x1b1f20, { rotation: [-0.3, 0, 0] }));
+  parts.push(box([0, -0.045, 0.04], [0.006, 0.02, 0.006], dark, { rotation: [-0.2, 0, 0] }));
+  parts.push(box([0, -0.06, 0.035], [0.02, 0.004, 0.06], body));
+  // Ammunition pouch or box hung under the left side, with the belt running up into it.
+  parts.push(box([-0.012, -0.075, -0.07], [0.075, 0.1, 0.12], spec.pouch, { moves: 'magazine' }));
+  parts.push(box([-0.03 * k, 0.005, -0.06], [0.012, 0.045, 0.03], 0xb58b3c, { moves: 'magazine' }));
+  // Fore end, barrel, gas tube, carry handle, bipod.
+  parts.push(box([0, 0.03, front - spec.guard / 2], [0.048, 0.055, spec.guard], body));
+  parts.push(tube([0, bore, (guardFront + barrelEnd) / 2], 0.012, guardFront - barrelEnd, dark));
+  if (spec.gasTube) parts.push(tube([0, bore - 0.022, (guardFront + barrelEnd + 0.08) / 2], 0.007, guardFront - barrelEnd - 0.08, dark));
+  parts.push(tube([0, bore, barrelEnd - 0.03], 0.013, 0.06, dark));
+  if (spec.handle) parts.push(box([0, coverTop - 0.01, front - 0.02], [0.012, 0.03, 0.12], dark));
+  for (const side of [-1, 1]) parts.push(box([side * 0.013, 0.0, barrelEnd + 0.13], [0.008, 0.008, 0.22], dark));
+  // Rear sight on the feed cover, front post standing up from the barrel.
+  for (const side of [-1, 1]) parts.push(box([side * 0.007, coverTop + 0.009, 0.05], [0.006, 0.018, 0.012], dark));
+  const sightZ = barrelEnd + 0.08, sightTop = coverTop + 0.018;
+  parts.push(box([0, (bore + sightTop) / 2, sightZ], [0.006, sightTop - bore, 0.01], dark));
+  // Stock.
+  if (spec.stock === 'collapsible') {
+    parts.push(tube([0, 0.03, 0.2], 0.016, 0.16, dark));
+    parts.push(box([0, 0.015, 0.34], [0.046, 0.09, 0.17], 0x24282a));
+  } else if (spec.stock === 'skeleton') {
+    for (const y of [0.06, -0.03]) parts.push(box([0, y, 0.25], [0.014, 0.014, 0.25], dark));
+    parts.push(box([0, 0.015, 0.37], [0.036, 0.13, 0.02], 0x151819));
+  } else {
+    for (const y of [0.055, -0.025]) parts.push(box([0, y, 0.23], [0.012, 0.012, 0.21], dark));
+    parts.push(box([0, 0.065, 0.24], [0.03, 0.025, 0.09], dark));
+    parts.push(box([0, 0.015, 0.34], [0.034, 0.13, 0.018], 0x151819));
+  }
+  const muzzleZ = barrelEnd - 0.06;
+  parts.push(tube([0, bore, muzzleZ - 0.1], 0.026, 0.2, 0x151a1c, { role: 'suppressor' }));
+  parts.push(...hands([0, -0.095, 0.075], [0, -0.02, front - spec.guard * 0.5]));
+  const [cr, cl] = spec.casing;
+  return {
+    muzzle: [0, bore, muzzleZ], sight: [0, sightTop, sightZ], port: [0.03, 0.03, -0.02],
+    casing: [cr, cl, brass], suppressorLength: 0.2, parts,
+  };
+}
+
 export const weaponModels = {
   shotgun: {
     muzzle: [0, 0.03, -0.9], sight: [0, 0.065, -0.88], port: [0.03, 0.02, -0.12], casing: [0.0105, 0.065, 0x8e2a22],
@@ -228,26 +440,6 @@ export const weaponModels = {
       ...hands([0, -0.085, 0.09], [0, -0.01, -0.42]),
     ],
   },
-  sniper: {
-    muzzle: [0, 0.035, -1.05], sight: [0, 0.115, -0.33], port: [0.03, 0.04, -0.05], casing: [0.006, 0.07, brass],
-    parts: [
-      box([0, -0.005, -0.1], [0.06, 0.085, 0.4], 0x2b342b),
-      tube([0, 0.035, -0.62], 0.014, 0.85, metal),
-      tube([0, 0.035, -1.0], 0.02, 0.1, steel),
-      box([0, -0.025, -0.45], [0.05, 0.05, 0.4], 0x52614a),
-      tube([0, 0.115, -0.15], 0.03, 0.34, 0x151a1c),
-      tube([0, 0.115, -0.33], 0.04, 0.05, 0x151a1c),
-      tube([0, 0.115, 0.03], 0.036, 0.05, 0x151a1c),
-      box([0, 0.075, -0.12], [0.02, 0.04, 0.03], metal),
-      box([0, 0.075, -0.3], [0.02, 0.04, 0.03], metal),
-      box([0.05, 0.03, -0.02], [0.03, 0.02, 0.02], steel, { moves: 'bolt' }),
-      box([0, -0.12, -0.1], [0.036, 0.1, 0.06], metal, { moves: 'magazine' }),
-      box([0, -0.07, 0.1], [0.042, 0.13, 0.05], 0x2a3a30, { rotation: [-0.3, 0, 0] }),
-      box([0, 0.01, 0.34], [0.058, 0.12, 0.3], 0x52614a),
-      tube([0, 0.035, -1.2], 0.03, 0.22, 0x151a1c, { role: 'suppressor' }),
-      ...hands([0, -0.095, 0.1], [0, -0.04, -0.46]),
-    ],
-  },
 };
 
 for (const [id, spec] of Object.entries(pistolSpecs)) weaponModels[`pistol:${id}`] = pistolModel(spec);
@@ -255,10 +447,14 @@ for (const [id, spec] of Object.entries(rifleSpecs)) weaponModels[`rifle:${id}`]
 // The plain 'pistol' and 'rifle' are the default models, kept off the list so they are not built twice.
 Object.defineProperty(weaponModels, 'pistol', { value: weaponModels[`pistol:${defaultPistol}`], enumerable: false });
 Object.defineProperty(weaponModels, 'rifle', { value: weaponModels['rifle:m4urgi'], enumerable: false });
+for (const [key, spec] of Object.entries(longSpecs)) weaponModels[key] = longGunModel(spec);
+for (const [key, spec] of Object.entries(smgSpecs)) weaponModels[key] = smgModel(spec);
+for (const [key, spec] of Object.entries(lmgSpecs)) weaponModels[key] = lmgModel(spec);
+for (const [id, model] of Object.entries({ dmr: 'm110a1', smg: 'mp5', lmg: 'mk48', sniper: 'mrad338' })) Object.defineProperty(weaponModels, id, { value: weaponModels[`${id}:${model}`], enumerable: false });
 // The model for a weapon key ('pistol:mk23'), falling back to the slot's default.
 export const modelFor = key => key ? weaponModels[key] ?? weaponModels[key.split(':')[0]] : undefined;
 
 // Length of a fitted suppressor beyond the muzzle, so the flash moves out with it.
-export const suppressorLength = { rifle: 0.2, pistol: 0.2, shotgun: 0.2, sniper: 0.22 };
+export const suppressorLength = { rifle: 0.2, pistol: 0.2, shotgun: 0.2, sniper: 0.22, dmr: 0.22, smg: 0.17, lmg: 0.2 };
 for (const key of Object.keys(weaponModels)) if (weaponModels[key].suppressorLength !== undefined) suppressorLength[key] = weaponModels[key].suppressorLength;
 export const suppressorFor = key => suppressorLength[key] ?? suppressorLength[key?.split(':')[0]] ?? 0;

@@ -6,7 +6,7 @@
 //   voice → muffle (lowpass) → direction (panner) → bus (weapons, effects, steps) → master → limiter → speakers
 //               └→ reverb send → the current room's reverb → master
 // Audio stays optional: if the browser blocks it, every call quietly does nothing.
-import { gunSounds, suppressed as suppressedMix, subsonic as subsonicMix, stepSounds, stepLoudness, reverbs, loudness, effectSounds, ringing, fireSound, ambience } from './sound-plan.js';
+import { gunSounds, suppressed as suppressedMix, subsonic as subsonicMix, stepSounds, stepLoudness, stepVolume, nonGunVolume, reverbs, loudness, effectSounds, ringing, fireSound, ambience } from './sound-plan.js';
 
 export const audioLimits = { voices: 40 };
 
@@ -24,7 +24,7 @@ export function createGunAudio() {
     deafFilter = context.createBiquadFilter(); deafFilter.type = 'lowpass'; deafFilter.frequency.value = 20000;
     master.connect(deafFilter).connect(limiter).connect(context.destination);
     buses = Object.fromEntries(['weapons', 'effects', 'steps', 'ambience'].map(name => { const bus = context.createGain(); bus.connect(master); return [name, bus]; }));
-    buses.effects.gain.value = buses.steps.gain.value = effectsLevel; buses.ambience.gain.value = ambienceLevel;
+    buses.effects.gain.value = buses.steps.gain.value = effectsLevel * nonGunVolume; buses.ambience.gain.value = ambienceLevel * nonGunVolume;
     buses.weapons.gain.value = weaponLevel / 0.3;
     // Two seconds of white noise, shared by every voice (each starts at a random point).
     noise = context.createBuffer(1, context.sampleRate * 2, context.sampleRate);
@@ -118,7 +118,7 @@ export function createGunAudio() {
     // Settings: Effects (effects and footsteps) and Ambience volume, 0..1.
     setVolumes({ effects = effectsLevel, ambience: ambienceVolume = ambienceLevel } = {}) {
       effectsLevel = Math.max(0, Math.min(1, effects)); ambienceLevel = Math.max(0, Math.min(1, ambienceVolume));
-      if (buses) { buses.effects.gain.value = buses.steps.gain.value = effectsLevel; buses.ambience.gain.value = ambienceLevel; }
+      if (buses) { buses.effects.gain.value = buses.steps.gain.value = effectsLevel * nonGunVolume; buses.ambience.gain.value = ambienceLevel * nonGunVolume; }
     },
     // Ambience for this frame, from sound-plan's ambienceMix(): looping beds faded to their
     // gains, and now and then a call (a bird, a cricket) somewhere around the listener.
@@ -160,7 +160,7 @@ export function createGunAudio() {
       deafFilter.frequency.setTargetAtTime(20000, t + seconds * 0.4, seconds * 0.3);
       const oscillator = context.createOscillator(), envelope = context.createGain();
       oscillator.frequency.value = ringing.tone;
-      envelope.gain.setValueAtTime(ringing.gain * masterLevel * strength, t); envelope.gain.setTargetAtTime(0, t + 0.3, seconds / 3);
+      envelope.gain.setValueAtTime(ringing.gain * masterLevel * strength * nonGunVolume, t); envelope.gain.setTargetAtTime(0, t + 0.3, seconds / 3);
       // The ringing bypasses the dulling: it is inside the head.
       oscillator.connect(envelope).connect(deafFilter.context.destination);
       oscillator.start(t); oscillator.stop(t + seconds * 1.5);
@@ -235,7 +235,7 @@ export function createGunAudio() {
     // A footstep on `surface` at pace `gait`. `heard` as for shot(); omit for the player's own.
     step(surface, gait, landing = false, { position = null, heard = null } = {}) {
       const recipe = stepSounds[surface] ?? stepSounds.floor;
-      const gain = (stepLoudness[gait] ?? 0.5) * (landing ? 1.7 : 1) * (heard ? loudness(heard.level, 12) : 1) * 0.5;
+      const gain = (stepLoudness[gait] ?? 0.5) * (landing ? 1.7 : 1) * (heard ? loudness(heard.level, 12) : 1) * stepVolume;
       const v = voice({ position, gain, dull: heard?.dull ?? 0, bus: 'steps', wet: 0.6, length: 0.4 });
       if (!v) return;
       burst(v.input, v.t, { gain: recipe.tap.gain, type: 'bandpass', frequency: recipe.tap.bandpass, q: recipe.tap.q, decay: recipe.tap.decay });

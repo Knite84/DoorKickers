@@ -146,7 +146,8 @@ export function removeUnsupportedPieces(pieces) {
 }
 
 export function damageWall(pieces, hit, amount, source = 'impact') {
-  if (!Number.isFinite(hit.hp) || hit.blastOnly && source !== 'blast') return [];
+  // Masonry takes explosives, or a .50 BMG round ('heavy', see weapons.js).
+  if (!Number.isFinite(hit.hp) || hit.blastOnly && source !== 'blast' && source !== 'heavy') return [];
   const removed = [];
   // Drywall chips around the impact. Timber requires direct, repeated hits.
   for (const piece of pieces) {

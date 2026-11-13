@@ -597,6 +597,18 @@ Done when: each weapon reads as its real counterpart at a glance, and every 5.3 
 - The models are true size now, so the rifle in hand is shorter than the old placeholder (muzzle about 40 cm ahead of the grip instead of 78).
 - `scripts/weapon-preview.html` (was pistol-preview) shows pistols or rifles side by side at true scale.
 - Not done: separate sounds per calibre; aiming down each rifle's sights in play; the owner to confirm the N4 and Boombox barrel lengths.
+
+**Built (SMGs, DMRs, LMGs, sniper rifles, 2026-11-13).** The owner's lists; LMG is a new category (the owner added it). Stats in `kit.js` (`smgModels`, `dmrModels`, `lmgModels`, `sniperModels`), handling in `weapon-handling.js`, shapes in `weapon-models.js` (`smgModel`, `longGunModel` for DMRs and snipers, `lmgModel`).
+
+- **SMGs:** HK MP5 (default), MP5K, B&T APC45 (.45, 25 rounds, flattest), APC10 (10mm, most penetration and climb).
+- **DMRs** (2–4× LPVO, the wheel zooms while aiming): HK M110A1 CSASS (default), KAC SR-25/M110, Geissele MRGG-S (6.5 CM), FN Mk 20 SSR, and three bolt actions that hit harder and fire slower: Q Fix in 8.6 BLK and in 6.5 CM (one model per calibre), SIG Cross (5 rounds).
+- **LMGs:** FN Mk 46 (200-round belt), Mk 48 (default), M240L, SIG M250 (6.8x51), SIG MMG 338 (.338 NM, the heaviest hitter and kick). Long reloads; the ammunition pouch comes off on a reload. LMGs can still sprint, unlike the M134.
+- **Sniper rifles** (2–8×): Barrett Mk22 MRAD in .338 NM (default) and .300 NM, Accuracy International AXSR, McMillan TAC-50 and Barrett M107A1 (.50 BMG; the M107A1 is semi-automatic, the rest bolt actions). The .50s knock a chair over in one hit, and break masonry walls (owner, 2026-11-13): three hits break a masonry piece and each round carries on through it (`masonryBreak` and the masonry cost in weapons.js). Floors and stairs still stop them, and every other round still stops at masonry.
+- Scopes are now general: any weapon with `scope: [min, max]` aims through the scope overlay and zooms with the wheel.
+- Barrel lengths are published specs except the MRGG-S (18 in), Q Fix and SIG Cross (16 in) and the LMG barrels, which are close approximations. Owner to correct.
+- The default sniper is now the Mk22 MRAD (.338), stronger than the old placeholder (115 damage, 10 rounds against 100 and 5).
+- Placeholder sounds per kind (DMR, SMG, LMG) until the sound pass.
+- Not done: the shotgun list; the "Other" weapons and derringer suit (stage C);  aiming down the new sights in play; frame time with all models built.
 - **Stage C, Other:** minigun (exists), grenade launcher, crossbow, flamethrower, RPG, and an Easter egg: a flight suit covered in Velcro and two-shot derringers. The operator grabs two at a time, fires akimbo (four shots a pair), throws them down and grabs the next pair. 24 derringers (12 pairs), refilled by Restock. Seen as hands and dropped derringers for now; a full third-person suit later.
 
 ## Phase 6: Effects, physics and sound

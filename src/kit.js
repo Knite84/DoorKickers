@@ -5,12 +5,17 @@ export const weapons = {
   rifle: { name: 'Assault rifle', penetration: 4, magazine: 30, reload: 1.4, interval: 0.11, damage: 50, pellets: 1, spread: 0, automatic: true, length: 0.48, color: 0x354438 },
   pistol: { name: 'Pistol', penetration: 2, magazine: 12, reload: 1, interval: 0.25, damage: 35, pellets: 1, spread: 0, automatic: false, length: 0.22, color: 0x56605b },
   shotgun: { name: 'Shotgun', penetration: 1, magazine: 6, reload: 2, interval: 0.8, damage: 12, pellets: 8, spread: 0.055, automatic: false, length: 0.65, color: 0x8b6746 },
-  sniper: { name: 'Sniper rifle', penetration: 6, magazine: 5, reload: 2.2, interval: 1.1, damage: 100, pellets: 1, spread: 0, automatic: false, length: 0.8, color: 0x52614a },
+  sniper: { name: 'Sniper rifle', penetration: 6, magazine: 5, reload: 2.2, interval: 1.1, damage: 100, pellets: 1, spread: 0, automatic: false, length: 0.8, color: 0x52614a, scope: [2, 8], push: 'sniper' },
+  // Added with the owner's lists (2026-11-13). `scope` is the magnification range the mouse
+  // wheel steps through while aiming; DMRs carry a 2-4x LPVO (owner).
+  dmr: { name: 'DMR', penetration: 5, magazine: 20, reload: 1.8, interval: 0.25, damage: 78, pellets: 1, spread: 0, automatic: false, length: 0.75, color: 0x3d4a3c, scope: [2, 4], push: 'sniper' },
+  smg: { name: 'SMG', penetration: 2, magazine: 30, reload: 1.2, interval: 0.075, damage: 35, pellets: 1, spread: 0, automatic: true, length: 0.4, color: 0x2b3031 },
+  lmg: { name: 'LMG', penetration: 4, magazine: 100, reload: 5, interval: 0.085, damage: 50, pellets: 1, spread: 0, automatic: true, length: 0.9, color: 0x313a33 },
   minigun: { name: 'M134 minigun', category: 'other', penetration: 4, magazine: 300, reload: 4.5, interval: 0.04, damage: 42, pellets: 1, spread: 0, automatic: true, canRun: false, length: 0.85, color: 0x323b3d },
 };
 // Weapon categories, in menu order (owner, 2026-11-13). A weapon's category is its id
 // unless it says otherwise; categories with no weapon yet are not shown.
-export const weaponCategories = [['rifle', 'Rifle'], ['dmr', 'DMR'], ['smg', 'SMG'], ['pistol', 'Pistol'], ['shotgun', 'Shotgun'], ['sniper', 'Sniper'], ['other', 'Other']];
+export const weaponCategories = [['rifle', 'Rifle'], ['dmr', 'DMR'], ['smg', 'SMG'], ['lmg', 'LMG'], ['pistol', 'Pistol'], ['shotgun', 'Shotgun'], ['sniper', 'Sniper'], ['other', 'Other']];
 export const categoryOf = id => weapons[id]?.category ?? id;
 // The pistol slot carries one of these real pistols (owner, 2026-11-13; POLISH_PLAN step 5.4).
 // Each overrides the generic pistol's balance above; magazines are the real standard
@@ -47,11 +52,50 @@ export const rifleModels = {
   // Integral suppressor: always quiet. Compact with a PDW stock.
   honeybadger: { name: 'Q Honey Badger', caliber: '.300 BLK', magazine: 30, damage: 55, penetration: 3.2, subsonic: blackout, integralSuppressor: true },
 };
+// SMGs (owner, 2026-11-13).
+export const smgModels = {
+  mp5: { name: 'HK MP5', caliber: '9mm', magazine: 30 },
+  // Ultra-compact: fastest cadence and draw, more climb, a little less damage.
+  mp5k: { name: 'HK MP5K', caliber: '9mm', magazine: 30, interval: 0.067, damage: 33, penetration: 1.9 },
+  // .45: hits harder; the hydraulic buffer keeps it flat. 25 rounds.
+  apc45: { name: 'B&T APC45', caliber: '.45 ACP', magazine: 25, interval: 0.09, damage: 48, penetration: 2.2, reload: 1.25 },
+  // 10mm: the heavy hitter of the SMGs, with the most penetration and climb.
+  apc10: { name: 'B&T APC10', caliber: '10mm Auto', magazine: 30, interval: 0.08, damage: 45, penetration: 2.8, reload: 1.25 },
+};
+// DMRs (owner, 2026-11-13). The Q Fix and SIG Cross are bolt actions: slower to fire, harder
+// hitting, smaller magazines. `cycle: 'bolt'` is in weapon-handling.js.
+export const dmrModels = {
+  m110a1: { name: 'HK M110A1 CSASS', caliber: '7.62 NATO', magazine: 20, interval: 0.22, damage: 80, penetration: 5.5 },
+  sr25: { name: 'KAC SR-25 / M110', caliber: '7.62 NATO', magazine: 20, interval: 0.25, damage: 82, penetration: 5.7, reload: 1.9 },
+  mrggs: { name: 'Geissele MRGG-S', caliber: '6.5 CM', magazine: 20, interval: 0.22, damage: 76, penetration: 6.2 },
+  mk20: { name: 'FN Mk 20 SSR', caliber: '7.62 NATO', magazine: 20, interval: 0.24, damage: 80, penetration: 5.6 },
+  qfix86: { name: 'Q Fix', caliber: '8.6 BLK', magazine: 10, interval: 0.9, damage: 90, penetration: 6.5, reload: 2, subsonic: blackout },
+  qfix65: { name: 'Q Fix', caliber: '6.5 CM', magazine: 10, interval: 0.9, damage: 88, penetration: 7, reload: 2 },
+  cross: { name: 'SIG Sauer Cross', caliber: '6.5 CM', magazine: 5, interval: 0.95, damage: 88, penetration: 7, reload: 2 },
+};
+// LMGs (owner, 2026-11-13): belts and long reloads.
+export const lmgModels = {
+  mk46: { name: 'FN Mk 46', caliber: '5.56 NATO', magazine: 200, interval: 0.075, damage: 50, penetration: 4, reload: 5 },
+  mk48: { name: 'FN Mk 48', caliber: '7.62 NATO', magazine: 100, interval: 0.085, damage: 72, penetration: 5.5, reload: 5.5 },
+  m240l: { name: 'M240L', caliber: '7.62 NATO', magazine: 100, interval: 0.09, damage: 72, penetration: 5.5, reload: 6 },
+  m250: { name: 'SIG M250', caliber: '6.8x51 Common', magazine: 100, interval: 0.09, damage: 78, penetration: 6.5, reload: 5 },
+  mmg338: { name: 'SIG MMG 338', caliber: '.338 NM', magazine: 100, interval: 0.1, damage: 95, penetration: 8, reload: 6.5 },
+};
+// Sniper rifles (owner, 2026-11-13). The M107A1 is semi-automatic; the rest are bolt actions.
+// The .50s knock chairs over at one hit (`push`) and break masonry walls (`breaksMasonry`,
+// owner 2026-11-13): see weapons.js.
+export const sniperModels = {
+  mrad338: { name: 'Barrett Mk22 MRAD', caliber: '.338 NM', magazine: 10, damage: 115, penetration: 8 },
+  mrad300: { name: 'Barrett Mk22 MRAD', caliber: '.300 NM', magazine: 10, interval: 1.05, damage: 108, penetration: 7.5 },
+  axsr: { name: 'Accuracy International AXSR', caliber: '.338 LM', magazine: 10, damage: 115, penetration: 8 },
+  tac50: { name: 'McMillan TAC-50', caliber: '.50 BMG', magazine: 5, interval: 1.4, reload: 2.6, damage: 160, penetration: 12, push: 'slug', breaksMasonry: true },
+  m107a1: { name: 'Barrett M107A1', caliber: '.50 BMG', magazine: 10, interval: 0.45, reload: 2.6, damage: 150, penetration: 11, push: 'slug', breaksMasonry: true },
+};
 for (const model of Object.values(pistolModels)) model.caliber ??= '9mm';
 pistolModels.mk23.caliber = '.45 ACP';
 // Weapons with a choice of real models, and the model each starts with.
-export const modelSets = { pistol: pistolModels, rifle: rifleModels };
-export const defaultModels = { pistol: defaultPistol, rifle: 'm4urgi' };
+export const modelSets = { pistol: pistolModels, rifle: rifleModels, smg: smgModels, dmr: dmrModels, lmg: lmgModels, sniper: sniperModels };
+export const defaultModels = { pistol: defaultPistol, rifle: 'm4urgi', smg: 'mp5', dmr: 'm110a1', lmg: 'mk48', sniper: 'mrad338' };
 const chosenModel = (kit, id) => modelSets[id]?.[kit?.weapons?.[id]?.model] ? kit.weapons[id].model : defaultModels[id];
 // A weapon "key" names the exact gun: the slot id, or '<id>:<model>' for weapons with models.
 export const weaponKey = (inventory, id) => modelSets[id] ? `${id}:${chosenModel(inventory, id)}` : id;
@@ -106,7 +150,7 @@ export function validateLoadout(input) {
   for (const id of Object.keys(weapons)) {
     const config = input.weapons?.[id];
     // Add the new weapon to older saved kits without discarding their choices.
-    if (id === 'minigun' && config === undefined && input.weapons) continue;
+    if (['minigun', 'dmr', 'smg', 'lmg'].includes(id) && config === undefined && input.weapons) continue;
     if (!config || typeof config.carried !== 'boolean' || typeof config.suppressor !== 'boolean' || !['subsonic', 'supersonic'].includes(config.velocity) || !Object.hasOwn(ammoFor(id), config.ammoType)) throw new Error(`Invalid ${weapons[id].name} configuration.`);
     result.weapons[id] = { carried: config.carried, suppressor: config.suppressor, velocity: config.velocity, ammoType: config.ammoType };
     // Kits saved before a weapon had a choice of models get the default model.
