@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Pistols · development preview</title>
+<style>
+  body { margin: 0; background: #17251f; color: #e6e6d8; font: 15px system-ui; }
+  header { position: absolute; padding: 20px 26px; z-index: 1; max-width: 70vw; }
+  h1 { font-size: 22px; margin: 0 0 6px; } p { margin: 4px 0 10px; color: #c9d3c2; }
+  button { background: #d8e7c9; color: #17251f; border: 0; padding: 8px 14px; margin: 0 6px 6px 0; cursor: pointer; font: inherit; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #names { position: absolute; bottom: 18px; left: 26px; right: 26px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; font-size: 13px; color: #c9d3c2; text-align: center; }
+</style>
+<header><h1>Pistols (step 5.4)</h1>
+<p>The five pistol models from src/weapon-models.js, side by side at true scale, without hands. The grid is 1 cm.</p>
+<button data-view="side">Right side</button><button data-view="right">Left side</button><button data-view="eye">Over the sights</button><button data-view="three">Three-quarter</button><button id="close">Close-up (next)</button><button id="can">Suppressor</button>
+</header>
+<canvas></canvas>
+<div id="names"></div>
+<script type="module">
+import * as THREE from 'three';
+import { weaponModels } from '/src/weapon-models.js';
+import { pistolModels } from '/src/kit.js';
+const canvas = document.querySelector('canvas'), renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2)); renderer.setClearColor(0x17251f); renderer.outputColorSpace = THREE.SRGBColorSpace;
+const scene = new THREE.Scene(), camera = new THREE.PerspectiveCamera(20, 1, 0.01, 20);
+scene.add(new THREE.HemisphereLight(0xf4eed4, 0x465b4f, 2.2));
+const sun = new THREE.DirectionalLight(0xffedcd, 2.2); sun.position.set(-2, 3, 2); scene.add(sun);
+const fill = new THREE.DirectionalLight(0xdfe8ff, 1.0); fill.position.set(2, 1, -2); scene.add(fill);
+const grid = new THREE.GridHelper(2, 200, 0x34483c, 0x26362d); grid.rotation.x = Math.PI / 2; grid.position.z = -0.05; scene.add(grid);
+const materials = {}, material = color => materials[color] ??= new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.15 });
+const cans = [], ids = Object.keys(pistolModels), spacing = 0.29, groups = [];
+ids.forEach((id, i) => {
+  const model = weaponModels[`pistol:${id}`], group = new THREE.Group();
+  for (const part of model.parts) {
+    if (part.role === 'hand') continue;
+    const geometry = part.shape === 'box' ? new THREE.BoxGeometry(...part.size) : new THREE.CylinderGeometry(part.radius, part.radius, part.length, 20).rotateX(Math.PI / 2);
+    const mesh = new THREE.Mesh(geometry, material(part.color));
+    mesh.position.set(...part.position); if (part.rotation) mesh.rotation.set(...part.rotation);
+    if (part.role === 'suppressor') { mesh.visible = false; cans.push(mesh); }
+    group.add(mesh);
+  }
+  // Barrel along -z; turn so it points to +x (seen from the right side, muzzle to the right).
+  group.rotation.y = -Math.PI / 2;
+  group.position.set((i - 2) * spacing - 0.08, 0, 0);
+  scene.add(group); groups.push(group);
+  document.querySelector('#names').insertAdjacentHTML('beforeend', `<div>${pistolModels[id].name}<br><small>${pistolModels[id].magazine} rds · ${Math.round((-model.muzzle[2] + 0.045) * 1000)} mm</small></div>`);
+});
+// Far enough back that all five fit the window's width.
+const fit = () => (spacing * 2.5 + 0.06) / Math.tan(Math.atan(Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)) * camera.aspect));
+const views = {
+  side: () => { camera.position.set(0, -0.02, fit()); camera.lookAt(0, -0.02, 0); },
+  right: () => { camera.position.set(0, -0.02, -fit()); camera.lookAt(0, -0.02, 0); },
+  eye: () => { camera.position.set(-0.9, 0.12, 0.0); camera.lookAt(0.3, 0.05, 0); },
+  three: () => { camera.position.set(-0.8, 0.5, 1.6); camera.lookAt(0, -0.02, 0); },
+  // One pistol filling the view, from the right side; each click moves to the next.
+  close: () => { const x = groups[focus].position.x - 0.03; camera.position.set(x, -0.02, 0.85); camera.lookAt(x, -0.02, 0); },
+};
+let view = 'side', focus = 0;
+document.querySelector('#close').onclick = () => { focus = view === 'close' ? (focus + 1) % groups.length : 0; view = 'close'; views.close(); };
+document.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { view = b.dataset.view; views[view](); });
+document.querySelector('#can').onclick = () => cans.forEach(m => { m.visible = !m.visible; });
+function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); }
+addEventListener('resize', () => { resize(); views[view](); }); resize(); views[view]();
+renderer.setAnimationLoop(() => renderer.render(scene, camera));
+</script>

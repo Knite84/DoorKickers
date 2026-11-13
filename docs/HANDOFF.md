@@ -37,7 +37,7 @@ Updated 2026-11-12. This is the current state of the project for a fresh session
 Everything a Sonnet session could start alone is built. What remains in the [status table](POLISH_PLAN.md#status):
 1. **Owner's order from here:** the owner's check of 5.1 in play. Every numbered step in the plan is now built; what remains is owner checks, tuning, and the open proposals below.
 2. **Proposals still to write:** mantling over low cover (6.3, a gameplay change).
-4. **Step 5.4, weapon model refinement:** waiting on the owner's choice of real firearms and reference photos; see the 5.4 entry.
+4. **Step 5.4, weapon model refinement:** pistols built 2026-11-13 (five real models, picked in planning; `scripts/pistol-preview.html` shows them side by side). The other slots wait on the owner's firearm picks; see the 5.4 entry.
 3. **Small follow-ups:** none open. Possible later: the 108 pitch-black light samples in windowless closets (see the stairwell fix note).
 
 ## Waiting on the owner

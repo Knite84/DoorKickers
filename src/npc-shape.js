@@ -100,13 +100,18 @@ export function guardLook(mapId, guard, seed = 0) {
   const headRoll = random(); let headwear = 'none', sum = 0;
   for (const [name, p] of Object.entries(kit.headwear)) { sum += p; if (headRoll < sum) { headwear = name; break; } }
   const armored = !!guard.armored;
-  return {
+  const look = {
     style, top: pick(kit.tops), bottom: pick(kit.bottoms), skin: pick(skinTones), boots: pick(boots), accent: pick(kit.accents),
     headwear, shortSleeves: chance(kit.shortSleeves), gloves: chance(kit.gloves),
     vest: armored ? 'plate' : chance(kit.vest) ? (style === 'tactical' ? 'carrier' : 'soft') : 'none',
     balaclava: chance(kit.balaclava), girth: 0.94 + random() * 0.08,
   };
+  // Sidearm model (kit.js pistolModels), drawn last so the rest of the look is unchanged.
+  look.pistol = pick(guardPistols[style]);
+  return look;
 }
+// Security carries Glocks; tactical teams mostly the M17. Looks only: guard damage is the same.
+export const guardPistols = { security: ['glock19', 'glock19', 'glock17'], tactical: ['m17', 'm17', 'm17', 'glock19'] };
 
 // ---- The mesh ---------------------------------------------------------------------
 

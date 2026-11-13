@@ -111,6 +111,7 @@ h3 { margin: 0 0 18px; text-transform: uppercase; font: 10px monospace; letter-s
 .weapon-options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .weapon-options label { color: #9eb58c; font-size: 10px; }
 .weapon-options select { width: 100%; padding: 7px; font-size: 11px; margin-top: 6px; }
+.weapon-options .pistol-model { grid-column: 1 / -1; }
 .weapon-card-bottom { margin-top: 14px; }
 .weapon-card-bottom label { font-size: 11px; white-space: nowrap; }
 .weapon-card-bottom button { width: auto; font-size: 10px; padding: 8px 10px; }

@@ -4,7 +4,7 @@ import { bindCombatMouse } from '../src/combat-input.js';
 import { createMission } from '../src/simulation.js';
 import { courtyard } from '../src/maps/courtyard.js';
 import { defaults } from '../src/rules.js';
-import { equip } from '../src/kit.js';
+import { equip, equippedWeapon } from '../src/kit.js';
 import { fireWeapon } from '../src/weapons.js';
 
 function mouse(target, type, button, buttons) {
@@ -25,11 +25,11 @@ test('a suppressed pistol fires when left is pressed while right is already held
   // Real browser sequence: no second pointerdown when the left button joins right.
   mouse(surface, 'pointerdown', 2, 2); mouse(surface, 'mousedown', 2, 2);
   mouse(surface, 'mousedown', 0, 3);
-  assert.equal(state.ammo, 11); assert.equal(state.guards[0].health, 0); assert.equal(held, true);
+  assert.equal(state.ammo, equippedWeapon(state).magazine - 1); assert.equal(state.guards[0].health, 0); assert.equal(held, true);
   mouse(releaseTarget, 'mouseup', 0, 2); assert.equal(held, false);
   state.elapsed = 1;
   mouse(surface, 'mousedown', 0, 3);
-  assert.equal(state.ammo, 10); assert.equal(aimChanges, 1); assert.equal(aimed, true);
+  assert.equal(state.ammo, equippedWeapon(state).magazine - 2); assert.equal(aimChanges, 1); assert.equal(aimed, true);
   // Releasing right must not cancel left-button fire.
   mouse(releaseTarget, 'mouseup', 2, 1); assert.equal(held, true);
   mouse(releaseTarget, 'mouseup', 0, 0); assert.equal(held, false);

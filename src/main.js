@@ -5,7 +5,7 @@ import { maps, resolveMap } from './maps/index.js';
 import { createMission, stepMission, interact, distance, movementGait, toggleCrouch, jump } from './simulation.js';
 import { createScene } from './scene.js';
 import { fireWeapon, reload } from './weapons.js';
-import { weaponReady, drawWindow, handling as weaponHandling } from './weapon-handling.js';
+import { weaponReady, drawWindow, handlingFor as weaponHandling } from './weapon-handling.js';
 import { createGunAudio } from './audio.js';
 import { hearing, roomReverb, speakerReach, effectSounds, eventSounds, landingSound, handlingCues, fireSound, guardStep, guardSteps, stepReach, ambienceMix } from './sound-plan.js';
 import { surfaceAt } from './surface-plan.js';
@@ -13,7 +13,7 @@ import { breakEffect } from './impacts.js';
 import { hearFootstep } from './combat.js';
 import { playerEye, doorCenter } from './world.js';
 import { createMotion, resetMotion, shapeInput, observeMotion } from './player-motion.js';
-import { weapons, items, ammoTypes, defaultLoadout, validateLoadout, equip, toggleHolster, restockEquipment, slotOrder, cycleEquipped } from './kit.js';
+import { weapons, items, ammoTypes, weaponKey, equippedWeapon, weaponSpec, defaultLoadout, validateLoadout, equip, toggleHolster, restockEquipment, slotOrder, cycleEquipped } from './kit.js';
 import { useEquipment, detonateCharges, weaponStrike } from './equipment.js';
 import { createKitMenu } from './menus.js';
 import { bindCombatMouse } from './combat-input.js';
@@ -348,7 +348,7 @@ function equipSlot(slot) {
   const id = slotOrder[slot - 1];
   if (!id) return;
   if (equip(state, id)) { aimed = false; firing = false; }
-  else message(`${weapons[id]?.name ?? items[id].name} not carried${items[id] ? ' or used up' : ''}. Add it in loadout planning.`);
+  else message(`${weaponSpec(weaponKey(state.inventory, id))?.name ?? items[id].name} not carried${items[id] ? ' or used up' : ''}. Add it in loadout planning.`);
 }
 function detonate() {
   if (state.status !== 'active') return message('Resume the mission before detonating charges.');
@@ -381,7 +381,7 @@ function soundFrame(ears, dt) {
   }
   // Ambience: room tone inside, wind outside, birds or crickets, rain.
   audio.setAmbience(ambienceMix({ indoor: roomReverb(map, ears) !== 'outdoor', time: state.timeOfDay ?? rules.timeOfDay ?? 'day', weather: rules.weather }), dt);
-  const id = state.inventory.equipped, weapon = weapons[id], spec = weaponHandling[id];
+  const id = state.inventory.equipped, weapon = equippedWeapon(state), spec = weaponHandling(weaponKey(state.inventory, id));
   if (state.status === 'active') for (const cue of handlingCues(state, soundClock, now, { weapon, style: spec?.reload, cycle: spec?.cycle, drawSpan: drawWindow(state, rules) })) audio.effect(cue);
   if (state.drawStart !== drawHeard) { drawHeard = state.drawStart; if (state.drawFrom && state.drawFrom !== 'unarmed') audio.effect('holster'); }
   soundClock = now;
@@ -418,7 +418,7 @@ function shoot(now = performance.now()) {
   if (shot) {
     if (shot.removed.length) { const piece = shot.removed[0]; heardEffect(piece.material === 'timber' ? 'breachTimber' : 'breachDrywall', piece.center); }
     for (const pellet of shot.pellets) scene.shotEffect(pellet, state);
-    scene.fired(state.inventory.equipped, { aimed: aimed && view === 'first', crouched: !!state.crouched, climb: rules.muzzleClimb !== false, suppressed: !!shot.suppressed });
+    scene.fired(weaponKey(state.inventory, state.inventory.equipped), { aimed: aimed && view === 'first', crouched: !!state.crouched, climb: rules.muzzleClimb !== false, suppressed: !!shot.suppressed });
     const config = state.inventory.weapons[state.inventory.equipped];
     audio.shot(state.inventory.equipped, { suppressed: !!shot.suppressed, subsonic: config?.velocity === 'subsonic' });
     if (shot.kind === 'guard') hitUntil = now + 150;
@@ -430,7 +430,7 @@ function shoot(now = performance.now()) {
     if (map.id === 'partitions-01') {
       const walls = new Set(shot.pellets.flatMap(p => p.impacts.filter(i => i.kind === 'wall' && i.material !== 'masonry').map(i => i.wall)));
       const last = shot.pellets[0].impacts.at(-1);
-      message(`${weapons[state.inventory.equipped].name} · ${ammoTypes[state.inventory.weapons[state.inventory.equipped].ammoType].name} · ${walls.size} interior wall(s) hit · final impact: ${last?.material ?? last?.kind ?? 'none'}.${shot.killed ? ' Guard down.' : ''} Tab changes ammo; New deployment restores walls.`);
+      message(`${equippedWeapon(state).name} · ${ammoTypes[state.inventory.weapons[state.inventory.equipped].ammoType].name} · ${walls.size} interior wall(s) hit · final impact: ${last?.material ?? last?.kind ?? 'none'}.${shot.killed ? ' Guard down.' : ''} Tab changes ammo; New deployment restores walls.`);
     }
   } else if (state.status === 'active' && state.ammo === 0 && !state.reloadUntil) message('Magazine empty. Press R to reload.');
 }
@@ -654,7 +654,7 @@ function frame(now) {
   $('.health-panel').classList.toggle('is-critical', state.health <= 25);
   $('#health-status').textContent = state.health <= 0 ? 'DOWNED' : state.health <= 25 ? 'CRITICAL · USE A MED KIT' : state.health <= 50 ? 'LOW HEALTH · FIND COVER' : state.health < 100 ? 'INJURED' : 'HEALTHY';
   const equipped = state.inventory.equipped;
-  $('#equipped-name').textContent = (weapons[equipped]?.name ?? items[equipped]?.name ?? 'EMPTY HANDS').toUpperCase();
+  $('#equipped-name').textContent = (equippedWeapon(state)?.name ?? items[equipped]?.name ?? 'EMPTY HANDS').toUpperCase();
   document.body.classList.toggle('on-screen', !!screens.current() && screens.current() !== 'pause');
   const hudAlert = alertState(state);
   $('#alert-pill').textContent = hudAlert.label; $('#alert-pill').dataset.level = String(hudAlert.level);

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { bodySegments, guardPose, guardWeaponPose } from './npc-body.js';
 import { boneFrames, restFrames, buildBody, guardLook } from './npc-shape.js';
-import { weaponModels } from './weapon-models.js';
+import { modelFor } from './weapon-models.js';
 
 // A guard as drawn. The simulation's 16 joints (npc-body.js) drive everything.
 //   body: 'skinned' (step 5.1): one skinned mesh in the guard's outfit, from
@@ -18,7 +18,9 @@ export function createGuardVisual(material, { body = 'capsules', look = null, bo
   // barrel runs along the attachment's +X.
   const weapon = new THREE.Group(); weapon.name = 'guard-pistol'; group.add(weapon);
   const model = new THREE.Group(); model.rotation.y = -Math.PI / 2; model.position.x = -0.03; weapon.add(model);
-  for (const part of weaponModels.pistol.parts) {
+  const pistol = modelFor(`pistol:${look?.pistol ?? ''}`) ?? modelFor('pistol');
+  weapon.userData.model = look?.pistol ?? null;
+  for (const part of pistol.parts) {
     if (part.role) continue;
     const geometry = part.shape === 'box' ? new THREE.BoxGeometry(...part.size) : new THREE.CylinderGeometry(part.radius, part.radius, part.length, 10).rotateX(Math.PI / 2);
     const mesh = new THREE.Mesh(geometry, material(part.color));
@@ -26,7 +28,7 @@ export function createGuardVisual(material, { body = 'capsules', look = null, bo
     mesh.castShadow = true; model.add(mesh);
   }
   const muzzleFlash = new THREE.Mesh(new THREE.OctahedronGeometry(0.06), new THREE.MeshBasicMaterial({ color: 0xffd486 }));
-  muzzleFlash.position.x = -weaponModels.pistol.muzzle[2] + 0.02; weapon.add(muzzleFlash);
+  muzzleFlash.position.x = -pistol.muzzle[2] + 0.02; weapon.add(muzzleFlash);
   const forward = new THREE.Vector3(1, 0, 0), direction = new THREE.Vector3();
   group.userData.update = guard => {
     const pose = guardPose(guard);

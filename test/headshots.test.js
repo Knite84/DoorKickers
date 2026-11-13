@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { courtyard } from '../src/maps/courtyard.js';
 import { defaults } from '../src/rules.js';
 import { createMission } from '../src/simulation.js';
-import { weapons, ammoTypes, equip } from '../src/kit.js';
+import { weapons, ammoTypes, equip, equippedWeapon } from '../src/kit.js';
 import { fireWeapon } from '../src/weapons.js';
 
 const arena = { ...courtyard, walls: [], doors: [], props: [], patrols: [[[2, 0], [3, 0]]] };
@@ -17,7 +17,7 @@ test('all weapon, suppressor, velocity and projectile configurations kill with o
     assert.equal(state.kills, 1, context);
     assert.equal(state.shots, 1, context);
     assert.equal(result.headshot, true, context);
-    assert.equal(state.ammo, weapons[weapon].magazine - 1, context);
+    assert.equal(state.ammo, equippedWeapon(state).magazine - 1, context);
   }
 });
 test('suppressed subsonic pistol body shots keep normal damage instead of becoming instant kills', () => {

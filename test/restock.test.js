@@ -30,7 +30,7 @@ test('restock makes depleted/omitted equipment available without refilling firea
   const inventoryWeapons = structuredClone(state.inventory.weapons), magazines = structuredClone(state.inventory.magazines);
   const ammo = state.ammo; state.reloadUntil = 10; state.nextUse = 5;
   restockEquipment(state);
-  assert.equal(state.ammo, ammo); assert.equal(ammo, 11); assert.equal(state.reloadUntil, 10); assert.equal(state.nextUse, 5);
+  assert.equal(state.ammo, ammo); assert.equal(ammo, 14); assert.equal(state.reloadUntil, 10); assert.equal(state.nextUse, 5);
   assert.deepEqual(state.inventory.magazines, magazines); assert.deepEqual(state.inventory.weapons, inventoryWeapons);
   assert.equal(state.inventory.equipped, 'pistol'); assert.equal(state.inventory.items.flashbang, 8); assert.equal(state.inventory.items.medkit, 5);
   assert.equal(equip(state, 'flashbang'), true);

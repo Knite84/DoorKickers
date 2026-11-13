@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { defaults } from '../src/rules.js';
 import { courtyard } from '../src/maps/courtyard.js';
 import { createMission, stepMission, movePlayer } from '../src/simulation.js';
-import { defaultLoadout, validateLoadout, equip, weapons, slotOrder, cycleEquipped } from '../src/kit.js';
+import { defaultLoadout, validateLoadout, equip, weapons, slotOrder, cycleEquipped, equippedWeapon } from '../src/kit.js';
 import { fireWeapon, reload, finishReload } from '../src/weapons.js';
 import { useEquipment, detonateCharges, stepEquipment } from '../src/equipment.js';
 import { damagePlayer } from '../src/combat.js';
@@ -24,9 +24,9 @@ test('loadout validation rejects missing kits, invalid ammo, no weapons and inva
 });
 test('weapon switching preserves separate magazines and reloads use each magazine size', () => {
   const state = ready(); state.ammo = 21;
-  assert.equal(equip(state, 'pistol'), true); assert.equal(state.ammo, 12);
+  assert.equal(equip(state, 'pistol'), true); assert.equal(state.ammo, 15, 'the default Glock 19 holds 15');
   state.ammo = 3; assert.equal(reload(state), true);
-  state.elapsed = 1.1; finishReload(state); assert.equal(state.ammo, 12);
+  state.elapsed = 1.1; finishReload(state); assert.equal(state.ammo, 15);
   equip(state, 'rifle'); assert.equal(state.ammo, 21);
   state.inventory.weapons.sniper.carried = false;
   assert.equal(equip(state, 'sniper'), false);
@@ -36,8 +36,8 @@ test('all weapons have independent cadence, damage, and shotgun pellet spread', 
     const state = ready(); state.guards[0].position = [2, 0]; equip(state, id);
     const shot = fireWeapon(state, arena, safeRules, [0, 1, 0], [1, 0, 0]);
     assert.equal(shot.pellets.length, weapons[id].pellets);
-    assert.equal(state.ammo, weapons[id].magazine - 1);
-    assert.equal(state.nextShot, weapons[id].interval);
+    assert.equal(state.ammo, equippedWeapon(state).magazine - 1);
+    assert.equal(state.nextShot, equippedWeapon(state).interval);
     assert.ok(state.guards[0].health < 100);
     assert.ok(state.kills <= 1);
   }

@@ -24,6 +24,7 @@
 import * as THREE from 'three';
 import { createGuardVisual } from '/src/npc-visual.js';
 import { guardLook } from '/src/npc-shape.js';
+import { pistolModels } from '/src/kit.js';
 import { stepBodies } from '/src/npc-body.js';
 import { damageGuard } from '/src/combat.js';
 const canvas = document.querySelector('canvas'), renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -52,7 +53,7 @@ function build() {
     list.forEach(v => { v.userData.guard = g; scene.add(v); });
     return list;
   });
-  document.querySelector('#looks').innerHTML = looks.map((l, i) => `<div>${i + 1}. ${l.style}${state.guards[i].armored ? ' · armoured' : ''}<br>${l.headwear}${l.balaclava ? ' · balaclava' : ''} · vest ${l.vest}</div>`).join('');
+  document.querySelector('#looks').innerHTML = looks.map((l, i) => `<div>${i + 1}. ${l.style}${state.guards[i].armored ? ' · armoured' : ''}<br>${l.headwear}${l.balaclava ? ' · balaclava' : ''} · vest ${l.vest}<br>${pistolModels[l.pistol]?.name ?? ""}</div>`).join('');
 }
 function reset() {
   state = { elapsed: 0, kills: 0, events: [], wallPieces: [], player: [0, 8], playerY: 0, guardReports: [], doors: [], windowHealth: [], guards: Array.from({ length: COUNT }, (_, i) => ({ id: i, armored: i === 6, armorHits: i === 6 ? 10 : 0, position: [(i - (COUNT - 1) / 2) * 2.2, 0], heading: Math.PI / 2, health: 100, suspicion: 0 })) };

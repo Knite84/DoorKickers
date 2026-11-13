@@ -8,6 +8,37 @@ export const weapons = {
   sniper: { name: 'Sniper rifle', penetration: 6, magazine: 5, reload: 2.2, interval: 1.1, damage: 100, pellets: 1, spread: 0, automatic: false, length: 0.8, color: 0x52614a },
   minigun: { name: 'M134 minigun', penetration: 4, magazine: 300, reload: 4.5, interval: 0.04, damage: 42, pellets: 1, spread: 0, automatic: true, canRun: false, length: 0.85, color: 0x323b3d },
 };
+// The pistol slot carries one of these real pistols (owner, 2026-11-13; POLISH_PLAN step 5.4).
+// Each overrides the generic pistol's balance above; magazines are the real standard
+// capacities. Handling (draw, climb, kick) is in src/weapon-handling.js `pistolHandling`
+// and the shapes in src/weapon-models.js. Sizes in comments are published specs.
+export const pistolModels = {
+  // 185 mm long, 102 mm barrel. Compact: quick to draw, a little snappier.
+  glock19: { name: 'Glock 19', magazine: 15, interval: 0.22, reload: 0.95 },
+  // 202 mm, 114 mm barrel. Full size: two more rounds, a touch steadier.
+  glock17: { name: 'Glock 17', magazine: 17, interval: 0.23, reload: 1 },
+  // 203 mm, 119 mm barrel. Full size, heavier slide, manual safety.
+  m17: { name: 'SIG M17', magazine: 17, interval: 0.24, reload: 1.05 },
+  // 2011 double-stack: about 216 mm, 112 mm bull barrel. Light single-action trigger, heavy steel frame.
+  staccato: { name: 'Staccato 2011', magazine: 17, interval: 0.18, reload: 1 },
+  // 245 mm, 149 mm barrel, .45 ACP. Hits hardest and penetrates a little more; big, slow, 12 rounds.
+  mk23: { name: 'HK Mk 23', magazine: 12, interval: 0.3, reload: 1.25, damage: 50, penetration: 2.3 },
+};
+export const defaultPistol = 'glock19';
+// A weapon "key" names the exact gun: the slot id, or 'pistol:<model>' for the pistol.
+export const weaponKey = (inventory, id) => id === 'pistol' ? `pistol:${pistolModels[inventory?.weapons?.pistol?.model] ? inventory.weapons.pistol.model : defaultPistol}` : id;
+export const baseWeapon = key => typeof key === 'string' ? key.split(':')[0] : key;
+const specs = {};
+// The balance of a weapon key: the slot's numbers with the chosen model's on top.
+export function weaponSpec(key) {
+  if (!key) return undefined;
+  const [id, model] = key.split(':');
+  if (!weapons[id]) return undefined;
+  if (!model || !pistolModels[model]) return weapons[id];
+  return specs[key] ??= { ...weapons[id], ...pistolModels[model], model };
+}
+// The weapon in hand, as its exact model; undefined for items and empty hands.
+export const equippedWeapon = state => weaponSpec(weaponKey(state.inventory, state.inventory.equipped));
 export const ammoTypes = {
   standard: { name: 'Standard', damage: 1, wall: 1, penetration: 1, description: 'Medium penetration; depends on firearm and remaining wall layers.' },
   hollow: { name: 'Hollow-point', damage: 1.3, wall: 0.5, penetration: 0.2, description: 'More body damage; lowest penetration, but not guaranteed to stop.' },
@@ -33,7 +64,7 @@ export const items = {
   molotov: { name: 'Molotov cocktail', max: 8, count: 2, description: 'Throw through window glass, shattering it. Creates a temporary fire patch on solid impact or landing that damages anyone inside.', action: 'Throw Molotov' },
 };
 export function defaultLoadout() {
-  return { primary: 'rifle', vision: 'off', weapons: Object.fromEntries(Object.keys(weapons).map(id => [id, { carried: true, suppressor: false, velocity: 'supersonic', ammoType: 'standard' }])), items: Object.fromEntries(Object.entries(items).map(([id, item]) => [id, item.count])) };
+  return { primary: 'rifle', vision: 'off', weapons: Object.fromEntries(Object.keys(weapons).map(id => [id, { carried: true, suppressor: false, velocity: 'supersonic', ammoType: 'standard', ...(id === 'pistol' ? { model: defaultPistol } : {}) }])), items: Object.fromEntries(Object.entries(items).map(([id, item]) => [id, item.count])) };
 }
 export function validateLoadout(input) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Invalid loadout.');
@@ -44,6 +75,11 @@ export function validateLoadout(input) {
     if (id === 'minigun' && config === undefined && input.weapons) continue;
     if (!config || typeof config.carried !== 'boolean' || typeof config.suppressor !== 'boolean' || !['subsonic', 'supersonic'].includes(config.velocity) || !Object.hasOwn(ammoFor(id), config.ammoType)) throw new Error(`Invalid ${weapons[id].name} configuration.`);
     result.weapons[id] = { carried: config.carried, suppressor: config.suppressor, velocity: config.velocity, ammoType: config.ammoType };
+    // Kits saved before the pistol choice get the default model.
+    if (id === 'pistol') {
+      if (config.model !== undefined && !Object.hasOwn(pistolModels, config.model)) throw new Error('Invalid pistol model.');
+      result.weapons.pistol.model = config.model ?? defaultPistol;
+    }
   }
   if (!Object.keys(weapons).some(id => result.weapons[id].carried)) throw new Error('Carry at least one weapon.');
   result.primary = result.weapons[input.primary]?.carried ? input.primary : Object.keys(weapons).find(id => result.weapons[id].carried);
@@ -60,7 +96,7 @@ export function validateLoadout(input) {
 }
 export function createInventory(loadout = defaultLoadout()) {
   const kit = validateLoadout(loadout);
-  return { ...kit, equipped: kit.primary, magazines: Object.fromEntries(Object.entries(weapons).map(([id, weapon]) => [id, weapon.magazine])) };
+  return { ...kit, equipped: kit.primary, magazines: Object.fromEntries(Object.keys(weapons).map(id => [id, weaponSpec(weaponKey(kit, id)).magazine])) };
 }
 export function restockEquipment(state) {
   if (!['active', 'paused'].includes(state.status)) return 0;

@@ -1,5 +1,5 @@
 import { damageWall, rayBox } from './destruction.js';
-import { weapons, ammoTypes } from './kit.js';
+import { weapons, ammoTypes, equippedWeapon } from './kit.js';
 import { alertGuards, damageGuard, shatterWindow } from './combat.js';
 import { damageDoor } from './doors.js';
 import { doorCenter, doorSize, elevation, windowCenter, windowSize, propBox, decorBox } from './world.js';
@@ -12,14 +12,14 @@ export const MAGAZINE = 30;
 // Drywall is easy to cross; framing and bodies consume the same heavier budget.
 const penetrationCosts = { drywall: 1, ceiling: 1, timber: 4, body: 4, door: 3, particleboard: 6, truss: 12 };
 export function reload(state) {
-  const weapon = weapons[state.inventory.equipped];
+  const weapon = equippedWeapon(state);
   if (!weapon || state.status !== 'active' || state.reloadUntil > state.elapsed || state.ammo === weapon.magazine) return false;
   state.reloadUntil = state.elapsed + weapon.reload;
   return true;
 }
 export function finishReload(state) {
   if (state.reloadUntil && state.elapsed >= state.reloadUntil) {
-    state.ammo = weapons[state.inventory.equipped].magazine;
+    state.ammo = equippedWeapon(state).magazine;
     state.inventory.magazines[state.inventory.equipped] = state.ammo; state.reloadUntil = 0;
   }
 }
@@ -109,7 +109,7 @@ function traceShot(state, map, rules, origin, direction, damage, wallPower, pene
 }
 export function fireWeapon(state, map, rules, origin, rawDirection) {
   if(state.playerCover&&!state.playerCover.peeking) return null;
-  const weapon = weapons[state.inventory.equipped];
+  const weapon = equippedWeapon(state);
   if (!weapon || state.status !== 'active' || state.elapsed < state.nextShot || state.reloadUntil > state.elapsed || (!rules.unlimitedAmmo && state.ammo === 0)) return null;
   const length = Math.hypot(...rawDirection);
   if (length < 1e-8) return null;

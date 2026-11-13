@@ -31,7 +31,7 @@ test('switching lowers the old item, raises the new one, and only then is it rea
   assert.ok(equip(state, 'pistol'));
   const span = drawWindow(state, defaults);
   assert.ok(Math.abs(span.lowered - (10 + drawTime('rifle') * holsterShare)) < 1e-9);
-  assert.ok(Math.abs(span.end - span.lowered - drawTime('pistol')) < 1e-9);
+  assert.ok(Math.abs(span.end - span.lowered - drawTime('pistol:glock19')) < 1e-9);
   assert.ok(!weaponReady(state, defaults));
   state.elapsed = span.lowered - 0.01;
   assert.equal(shownItem(state, defaults), 'rifle');

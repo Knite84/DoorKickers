@@ -101,7 +101,7 @@ These are traps that have already cost time. Follow them on every rendering chan
 | 5.1 | Skinned guard bodies | ◐ | Built and in the game 2026-11-12; owner to look in play and tune outfits. Hit zones slimmed to real size (a gameplay change). Not seen: night vision on the new bodies, eight guards' frame time | Sonnet for tuning |
 | 5.2 | First-person weapon and hands | ◐ | Owner look at the four firearm models; wall clipping fixed in 5.3 by drawing first-person items in front; melee and thrown-item hands, and minigun not done | Sonnet |
 | 5.3 | Weapon handling feel | ◐ | Built 2026-11-12; owner to feel the climb, recovery, draw times, ADS and flash in play and tune the `handling` table. Not felt in play: any of the timing (automation browser runs at about one frame a second); frame time | Opus, then Sonnet for tuning |
-| 5.4 | Weapon model refinement | ☐ | Waiting on the owner: one real firearm per slot with side-on reference photos and dimensions, and what each ammo type should look like | Opus |
+| 5.4 | Weapon model refinement | ◐ | Pistols built 2026-11-13: five real models to choose from (see the Built note). Owner to look at them in `scripts/pistol-preview.html` and in play, and feel the handling differences. Not checked: aiming down each pistol's sights in play. Rifle, shotgun, sniper and minigun still wait on the owner's picks | Opus |
 | 6.1 | Impact effects and decals | ◐ | Built 2026-11-12; owner to judge in play: amount of dust and debris, hole size, blood marks, explosion and fire look. Not seen in play: a live firefight, a real grenade or Molotov, the overhead and tactical views with marks, frame time | Sonnet for tuning |
 | 6.2 | Loose physics: casings, debris, doors, chairs | ◐ | Built 2026-11-12: loose bits with contacts, drawn-only swinging doors. Owner to check in play: door hinge sides against the real house, how far casings fly and how long they lie, tipping chairs. Not seen in play: doors opened by guards, frame time | Sonnet for tuning |
 | 6.3 | Movement feel | ◐ | Built 2026-11-12; owner to feel it in play. Mantling stays out, as a separate proposal | Sonnet (mantling: Opus) |
@@ -554,6 +554,23 @@ Start from: `src/weapon-models.js` (the first-person models as data), `src/npc-v
 - Later, if wanted: ammo types (standard, hollow-point, solid core, slug, plus subsonic) get visible differences where the player sees ammo: magazine and casing colours, shotgun shell colours, tracer tint. Owner to say which.
 
 Done when: each weapon reads as its real counterpart at a glance, and every 5.3 and 6.2 test still passes.
+
+**Built (pistols, 2026-11-13).** The owner chose five real pistols for the pistol slot, picked in loadout planning (the model is fixed once deployed):
+
+| Model | Length | Magazine | Notes |
+|---|---|---|---|
+| Glock 19 (default) | 185 mm | 15 | Compact: quickest draw, a little snappier |
+| Glock 17 | 202 mm | 17 | Full size, a touch steadier |
+| SIG M17 | 203 mm | 17 | Coyote finish, optic plate, thumb safety; slower draw (the M18 was left out by the owner) |
+| Staccato 2011 | 216 mm | 17 | Quickest trigger, least climb; hammer, beavertail, magwell |
+| HK Mk 23 | 245 mm | 12 | .45: damage 50 vs 35, slightly more penetration; slowest draw and fire, bigger suppressor |
+
+- Balance numbers are in `kit.js` `pistolModels`; handling in `weapon-handling.js` `pistolHandling`; shapes in `weapon-models.js` `pistolSpecs`, built from published lengths, barrel lengths and heights. No markings or logos.
+- A weapon key names the exact gun: `'pistol:mk23'`. `weaponKey`, `weaponSpec` and `equippedWeapon` in kit.js resolve it; `handlingFor` and `modelFor` do the same for handling and shapes.
+- Real names are shown in the menu, HUD and briefing (owner, 2026-11-13).
+- Guards carry a model by outfit: security Glock 19 or 17, tactical mostly the M17 (`npc-shape.js` `guardPistols`). Looks only; guard damage is unchanged.
+- Gameplay change: the default pistol now holds 15 rounds instead of 12; tests that assumed 12 now read the model's magazine.
+- Not done: a separate gunshot sound for the .45; each model's sights seen while aiming in play.
 
 ## Phase 6: Effects, physics and sound
 

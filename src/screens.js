@@ -3,6 +3,7 @@
 // main.js gives them data and handles the callbacks.
 import { drawPlan } from './plan-view.js';
 import { summarize } from './debrief.js';
+import { weaponSpec, weaponKey } from './kit.js';
 
 const esc = text => String(text).replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]);
 const arrow = '<span>↗</span>';
@@ -34,7 +35,7 @@ export function createScreens(root, callbacks) {
     briefing({ map, rules, loadout, weapons }) {
       const levels = map.levels ?? [{ name: 'Ground floor', elevation: 0 }];
       floor = Math.max(0, levels.findIndex(level => level.elevation >= (map.entries?.[rules.entryPoint]?.elevation ?? 0) - 0.01));
-      const entry = map.entries?.[rules.entryPoint], carried = Object.entries(loadout.weapons).filter(([, w]) => w.carried).map(([id]) => weapons[id].name);
+      const entry = map.entries?.[rules.entryPoint], carried = Object.entries(loadout.weapons).filter(([, w]) => w.carried).map(([id]) => (weaponSpec(weaponKey(loadout, id)) ?? weapons[id]).name);
       const screen = mount('briefing', `<div class="screen-card"><div class="eyebrow">OPERATION / BRIEFING</div><h2>${esc(map.name)}</h2>
         <p>${esc(map.description ?? 'Retrieve the archive and extract. Doors and destructible partitions are alternative routes through the same guarded building.')}</p>
         <div class="briefing-grid"><div class="plan-box"><div class="plan-floors" role="group" aria-label="Floor">${levels.map((level, i) => `<button data-floor="${i}" aria-pressed="${i === floor}">${esc(level.name)}</button>`).join('')}</div><canvas width="640" height="480" aria-label="Floor plan of ${esc(map.name)}"></canvas></div>

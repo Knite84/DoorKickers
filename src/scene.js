@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { distance, lineOfSight, obstacles } from './simulation.js';
 import { buildWallPieces } from './destruction.js';
-import { weapons, items } from './kit.js';
+import { weapons, items, weaponKey, baseWeapon } from './kit.js';
 import { elevation, eyeHeight, playerEye, doorCenter, doorSize, windowCenter, windowSize, activeProps } from './world.js';
 import { sightHalfAngle, sightRangeFactor } from './guard-traits.js';
 import { segmentClear } from './combat.js';
@@ -21,8 +21,8 @@ import { exposureRange, graphicsPresets } from './graphics.js';
 import { createSceneSky } from './scene-sky.js';
 import { createPaneledDoor } from './door-visual.js';
 import { trimFor, trimKinds } from './trim.js';
-import { weaponModels, suppressorLength } from './weapon-models.js';
-import { handling, createHandling, resetHandling, fireKick, stepHandling, weaponPose, shownItem, drawDrop, cycleProgress, ejectsBetween, scopeUp, fieldOfView, weaponReady, hipPosition } from './weapon-handling.js';
+import { weaponModels, suppressorFor } from './weapon-models.js';
+import { handlingFor, createHandling, resetHandling, fireKick, stepHandling, weaponPose, shownItem, drawDrop, cycleProgress, ejectsBetween, scopeUp, fieldOfView, weaponReady, hipPosition } from './weapon-handling.js';
 import { stairDressFor, dressKinds, railWalls } from './stair-dress.js';
 import { createScenePost } from './scene-post.js';
 import { createSceneEffects } from './scene-effects.js';
@@ -244,7 +244,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     }
     // A shell for the shotgun's loading animation.
     let shell = null;
-    if (handling[id]?.reload === 'shells') { shell = new THREE.Mesh(cylinder(model.casing[0], model.casing[1]), viewMaterial(model.casing[2])); shell.visible = false; group.add(shell); }
+    if (handlingFor(id)?.reload === 'shells') { shell = new THREE.Mesh(cylinder(model.casing[0], model.casing[1]), viewMaterial(model.casing[2])); shell.visible = false; group.add(shell); }
     weaponModelGroups[id] = { group, suppressorParts, moving, shell, muzzle: model.muzzle };
   }
   // Muzzle flash: a star facing the eye plus two crossed flame planes along the barrel,
@@ -661,21 +661,23 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
     // drives the look lag; muzzle climb was already added to pitch and yaw by fired().
     const firstView = view === 'first' && !mapOpen;
     const equipped = state.inventory.equipped, shownId = shownItem(state, rules), spec = weapons[shownId], config = state.inventory.weapons[shownId];
+    // The exact gun shown: 'pistol:mk23' for the chosen pistol model.
+    const shownKey = weaponKey(state.inventory, shownId);
     const steadyHands = state.status === 'active' && weaponReady(state, rules) && !(state.reloadUntil > state.elapsed) && shownId === equipped;
     const aimedNow = !!controls.aimed && firstView && !!spec && steadyHands;
-    const recovery = stepHandling(hand, dt, shownId, { aimed: aimedNow, look: firstView ? { yaw: yaw - lastYaw, pitch: pitch - lastPitch } : { yaw: 0, pitch: 0 } });
+    const recovery = stepHandling(hand, dt, shownKey, { aimed: aimedNow, look: firstView ? { yaw: yaw - lastYaw, pitch: pitch - lastPitch } : { yaw: 0, pitch: 0 } });
     if (firstView) { yaw += recovery.yaw; pitch = THREE.MathUtils.clamp(pitch + recovery.pitch, -1.35, 1.35); }
     lastYaw = yaw; lastPitch = pitch;
     firstPerson.rotation.set(pitch, yaw, feel ? -feel.roll : 0);
     scopedNow = aimedNow && shownId === 'sniper' && scopeUp(hand);
-    const fov = fieldOfView(hand, spec ? shownId : null, { scoped: scopedNow, zoom: controls.scopeZoom ?? 4 });
+    const fov = fieldOfView(hand, spec ? shownKey : null, { scoped: scopedNow, zoom: controls.scopeZoom ?? 4 });
     if (Math.abs(firstPerson.fov - fov) > 1e-4) { firstPerson.fov = fov; firstPerson.updateProjectionMatrix(); }
     const strike = state.status === 'active' ? Math.sin(Math.PI * Math.max(0, Math.min(1, ((state.meleeUntil ?? 0) - state.elapsed) / .65))) : 0;
     const bob = controls.feel ? controls.feel.weapon : Math.sin(state.elapsed * (controls.running ? 14 : 9)) * (controls.moving ? 0.008 : 0);
     const inCover = !!(state.playerCover && !state.playerCover.peeking);
-    const pose = weaponPose(hand, state, rules, shownId, { bob, cover: inCover, strike });
-    const shown = weaponModelGroups[shownId];
-    for (const [id, entry] of Object.entries(weaponModelGroups)) entry.group.visible = id === shownId;
+    const pose = weaponPose(hand, state, rules, shownKey, { bob, cover: inCover, strike });
+    const shown = weaponModelGroups[shownKey];
+    for (const [id, entry] of Object.entries(weaponModelGroups)) entry.group.visible = id === shownKey;
     weapon.position.set(...pose.position); weapon.rotation.set(...pose.rotation);
     if (shown) {
       shown.suppressorParts.forEach(mesh => { mesh.visible = !!config?.suppressor; });
@@ -685,7 +687,7 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
         if (kind === 'magazine') mesh.visible = pose.parts.magazine.visible;
       }
       if (shown.shell) { shown.shell.visible = !!pose.parts.shell; if (pose.parts.shell) shown.shell.position.set(...pose.parts.shell); }
-      flash.position.set(shown.muzzle[0], shown.muzzle[1], shown.muzzle[2] - (config?.suppressor ? suppressorLength[shownId] : 0) - 0.02);
+      flash.position.set(shown.muzzle[0], shown.muzzle[1], shown.muzzle[2] - (config?.suppressor ? suppressorFor(shownKey) : 0) - 0.02);
     }
     const weaponVisible = !!spec && firstView && !scopedNow && !controls.menuVisible;
     weapon.visible = weaponVisible && shownId !== 'minigun';
@@ -700,12 +702,12 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
       model.position.y = -0.3 - 0.3 * drop + bob; model.rotation.x = -0.9 * drop - (inCover ? 0.7 : 0);
     }
     // Casings leave on the shot (rifle, pistol) or partway through the bolt or pump.
-    const cycle = cycleProgress(state, shownId);
-    if (firstView && ejectsBetween(lastCycle, cycle)) ejectCasing(shownId);
+    const cycle = cycleProgress(state, shownKey);
+    if (firstView && ejectsBetween(lastCycle, cycle)) ejectCasing(shownKey);
     lastCycle = cycle;
-    if (ejectQueued) { if (firstView && ejectQueued === shownId) ejectCasing(shownId); ejectQueued = null; }
+    if (ejectQueued) { if (firstView && ejectQueued === shownKey) ejectCasing(shownKey); ejectQueued = null; }
     // Flash, puff and the brief light on nearby walls.
-    const flashAge = hand.time - hand.lastShot, flashing = flashAge < 0.05 && state.status === 'active' && !config?.suppressor && hand.lastWeapon === shownId && firstView;
+    const flashAge = hand.time - hand.lastShot, flashing = flashAge < 0.05 && state.status === 'active' && !config?.suppressor && hand.lastWeapon === shownKey && firstView;
     const activeFlash = shownId === 'minigun' ? miniFlash : flash;
     flash.visible = flashing && activeFlash === flash && weapon.visible;
     miniFlash.visible = flashing && activeFlash === miniFlash && minigun.visible;
@@ -873,9 +875,9 @@ export function createScene(canvas, map, preset = graphicsPresets.Medium) {
       const lift = fireKick(hand, id, { aimed, crouched, climb: climb && view === 'first' && !mapOpen });
       yaw += lift.yaw; pitch = THREE.MathUtils.clamp(pitch + lift.pitch, -1.35, 1.35);
       lastYaw = yaw; lastPitch = pitch;
-      flashSize = ({ shotgun: 1.4, sniper: 1.25, pistol: 0.75, minigun: 0.9 })[id] ?? 1;
+      flashSize = ({ shotgun: 1.4, sniper: 1.25, pistol: 0.75, minigun: 0.9, 'pistol:mk23': 0.9 })[id] ?? ({ pistol: 0.75 })[baseWeapon(id)] ?? 1;
       for (const group of [flash, miniFlash]) { group.rotation.z = Math.random() * Math.PI; group.scale.setScalar(flashSize * (0.8 + Math.random() * 0.4)); }
-      if (!handling[id]?.cycle && id !== 'minigun') ejectQueued = id;
+      if (!handlingFor(id)?.cycle && id !== 'minigun') ejectQueued = id;
       puffQueued = suppressed ? 0.1 : 0.22;
     },
     // For sound (step 6.4): casing and debris landings and bullet impacts since the last call.

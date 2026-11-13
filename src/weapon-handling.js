@@ -11,8 +11,8 @@
 //
 // Every tuning number is in `handling` and `sway` below. Angles are radians,
 // distances metres, times seconds.
-import { weapons } from './kit.js';
-import { weaponModels } from './weapon-models.js';
+import { weaponSpec, weaponKey, baseWeapon } from './kit.js';
+import { weaponModels, modelFor } from './weapon-models.js';
 
 export const handling = {
   rifle: {
@@ -51,6 +51,27 @@ export const handling = {
     aimTime: 0.3, aimFov: 62, draw: 1.0, reload: 'box',
   },
 };
+// The pistol models (kit.js pistolModels) change only what differs from the generic
+// pistol above. Weapon functions below take a key: 'rifle', or 'pistol:mk23' for a model.
+export const pistolHandling = {
+  // Compact and light: fastest out of the holster, snappiest.
+  glock19: { draw: 0.27, climb: { pitch: 0.027, yaw: 0.0065, drift: 0 }, kick: { back: 0.03, rise: 0.17, roll: 0.035 } },
+  glock17: { draw: 0.3, climb: { pitch: 0.024, yaw: 0.006, drift: 0 } },
+  // Heavier slide and higher bore: a little more rise, a slower draw.
+  m17: { draw: 0.32, climb: { pitch: 0.025, yaw: 0.005, drift: 0 }, kick: { back: 0.032, rise: 0.15, roll: 0.03 } },
+  // Steel frame and a light single-action trigger: flattest and quickest to settle.
+  staccato: { draw: 0.32, aimTime: 0.11, climb: { pitch: 0.017, yaw: 0.004, drift: 0 }, recover: { share: 0.85, delay: 0.05, time: 0.07 }, kick: { back: 0.026, rise: 0.12, roll: 0.02 } },
+  // Big and heavy, with a .45 push: slow to draw and aim, a long roll back down.
+  mk23: { draw: 0.45, aimTime: 0.15, climb: { pitch: 0.031, yaw: 0.007, drift: 0 }, recover: { share: 0.75, delay: 0.08, time: 0.11 }, kick: { back: 0.04, rise: 0.17, roll: 0.03 }, spring: { stiffness: 260, damping: 24 } },
+};
+const merged = {};
+// Handling for a weapon key; undefined for items.
+export function handlingFor(key) {
+  if (!key) return undefined;
+  const [id, model] = key.split(':');
+  if (!model || !pistolHandling[model]) return handling[id];
+  return merged[key] ??= { ...handling[id], ...pistolHandling[model] };
+}
 export const itemDraw = 0.3;            // grenades, tools and other carried items
 export const holsterShare = 0.5;        // lowering takes this share of the item's own draw time
 export const quickDraw = 0.4;           // with the draw-delay rule off, the animation plays this much faster and never blocks
@@ -72,14 +93,14 @@ const window4 = (t, a, b, c, d) => t <= a || t >= d ? 0 : t < b ? ease((t - a) /
 
 export function drawTime(id) {
   if (!id || id === 'unarmed') return 0;
-  return handling[id]?.draw ?? itemDraw;
+  return handlingFor(id)?.draw ?? itemDraw;
 }
 
 // The current switch, if any: lowering the old item until `lowered`, raising the new one until `end`.
 export function drawWindow(state, rules) {
   if (state.drawStart === undefined || state.drawStart === null) return null;
   const scale = rules?.drawDelay === false ? quickDraw : 1;
-  const lower = drawTime(state.drawFrom) * holsterShare * scale, raise = drawTime(state.inventory.equipped) * scale;
+  const lower = drawTime(weaponKey(state.inventory, state.drawFrom)) * holsterShare * scale, raise = drawTime(weaponKey(state.inventory, state.inventory.equipped)) * scale;
   return { start: state.drawStart, lowered: state.drawStart + lower, end: state.drawStart + lower + raise };
 }
 
@@ -104,7 +125,7 @@ export function resetHandling(h) { Object.assign(h, createHandling()); }
 // positive, yaw positive turns left). Zero when the muzzle-climb rule is off; the
 // weapon still kicks visibly.
 export function fireKick(h, id, { aimed = false, crouched = false, climb = true } = {}) {
-  const spec = handling[id];
+  const spec = handlingFor(id);
   if (!spec) return { pitch: 0, yaw: 0 };
   h.shots++; h.lastShot = h.time; h.lastWeapon = id;
   // Drawn kick: an impulse on each spring. The peak of a damped spring hit with
@@ -129,9 +150,9 @@ export function fireKick(h, id, { aimed = false, crouched = false, climb = true 
 // as { pitch, yaw } (usually negative pitch: the muzzle settling back down).
 export function stepHandling(h, dt, id, { aimed = false, look = { yaw: 0, pitch: 0 } } = {}) {
   h.time += dt;
-  const spec = handling[id] ?? handling[h.lastWeapon];
+  const spec = handlingFor(id) ?? handlingFor(h.lastWeapon);
   const recovery = { pitch: 0, yaw: 0 };
-  const recoverSpec = handling[h.lastWeapon]?.recover;
+  const recoverSpec = handlingFor(h.lastWeapon)?.recover;
   if (recoverSpec && h.time - h.lastShot >= recoverSpec.delay && (h.pendingPitch || h.pendingYaw)) {
     const f = 1 - Math.exp(-dt / recoverSpec.time);
     recovery.pitch = -h.pendingPitch * f; recovery.yaw = -h.pendingYaw * f;
@@ -139,7 +160,7 @@ export function stepHandling(h, dt, id, { aimed = false, look = { yaw: 0, pitch:
     if (Math.abs(h.pendingPitch) < 1e-5 && Math.abs(h.pendingYaw) < 1e-5) h.pendingPitch = h.pendingYaw = 0;
   }
   // Springs, in small sub-steps so a slow frame cannot blow them up.
-  const { stiffness, damping } = (handling[h.lastWeapon] ?? spec ?? handling.rifle).spring;
+  const { stiffness, damping } = (handlingFor(h.lastWeapon) ?? spec ?? handling.rifle).spring;
   for (let left = dt; left > 1e-6; left -= 1 / 120) {
     const step = Math.min(left, 1 / 120);
     for (const [x, v] of [['back', 'backV'], ['rise', 'riseV'], ['roll', 'rollV']]) {
@@ -178,8 +199,8 @@ export function drawDrop(state, rules) {
 
 // Progress through the bolt or pump cycle after the last shot: 0 to 1, or null.
 export function cycleProgress(state, id) {
-  const spec = handling[id], weapon = weapons[id];
-  if (!spec?.cycle || !weapon || state.inventory.equipped !== id || !(state.shots > 0)) return null;
+  const spec = handlingFor(id), weapon = weaponSpec(id);
+  if (!spec?.cycle || !weapon || state.inventory.equipped !== baseWeapon(id) || !(state.shots > 0)) return null;
   const since = (state.elapsed ?? 0) - (state.nextShot - weapon.interval);
   const u = since / weapon.interval;
   return u >= 0 && u < 1 ? u : null;
@@ -192,7 +213,7 @@ export const ejectsBetween = (before, after) => after !== null && after >= cycle
 // where each part entry is an offset [x, y, z] in the model's frame
 // (`magazine.visible` false while it is off screen, `shell` null when none).
 export function weaponPose(h, state, rules, id, { time = h.time, bob = 0, cover = false, strike = 0 } = {}) {
-  const spec = handling[id], model = weaponModels[id];
+  const spec = handlingFor(id), model = modelFor(id);
   const aim = ease(h.aim);
   const ads = model && spec?.eyeRelief !== undefined ? [-model.sight[0], -model.sight[1], -spec.eyeRelief] : hipPosition;
   const position = hipPosition.map((v, i) => v + (ads[i] - v) * aim);
@@ -209,8 +230,8 @@ export function weaponPose(h, state, rules, id, { time = h.time, bob = 0, cover 
   position[0] += strike * 0.12; rotation[2] -= strike * 0.55;
 
   const parts = { magazine: { offset: [0, 0, 0], visible: true }, support: [0, 0, 0], bolt: [0, 0, 0], pump: [0, 0, 0], shell: null };
-  const weapon = weapons[id], now = state.elapsed ?? 0;
-  if (weapon && state.inventory.equipped === id && state.reloadUntil > now) {
+  const weapon = weaponSpec(id), now = state.elapsed ?? 0;
+  if (weapon && state.inventory.equipped === baseWeapon(id) && state.reloadUntil > now) {
     const r = clamp(1 - (state.reloadUntil - now) / weapon.reload, 0, 1);
     const tilt = window4(r, 0, 0.15, 0.85, 1);
     if (spec?.reload === 'magazine') {
@@ -258,6 +279,6 @@ export const scopeUp = h => h.aim >= 0.98;
 // Field of view for this frame.
 export function fieldOfView(h, id, { base = 76, scoped = false, zoom = 4 } = {}) {
   if (scoped) return base / zoom;
-  const spec = handling[id];
+  const spec = handlingFor(id);
   return spec ? base + (spec.aimFov - base) * ease(h.aim) : base;
 }
